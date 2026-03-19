@@ -54,10 +54,31 @@ Deno.serve(async (req) => {
         continue;
       }
 
-      // Find conversation for this contact
+      // Find conversation for this contact (check metadata and tool_calls)
+      const contactPhone = request.contact_phone || '';
       let targetConversation = null;
       for (const conv of conversations) {
-        if (conv.metadata?.contact_id === contactId) {
+        const meta = conv.metadata || {};
+        if (meta.contact_id === contactId || meta.phone === contactPhone) {
+          targetConversation = conv;
+          break;
+        }
+        // Search in tool_calls
+        const msgs = conv.messages || [];
+        let found = false;
+        for (const msg of msgs) {
+          if (msg.tool_calls) {
+            for (const tc of msg.tool_calls) {
+              const args = tc.arguments_string || '';
+              if (args.includes(contactId) || (contactPhone && args.includes(contactPhone))) {
+                found = true;
+                break;
+              }
+            }
+          }
+          if (found) break;
+        }
+        if (found) {
           targetConversation = conv;
           break;
         }
