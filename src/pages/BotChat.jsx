@@ -18,6 +18,18 @@ export default function BotChat() {
   const [isLoadingList, setIsLoadingList] = useState(true);
   const messagesEndRef = useRef(null);
 
+  const HIDDEN_KEY = 'hidden_conversations';
+  const getHiddenIds = () => {
+    try { return JSON.parse(localStorage.getItem(HIDDEN_KEY) || '[]'); } catch { return []; }
+  };
+  const addHiddenId = (id) => {
+    const hidden = getHiddenIds();
+    if (!hidden.includes(id)) {
+      hidden.push(id);
+      localStorage.setItem(HIDDEN_KEY, JSON.stringify(hidden));
+    }
+  };
+
   // Load conversations list
   useEffect(() => {
     loadConversations();
