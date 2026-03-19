@@ -46,6 +46,9 @@ Deno.serve(async (req) => {
       } else if (serviceType === 'legal') {
         updates.current_step = 'send_privacy_message';
         await sendBotContinuation(base44, data, requestId, 'paid_legal');
+      } else if (serviceType === 'post_lecture') {
+        updates.current_step = 'confirm_payment';
+        await sendBotContinuation(base44, data, requestId, 'paid_post_lecture');
       } else if (serviceType === 'lectures') {
         updates.current_step = 'confirm_payment';
         await sendBotContinuation(base44, data, requestId, 'paid_lectures');
@@ -163,6 +166,14 @@ async function sendBotContinuation(base44, requestData, requestId, triggerType) 
         botMessage += '\n\n' + docContent[0].content;
       }
 
+    } else if (triggerType === 'paid_post_lecture') {
+      const paymentContent = await base44.asServiceRole.entities.BotContent.filter({ key: 'post_lecture_payment_confirmed' });
+      if (paymentContent.length > 0) {
+        botMessage = paymentContent[0].content.replace('{שם}', contactName).replace('{שם פרטי}', contactName);
+      } else {
+        botMessage = `היי ${contactName}, קיבלנו את התשלום! תודה רבה. ניצור איתך קשר בהקדם להמשך התהליך.`;
+      }
+
     } else if (triggerType === 'paid_lectures') {
       const paymentContent = await base44.asServiceRole.entities.BotContent.filter({ key: 'lectures_payment_confirmed' });
       if (paymentContent.length > 0) {
@@ -187,57 +198,38 @@ async function sendBotContinuation(base44, requestData, requestId, triggerType) 
 
     console.log(`Bot message ready (${botMessage.length} chars), searching for conversation...`);
 
-    // Try to use conversation_id stored on the ServiceRequest first
+    // Find existing conversation for this contact (use user scope - service role doesn't see conversations)
+    const conversations = await base44.agents.listConversations({ agent_name: 'dr_adri_bot' });
+    console.log(`Found ${conversations.length} total conversations`);
+
     let targetConversation = null;
-    const conversationId = requestData.conversation_id;
-
-    if (conversationId) {
-      console.log(`Using stored conversation_id: ${conversationId}`);
-      targetConversation = await base44.agents.getConversation(conversationId);
-    }
-
-    // Fallback: search conversations by contact name/phone (lightweight - metadata only)
-    if (!targetConversation) {
-      console.log('No stored conversation_id, searching by contact info...');
-      const conversations = await base44.agents.listConversations({ agent_name: 'dr_adri_bot' });
-      console.log(`Found ${conversations.length} total conversations`);
-
-      for (const conv of conversations) {
-        const meta = conv.metadata || {};
-        if (meta.contact_id === contactId || meta.phone === contactPhone) {
-          targetConversation = conv;
-          console.log(`Found matching conversation via metadata: ${conv.id}`);
-          break;
-        }
+    for (const conv of conversations) {
+      // Check metadata first
+      const meta = conv.metadata || {};
+      if (meta.contact_id === contactId || meta.phone === contactPhone) {
+        targetConversation = conv;
+        console.log(`Found matching conversation via metadata: ${conv.id}`);
+        break;
       }
-
-      // Last resort: check only the 5 most recent conversations by searching messages
-      if (!targetConversation) {
-        const recentConvs = conversations.slice(0, 5);
-        for (const conv of recentConvs) {
-          const fullConv = await base44.agents.getConversation(conv.id);
-          const msgs = fullConv.messages || [];
-          let found = false;
-          for (const msg of msgs) {
-            if (msg.tool_calls) {
-              for (const tc of msg.tool_calls) {
-                const args = tc.arguments_string || '';
-                if (args.includes(contactId) || (contactPhone && args.includes(contactPhone)) || (contactName && args.includes(contactName))) {
-                  found = true;
-                  break;
-                }
-              }
+      // Check tool_calls in messages for contact references
+      const msgs = conv.messages || [];
+      let found = false;
+      for (const msg of msgs) {
+        if (msg.tool_calls) {
+          for (const tc of msg.tool_calls) {
+            const args = tc.arguments_string || '';
+            if (args.includes(contactId) || (contactPhone && args.includes(contactPhone))) {
+              found = true;
+              break;
             }
-            if (found) break;
-          }
-          if (found) {
-            targetConversation = fullConv;
-            console.log(`Found matching conversation via messages: ${conv.id}`);
-            // Save conversation_id for next time
-            await base44.asServiceRole.entities.ServiceRequest.update(requestId, { conversation_id: conv.id });
-            break;
           }
         }
+        if (found) break;
+      }
+      if (found) {
+        targetConversation = conv;
+        console.log(`Found matching conversation via tool_calls: ${conv.id}`);
+        break;
       }
     }
 

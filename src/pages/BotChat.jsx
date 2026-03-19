@@ -1,8 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { base44 } from '@/api/base44Client';
-import { Bot, Trash2 } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
+import { Bot } from 'lucide-react';
 import MessageBubble from '@/components/chat/MessageBubble';
 import ChatInput from '@/components/chat/ChatInput';
 import ConversationsList from '@/components/chat/ConversationsList';
@@ -18,18 +16,6 @@ export default function BotChat() {
   const [isLoadingList, setIsLoadingList] = useState(true);
   const messagesEndRef = useRef(null);
 
-  const HIDDEN_KEY = 'hidden_conversations';
-  const getHiddenIds = () => {
-    try { return JSON.parse(localStorage.getItem(HIDDEN_KEY) || '[]'); } catch { return []; }
-  };
-  const addHiddenId = (id) => {
-    const hidden = getHiddenIds();
-    if (!hidden.includes(id)) {
-      hidden.push(id);
-      localStorage.setItem(HIDDEN_KEY, JSON.stringify(hidden));
-    }
-  };
-
   // Load conversations list
   useEffect(() => {
     loadConversations();
@@ -38,8 +24,7 @@ export default function BotChat() {
   const loadConversations = async () => {
     setIsLoadingList(true);
     const list = await base44.agents.listConversations({ agent_name: AGENT_NAME });
-    const hidden = getHiddenIds();
-    setConversations((list || []).filter(c => !hidden.includes(c.id)));
+    setConversations(list || []);
     setIsLoadingList(false);
   };
 
@@ -80,13 +65,6 @@ export default function BotChat() {
     setActiveConvId(conv.id);
   };
 
-  const handleDeleteConversation = () => {
-    if (!activeConvId) return;
-    addHiddenId(activeConvId);
-    setConversations(prev => prev.filter(c => c.id !== activeConvId));
-    setActiveConvId(null);
-  };
-
   const handleSend = async (text) => {
     if (!activeConv) return;
     setIsSending(true);
@@ -125,31 +103,6 @@ export default function BotChat() {
           >
             שיחה חדשה
           </button>
-          
-          {/* Delete conversation button */}
-          {activeConvId && (
-            <AlertDialog>
-              <AlertDialogTrigger asChild>
-                <Button variant="ghost" size="icon" className="mr-auto text-destructive hover:text-destructive">
-                  <Trash2 className="w-4 h-4" />
-                </Button>
-              </AlertDialogTrigger>
-              <AlertDialogContent>
-                <AlertDialogHeader>
-                  <AlertDialogTitle>מחיקת שיחה</AlertDialogTitle>
-                  <AlertDialogDescription>
-                    האם למחוק את השיחה הזו? פעולה זו לא ניתנת לביטול.
-                  </AlertDialogDescription>
-                </AlertDialogHeader>
-                <AlertDialogFooter>
-                  <AlertDialogCancel>ביטול</AlertDialogCancel>
-                  <AlertDialogAction onClick={handleDeleteConversation} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
-                    מחק
-                  </AlertDialogAction>
-                </AlertDialogFooter>
-              </AlertDialogContent>
-            </AlertDialog>
-          )}
         </div>
 
         {/* Messages */}

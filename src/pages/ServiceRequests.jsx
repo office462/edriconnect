@@ -78,19 +78,11 @@ export default function ServiceRequests() {
 
   const updateMutation = useMutation({
     mutationFn: async ({ id, data, oldStatus }) => {
-      const oldRequest = requests.find(r => r.id === id);
       await base44.entities.ServiceRequest.update(id, data);
       if (data.status && data.status !== oldStatus) {
         await base44.entities.ServiceRequestTimeline.create({
           service_request_id: id, event_type: 'status_change', description: 'סטטוס שונה', old_value: oldStatus, new_value: data.status,
         });
-
-        // Trigger bot continuation directly as backup
-        base44.functions.invoke('onServiceRequestUpdate', {
-          event: { type: 'update', entity_name: 'ServiceRequest', entity_id: id },
-          data: { ...oldRequest, ...data },
-          old_data: oldRequest,
-        }).catch(err => console.log('Bot continuation backup call:', err));
       }
     },
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['service-requests'] }); setShowEdit(false); setEditingReq(null); toast.success('עודכן'); },

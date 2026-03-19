@@ -49,14 +49,6 @@ export default function ServiceRequestDetail() {
           old_value: oldStatus,
           new_value: updates.status,
         });
-
-        // Trigger bot continuation directly as backup
-        const currentRequest = request;
-        base44.functions.invoke('onServiceRequestUpdate', {
-          event: { type: 'update', entity_name: 'ServiceRequest', entity_id: id },
-          data: { ...currentRequest, ...updates },
-          old_data: currentRequest,
-        }).catch(err => console.log('Bot continuation backup call:', err));
       }
 
       // Log step change
