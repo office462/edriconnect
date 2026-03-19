@@ -12,6 +12,9 @@ import Contacts from '@/pages/Contacts';
 import ServiceRequests from '@/pages/ServiceRequests';
 import ServiceRequestDetail from '@/pages/ServiceRequestDetail';
 import BotContent from '@/pages/BotContent';
+import ServiceContentPage from '@/pages/ServiceContentPage';
+import Lectures from '@/pages/Lectures';
+import SystemSettings from '@/pages/SystemSettings';
 
 const AuthenticatedApp = () => {
   const { isLoadingAuth, isLoadingPublicSettings, authError, navigateToLogin } = useAuth();
@@ -42,6 +45,9 @@ const AuthenticatedApp = () => {
         <Route path="/ServiceRequests" element={<ServiceRequests />} />
         <Route path="/ServiceRequestDetail" element={<ServiceRequestDetail />} />
         <Route path="/BotContent" element={<BotContent />} />
+        <Route path="/ServiceContent" element={<ServiceContentPage />} />
+        <Route path="/Lectures" element={<Lectures />} />
+        <Route path="/SystemSettings" element={<SystemSettings />} />
       </Route>
       <Route path="*" element={<PageNotFound />} />
     </Routes>

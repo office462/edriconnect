@@ -8,6 +8,7 @@ import { Link } from 'react-router-dom';
 import RequestInfo from '@/components/service-request/RequestInfo';
 import StatusActions from '@/components/service-request/StatusActions';
 import TimelineView from '@/components/service-request/TimelineView';
+import FilesList from '@/components/service-request/FilesList';
 import { toast } from 'sonner';
 
 export default function ServiceRequestDetail() {
@@ -116,6 +117,9 @@ export default function ServiceRequestDetail() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2 space-y-6">
           <RequestInfo request={request} />
+
+          {/* Files */}
+          <FilesList serviceRequestId={id} />
           
           {/* Timeline */}
           <Card>

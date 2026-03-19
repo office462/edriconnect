@@ -8,7 +8,9 @@ import {
   Settings,
   Stethoscope,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  FolderOpen,
+  BookOpen
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -17,7 +19,10 @@ const navItems = [
   { path: '/Dashboard', label: 'לוח בקרה', icon: LayoutDashboard },
   { path: '/Contacts', label: 'אנשי קשר', icon: Users },
   { path: '/ServiceRequests', label: 'פניות שירות', icon: FileText },
+  { path: '/Lectures', label: 'קטלוג הרצאות', icon: BookOpen },
+  { path: '/ServiceContent', label: 'ניהול תוכן', icon: FolderOpen },
   { path: '/BotContent', label: 'תוכן הבוט', icon: MessageSquare },
+  { path: '/SystemSettings', label: 'הגדרות מערכת', icon: Settings },
 ];
 
 export default function Sidebar({ collapsed, onToggle }) {
