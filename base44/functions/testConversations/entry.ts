@@ -9,36 +9,52 @@ Deno.serve(async (req) => {
       return Response.json({ error: 'Forbidden' }, { status: 403 });
     }
 
-    // Try different approaches to list conversations
-    console.log('Approach 1: q param');
-    const convs1 = await base44.asServiceRole.agents.listConversations({ q: { agent_name: 'dr_adri_bot' }, limit: 10 });
-    console.log('Approach 1 result:', convs1.length);
+    const results = {};
 
-    console.log('Approach 2: agent_name direct');
-    const convs2 = await base44.asServiceRole.agents.listConversations({ agent_name: 'dr_adri_bot' });
-    console.log('Approach 2 result:', convs2.length);
+    try {
+      console.log('Test 1: asServiceRole with q filter');
+      const c1 = await base44.asServiceRole.agents.listConversations({ q: { agent_name: 'dr_adri_bot' }, limit: 5 });
+      results.serviceRole_q = c1.length;
+      console.log('Test 1 OK:', c1.length);
+    } catch (e) {
+      results.serviceRole_q_error = e.message;
+      console.error('Test 1 error:', e.message);
+    }
 
-    console.log('Approach 3: no filter at all');
-    const convs3 = await base44.asServiceRole.agents.listConversations({});
-    console.log('Approach 3 result:', convs3.length);
+    try {
+      console.log('Test 2: asServiceRole with agent_name');
+      const c2 = await base44.asServiceRole.agents.listConversations({ agent_name: 'dr_adri_bot' });
+      results.serviceRole_agentName = c2.length;
+      console.log('Test 2 OK:', c2.length);
+    } catch (e) {
+      results.serviceRole_agentName_error = e.message;
+      console.error('Test 2 error:', e.message);
+    }
 
-    console.log('Approach 4: user scope');
-    const convs4 = await base44.agents.listConversations({ agent_name: 'dr_adri_bot' });
-    console.log('Approach 4 result:', convs4.length);
+    try {
+      console.log('Test 3: asServiceRole no filter');
+      const c3 = await base44.asServiceRole.agents.listConversations({});
+      results.serviceRole_noFilter = c3.length;
+      console.log('Test 3 OK:', c3.length);
+    } catch (e) {
+      results.serviceRole_noFilter_error = e.message;
+      console.error('Test 3 error:', e.message);
+    }
 
-    // Show metadata of conversations found
-    const allConvs = convs1.length > 0 ? convs1 : convs2;
-    const summaries = allConvs.map(c => ({
-      id: c.id,
-      metadata: c.metadata,
-      messages_count: c.messages?.length || 0,
-    }));
+    try {
+      console.log('Test 4: user scope');
+      const c4 = await base44.agents.listConversations({ agent_name: 'dr_adri_bot' });
+      results.userScope = c4.length;
+      if (c4.length > 0) {
+        results.userScope_first = { id: c4[0].id, metadata: c4[0].metadata };
+      }
+      console.log('Test 4 OK:', c4.length);
+    } catch (e) {
+      results.userScope_error = e.message;
+      console.error('Test 4 error:', e.message);
+    }
 
-    return Response.json({ 
-      approach1_count: convs1.length,
-      approach2_count: convs2.length,
-      conversations: summaries,
-    });
+    return Response.json(results);
   } catch (error) {
     console.error('Error:', error);
     return Response.json({ error: error.message }, { status: 500 });
