@@ -67,6 +67,13 @@ export default function BotChat() {
     setActiveConvId(conv.id);
   };
 
+  const handleDeleteConversation = async () => {
+    if (!activeConvId) return;
+    await base44.agents.updateConversation(activeConvId, { is_archived: true });
+    setConversations(prev => prev.filter(c => c.id !== activeConvId));
+    setActiveConvId(null);
+  };
+
   const handleSend = async (text) => {
     if (!activeConv) return;
     setIsSending(true);
