@@ -18,6 +18,14 @@ Deno.serve(async (req) => {
     const convs2 = await base44.asServiceRole.agents.listConversations({ agent_name: 'dr_adri_bot' });
     console.log('Approach 2 result:', convs2.length);
 
+    console.log('Approach 3: no filter at all');
+    const convs3 = await base44.asServiceRole.agents.listConversations({});
+    console.log('Approach 3 result:', convs3.length);
+
+    console.log('Approach 4: user scope');
+    const convs4 = await base44.agents.listConversations({ agent_name: 'dr_adri_bot' });
+    console.log('Approach 4 result:', convs4.length);
+
     // Show metadata of conversations found
     const allConvs = convs1.length > 0 ? convs1 : convs2;
     const summaries = allConvs.map(c => ({
