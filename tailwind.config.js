@@ -11,6 +11,7 @@ module.exports = {
       'bg-cyan-100', 'text-cyan-700', 'border-cyan-200',
       'bg-gray-100', 'text-gray-600', 'border-gray-200', 'bg-gray-50',
       'bg-green-50', 'text-green-600',
+      'bg-purple-100', 'text-purple-700', 'border-purple-200',
     ],
   theme: {
   	extend: {
