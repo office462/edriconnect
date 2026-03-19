@@ -80,10 +80,9 @@ export default function BotChat() {
     setActiveConvId(conv.id);
   };
 
-  const handleDeleteConversation = async () => {
+  const handleDeleteConversation = () => {
     if (!activeConvId) return;
-    // Delete by removing from list (no updateConversation API available)
-    // We just remove it from the local state
+    addHiddenId(activeConvId);
     setConversations(prev => prev.filter(c => c.id !== activeConvId));
     setActiveConvId(null);
   };
