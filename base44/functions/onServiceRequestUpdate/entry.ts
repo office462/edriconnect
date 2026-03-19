@@ -204,10 +204,31 @@ async function sendBotContinuation(base44, requestData, requestId, triggerType) 
 
     let targetConversation = null;
     for (const conv of conversations) {
+      // Check metadata first
       const meta = conv.metadata || {};
       if (meta.contact_id === contactId || meta.phone === contactPhone) {
         targetConversation = conv;
-        console.log(`Found matching conversation: ${conv.id}`);
+        console.log(`Found matching conversation via metadata: ${conv.id}`);
+        break;
+      }
+      // Check tool_calls in messages for contact references
+      const msgs = conv.messages || [];
+      let found = false;
+      for (const msg of msgs) {
+        if (msg.tool_calls) {
+          for (const tc of msg.tool_calls) {
+            const args = tc.arguments_string || '';
+            if (args.includes(contactId) || (contactPhone && args.includes(contactPhone))) {
+              found = true;
+              break;
+            }
+          }
+        }
+        if (found) break;
+      }
+      if (found) {
+        targetConversation = conv;
+        console.log(`Found matching conversation via tool_calls: ${conv.id}`);
         break;
       }
     }
