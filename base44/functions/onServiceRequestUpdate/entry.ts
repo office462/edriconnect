@@ -163,14 +163,6 @@ async function sendBotContinuation(base44, requestData, requestId, triggerType) 
         botMessage += '\n\n' + docContent[0].content;
       }
 
-    } else if (triggerType === 'paid_post_lecture') {
-      const paymentContent = await base44.asServiceRole.entities.BotContent.filter({ key: 'post_lecture_payment_confirmed' });
-      if (paymentContent.length > 0) {
-        botMessage = paymentContent[0].content.replace('{שם}', contactName).replace('{שם פרטי}', contactName);
-      } else {
-        botMessage = `היי ${contactName}, קיבלנו את התשלום! תודה רבה. ניצור איתך קשר בהקדם להמשך התהליך.`;
-      }
-
     } else if (triggerType === 'paid_lectures') {
       const paymentContent = await base44.asServiceRole.entities.BotContent.filter({ key: 'lectures_payment_confirmed' });
       if (paymentContent.length > 0) {
