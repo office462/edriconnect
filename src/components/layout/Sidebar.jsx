@@ -11,7 +11,8 @@ import {
   ChevronRight,
   FolderOpen,
   BookOpen,
-  Bot
+  Bot,
+  BookOpenCheck
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -25,6 +26,7 @@ const navItems = [
   { path: '/BotChat', label: 'בדיקת בוט', icon: Bot },
   { path: '/BotContent', label: 'תוכן הבוט', icon: MessageSquare },
   { path: '/SystemSettings', label: 'הגדרות מערכת', icon: Settings },
+  { path: '/UserGuide', label: 'מדריך למשתמשת', icon: BookOpenCheck },
 ];
 
 export default function Sidebar({ collapsed, onToggle }) {

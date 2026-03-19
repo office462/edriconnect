@@ -16,6 +16,7 @@ import ServiceContentPage from '@/pages/ServiceContentPage';
 import Lectures from '@/pages/Lectures';
 import SystemSettings from '@/pages/SystemSettings';
 import BotChat from '@/pages/BotChat';
+import UserGuide from '@/pages/UserGuide';
 
 const AuthenticatedApp = () => {
   const { isLoadingAuth, isLoadingPublicSettings, authError, navigateToLogin } = useAuth();
@@ -50,6 +51,7 @@ const AuthenticatedApp = () => {
         <Route path="/ServiceContent" element={<ServiceContentPage />} />
         <Route path="/Lectures" element={<Lectures />} />
         <Route path="/SystemSettings" element={<SystemSettings />} />
+        <Route path="/UserGuide" element={<UserGuide />} />
       </Route>
       <Route path="*" element={<PageNotFound />} />
     </Routes>
