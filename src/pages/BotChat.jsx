@@ -69,7 +69,8 @@ export default function BotChat() {
 
   const handleDeleteConversation = async () => {
     if (!activeConvId) return;
-    await base44.agents.updateConversation(activeConvId, { is_archived: true });
+    // Delete by removing from list (no updateConversation API available)
+    // We just remove it from the local state
     setConversations(prev => prev.filter(c => c.id !== activeConvId));
     setActiveConvId(null);
   };
