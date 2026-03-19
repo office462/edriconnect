@@ -198,8 +198,8 @@ async function sendBotContinuation(base44, requestData, requestId, triggerType) 
 
     console.log(`Bot message ready (${botMessage.length} chars), searching for conversation...`);
 
-    // Find existing conversation for this contact
-    const conversations = await base44.asServiceRole.agents.listConversations({ q: { agent_name: 'dr_adri_bot' }, limit: 100 });
+    // Find existing conversation for this contact (use user scope - service role doesn't see conversations)
+    const conversations = await base44.agents.listConversations({ agent_name: 'dr_adri_bot' });
     console.log(`Found ${conversations.length} total conversations`);
 
     let targetConversation = null;
