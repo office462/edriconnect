@@ -1,0 +1,195 @@
+import React, { useState } from 'react';
+import { base44 } from '@/api/base44Client';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { Card, CardContent } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
+import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { Badge } from '@/components/ui/badge';
+import { Plus, Pencil, Video, FileText, Link as LinkIcon, CreditCard, ClipboardList, FileCheck } from 'lucide-react';
+import { toast } from 'sonner';
+
+const contentTypes = [
+  { value: 'video', label: 'סרטון', icon: Video },
+  { value: 'pdf', label: 'PDF', icon: FileText },
+  { value: 'questionnaire', label: 'שאלון', icon: ClipboardList },
+  { value: 'payment_link', label: 'קישור תשלום', icon: CreditCard },
+  { value: 'external_link', label: 'קישור חיצוני', icon: LinkIcon },
+  { value: 'agreement', label: 'הסכם', icon: FileCheck },
+];
+
+const serviceTypes = [
+  { value: 'general', label: 'כללי' },
+  { value: 'consultation', label: 'ייעוץ' },
+  { value: 'legal', label: 'משפטי' },
+  { value: 'lectures', label: 'הרצאות' },
+  { value: 'clinic', label: 'קליניקה' },
+  { value: 'post_lecture', label: 'פוסט הרצאה' },
+];
+
+const emptyForm = { title: '', content_type: 'video', service_type: 'general', url: '', description: '', is_active: true, sort_order: 0 };
+
+export default function ServiceContentPage() {
+  const [showDialog, setShowDialog] = useState(false);
+  const [form, setForm] = useState(emptyForm);
+  const [editId, setEditId] = useState(null);
+  const [filterService, setFilterService] = useState('all');
+  const [filterType, setFilterType] = useState('all');
+  const queryClient = useQueryClient();
+
+  const { data: contents = [], isLoading } = useQuery({
+    queryKey: ['service-content'],
+    queryFn: () => base44.entities.ServiceContent.list('sort_order', 200),
+  });
+
+  const saveMutation = useMutation({
+    mutationFn: (data) => editId 
+      ? base44.entities.ServiceContent.update(editId, data)
+      : base44.entities.ServiceContent.create(data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['service-content'] });
+      setShowDialog(false);
+      setEditId(null);
+      toast.success(editId ? 'עודכן' : 'נוצר');
+    },
+  });
+
+  const handleEdit = (item) => {
+    setForm({
+      title: item.title || '', content_type: item.content_type || 'video',
+      service_type: item.service_type || 'general', url: item.url || '',
+      description: item.description || '', is_active: item.is_active !== false,
+      sort_order: item.sort_order || 0,
+    });
+    setEditId(item.id);
+    setShowDialog(true);
+  };
+
+  const filtered = contents.filter(c => {
+    const matchService = filterService === 'all' || c.service_type === filterService;
+    const matchType = filterType === 'all' || c.content_type === filterType;
+    return matchService && matchType;
+  });
+
+  const getIcon = (type) => {
+    const ct = contentTypes.find(t => t.value === type);
+    return ct ? ct.icon : FileText;
+  };
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <h1 className="text-2xl font-bold">ניהול תוכן שירות</h1>
+        <Button onClick={() => { setForm(emptyForm); setEditId(null); setShowDialog(true); }} className="gap-2">
+          <Plus className="w-4 h-4" /> הוסף תוכן
+        </Button>
+      </div>
+
+      <div className="flex gap-3 flex-wrap">
+        <Select value={filterService} onValueChange={setFilterService}>
+          <SelectTrigger className="w-40"><SelectValue placeholder="סוג שירות" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">כל השירותים</SelectItem>
+            {serviceTypes.map(s => <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}
+          </SelectContent>
+        </Select>
+        <Select value={filterType} onValueChange={setFilterType}>
+          <SelectTrigger className="w-40"><SelectValue placeholder="סוג תוכן" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">כל הסוגים</SelectItem>
+            {contentTypes.map(t => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}
+          </SelectContent>
+        </Select>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        {isLoading ? (
+          <p className="col-span-3 text-center py-8 text-muted-foreground">טוען...</p>
+        ) : filtered.length === 0 ? (
+          <p className="col-span-3 text-center py-8 text-muted-foreground">אין תוכן</p>
+        ) : (
+          filtered.map((item) => {
+            const Icon = getIcon(item.content_type);
+            return (
+              <Card key={item.id} className="hover:shadow-md transition-shadow cursor-pointer group" onClick={() => handleEdit(item)}>
+                <CardContent className="p-4">
+                  <div className="flex items-start justify-between mb-2">
+                    <div className="flex items-center gap-2">
+                      <div className="p-1.5 rounded-md bg-primary/10">
+                        <Icon className="w-4 h-4 text-primary" />
+                      </div>
+                      <span className="text-sm font-bold">{item.title}</span>
+                    </div>
+                    <Pencil className="w-3.5 h-3.5 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+                  </div>
+                  {item.description && <p className="text-xs text-muted-foreground mb-3 line-clamp-2">{item.description}</p>}
+                  {item.url && (
+                    <p className="text-xs text-primary/70 mb-3 truncate" dir="ltr">{item.url}</p>
+                  )}
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <Badge variant="outline" className="text-xs">{contentTypes.find(t => t.value === item.content_type)?.label}</Badge>
+                    <Badge variant="secondary" className="text-xs">{serviceTypes.find(s => s.value === item.service_type)?.label}</Badge>
+                    {!item.is_active && <Badge variant="destructive" className="text-xs">לא פעיל</Badge>}
+                  </div>
+                </CardContent>
+              </Card>
+            );
+          })
+        )}
+      </div>
+
+      <Dialog open={showDialog} onOpenChange={setShowDialog}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader><DialogTitle>{editId ? 'עריכת תוכן' : 'תוכן חדש'}</DialogTitle></DialogHeader>
+          <div className="space-y-4 max-h-[60vh] overflow-y-auto pl-1">
+            <div>
+              <Label>כותרת *</Label>
+              <Input value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label>סוג תוכן *</Label>
+                <Select value={form.content_type} onValueChange={(v) => setForm({ ...form, content_type: v })}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {contentTypes.map(t => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label>שיוך שירות *</Label>
+                <Select value={form.service_type} onValueChange={(v) => setForm({ ...form, service_type: v })}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {serviceTypes.map(s => <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div>
+              <Label>קישור / URL</Label>
+              <Input value={form.url} onChange={(e) => setForm({ ...form, url: e.target.value })} placeholder="https://..." dir="ltr" />
+            </div>
+            <div>
+              <Label>תיאור</Label>
+              <Textarea value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} rows={3} />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label>סדר הצגה</Label>
+                <Input type="number" value={form.sort_order} onChange={(e) => setForm({ ...form, sort_order: Number(e.target.value) })} />
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowDialog(false)}>ביטול</Button>
+            <Button onClick={() => saveMutation.mutate(form)} disabled={!form.title}>{editId ? 'עדכן' : 'צור'}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
