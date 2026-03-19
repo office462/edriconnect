@@ -110,7 +110,7 @@ Deno.serve(async (req) => {
     // Trigger bot continuation async (don't wait for it)
     if (botTrigger) {
       console.log(`Triggering bot continuation: ${botTrigger}`);
-      base44.functions.invoke('sendBotContinuation', {
+      base44.asServiceRole.functions.invoke('sendBotContinuation', {
         requestId,
         contactId: data.contact_id,
         contactName: data.contact_name,

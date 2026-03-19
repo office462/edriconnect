@@ -83,7 +83,7 @@ Deno.serve(async (req) => {
     console.log(`Bot message ready (${botMessage.length} chars), searching for conversation...`);
 
     // Find existing conversation for this contact
-    const conversations = await base44.agents.listConversations({ agent_name: 'dr_adri_bot' });
+    const conversations = await base44.asServiceRole.agents.listConversations({ agent_name: 'dr_adri_bot' });
     console.log(`Found ${conversations.length} total conversations`);
 
     let targetConversation = null;
@@ -118,7 +118,7 @@ Deno.serve(async (req) => {
     }
 
     if (targetConversation) {
-      await base44.agents.addMessage(targetConversation, {
+      await base44.asServiceRole.agents.addMessage(targetConversation, {
         role: 'assistant',
         content: botMessage,
       });
