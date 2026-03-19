@@ -22,8 +22,8 @@ Deno.serve(async (req) => {
       ? reminderContent[0].content
       : 'היי, רק רצינו לוודא שקיבלת את ההודעה שלנו. האם תרצה להמשיך?';
 
-    // Get all bot conversations
-    const conversations = await base44.asServiceRole.agents.listConversations({ agent_name: 'dr_adri_bot' });
+    // Get all bot conversations (user scope - service role doesn't see conversations)
+    const conversations = await base44.agents.listConversations({ agent_name: 'dr_adri_bot' });
 
     let sentCount = 0;
     let skippedCount = 0;
