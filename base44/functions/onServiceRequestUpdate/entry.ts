@@ -21,7 +21,7 @@ Deno.serve(async (req) => {
       return Response.json({ ok: true, skipped: true, reason: 'status_unchanged' });
     }
 
-    console.log(`Status changed: ${oldStatus} -> ${newStatus} for request ${requestId}`);
+    console.log(`Status changed: ${oldStatus} -> ${newStatus} for request ${requestId}, type: ${data.service_type}`);
 
     const updates = {};
     const timelineEntries = [];
@@ -42,11 +42,16 @@ Deno.serve(async (req) => {
       const serviceType = data.service_type;
       if (serviceType === 'consultation') {
         updates.current_step = 'confirm_payment';
-        // Send confirmation message via bot conversation
-        await sendBotContinuation(base44, data, 'paid_consultation');
+        await sendBotContinuation(base44, data, requestId, 'paid_consultation');
       } else if (serviceType === 'legal') {
         updates.current_step = 'send_privacy_message';
-        await sendBotContinuation(base44, data, 'paid_legal');
+        await sendBotContinuation(base44, data, requestId, 'paid_legal');
+      } else if (serviceType === 'post_lecture') {
+        updates.current_step = 'confirm_payment';
+        await sendBotContinuation(base44, data, requestId, 'paid_post_lecture');
+      } else if (serviceType === 'lectures') {
+        updates.current_step = 'confirm_payment';
+        await sendBotContinuation(base44, data, requestId, 'paid_lectures');
       }
     }
 
@@ -75,9 +80,8 @@ Deno.serve(async (req) => {
         new_value: 'scheduled',
       });
 
-      // Send location info to bot
       if (data.service_type === 'consultation') {
-        await sendBotContinuation(base44, data, 'scheduled_consultation');
+        await sendBotContinuation(base44, data, requestId, 'scheduled_consultation');
       }
     }
 
@@ -110,30 +114,23 @@ Deno.serve(async (req) => {
   }
 });
 
-async function sendBotContinuation(base44, requestData, triggerType) {
+async function sendBotContinuation(base44, requestData, requestId, triggerType) {
   try {
     const contactId = requestData.contact_id;
+    const contactName = requestData.contact_name || '';
+    const contactPhone = requestData.contact_phone || '';
+
     if (!contactId) {
       console.log('No contact_id found, skipping bot continuation');
       return;
     }
 
-    // Get the contact info
-    const contacts = await base44.asServiceRole.entities.Contact.filter({ id: contactId });
-    const contact = contacts[0];
-    if (!contact) {
-      console.log('Contact not found:', contactId);
-      return;
-    }
+    console.log(`sendBotContinuation: trigger=${triggerType}, contact=${contactName}, phone=${contactPhone}`);
 
-    const contactName = contact.full_name || requestData.contact_name || '';
-    const serviceType = requestData.service_type;
-
-    // Read relevant content from SystemSetting and ServiceContent
+    // Build the message based on trigger type
     let botMessage = '';
 
     if (triggerType === 'paid_consultation') {
-      // Read payment confirmation message
       const settings = await base44.asServiceRole.entities.SystemSetting.filter({ key: 'consultation_payment_confirmed' });
       if (settings.length > 0) {
         botMessage = settings[0].value.replace('{שם פרטי}', contactName).replace('{שם}', contactName);
@@ -141,47 +138,51 @@ async function sendBotContinuation(base44, requestData, triggerType) {
         botMessage = `היי ${contactName}, קיבלתי את התשלום והשאלון ואעבור עליו בהקדם!`;
       }
 
-      // Also get appointment instructions
       const appointmentSettings = await base44.asServiceRole.entities.SystemSetting.filter({ key: 'consultation_appointments' });
       if (appointmentSettings.length > 0) {
         botMessage += '\n\n' + appointmentSettings[0].value;
-      } else {
-        botMessage += '\n\n!חשוב מאוד\nיש לזמן 2 תורים:\n1. תור לזמינות בווצאפ (קוד קופ"ח) - 10 דקות\n2. תור לייעוץ מלא - שעה וחצי';
       }
 
-      // Get calendar link
       const calendarSettings = await base44.asServiceRole.entities.SystemSetting.filter({ key: 'calendar_link' });
       if (calendarSettings.length > 0) {
         botMessage += '\n\nקישור ליומן: ' + calendarSettings[0].value;
       }
 
     } else if (triggerType === 'paid_legal') {
-      // First send payment confirmation
       const paymentConfirmContent = await base44.asServiceRole.entities.BotContent.filter({ key: 'legal_payment_confirmed' });
       if (paymentConfirmContent.length > 0) {
         botMessage = paymentConfirmContent[0].content;
       } else {
-        botMessage = 'ראינו ששילמת!';
+        botMessage = `היי ${contactName}, ראינו ששילמת! תודה רבה.`;
       }
 
-      // Then add privacy message
       const privacyContent = await base44.asServiceRole.entities.BotContent.filter({ key: 'privacy_message' });
       if (privacyContent.length > 0) {
         botMessage += '\n\n' + privacyContent[0].content;
-      } else {
-        botMessage += '\n\nרגע לפני שממשיכים, חשוב לנו לציין שכל המידע שתשתפו נשמר תחת חיסיון וסודיות רפואית מלאה.';
       }
 
-      // Then request documents
       const docContent = await base44.asServiceRole.entities.BotContent.filter({ key: 'legal_documents_request' });
       if (docContent.length > 0) {
         botMessage += '\n\n' + docContent[0].content;
+      }
+
+    } else if (triggerType === 'paid_post_lecture') {
+      const paymentContent = await base44.asServiceRole.entities.BotContent.filter({ key: 'post_lecture_payment_confirmed' });
+      if (paymentContent.length > 0) {
+        botMessage = paymentContent[0].content.replace('{שם}', contactName).replace('{שם פרטי}', contactName);
       } else {
-        botMessage += '\n\nאילו חומרים נדרשים למייל?\n• תיאור המקרה הרפואי\n• תוצאות בדיקות ותיקים רפואיים\n• דוחות רלוונטיים\n• כל מידע נוסף רלוונטי';
+        botMessage = `היי ${contactName}, קיבלנו את התשלום! תודה רבה. ניצור איתך קשר בהקדם להמשך התהליך.`;
+      }
+
+    } else if (triggerType === 'paid_lectures') {
+      const paymentContent = await base44.asServiceRole.entities.BotContent.filter({ key: 'lectures_payment_confirmed' });
+      if (paymentContent.length > 0) {
+        botMessage = paymentContent[0].content.replace('{שם}', contactName).replace('{שם פרטי}', contactName);
+      } else {
+        botMessage = `היי ${contactName}, קיבלנו את התשלום! תודה רבה. ניצור איתך קשר בהקדם.`;
       }
 
     } else if (triggerType === 'scheduled_consultation') {
-      // Send location directions
       const locationSettings = await base44.asServiceRole.entities.SystemSetting.filter({ key: 'location_directions' });
       if (locationSettings.length > 0) {
         botMessage = locationSettings[0].value;
@@ -190,43 +191,51 @@ async function sendBotContinuation(base44, requestData, triggerType) {
       }
     }
 
-    if (botMessage) {
-      console.log(`Bot message for ${triggerType} to ${contactName}: ${botMessage.substring(0, 100)}...`);
+    if (!botMessage) {
+      console.log('No message to send for trigger:', triggerType);
+      return;
+    }
 
-      // Find existing conversation for this contact and send message
-      const conversations = await base44.asServiceRole.agents.listConversations({ agent_name: 'dr_adri_bot' });
+    console.log(`Bot message ready (${botMessage.length} chars), searching for conversation...`);
 
-      // Find conversation that matches this contact
-      let targetConversation = null;
-      for (const conv of conversations) {
-        if (conv.metadata?.contact_id === contactId || conv.metadata?.phone === contact.phone) {
-          targetConversation = conv;
-          break;
-        }
+    // Find existing conversation for this contact
+    const conversations = await base44.asServiceRole.agents.listConversations({ agent_name: 'dr_adri_bot' });
+    console.log(`Found ${conversations.length} total conversations`);
+
+    let targetConversation = null;
+    for (const conv of conversations) {
+      const meta = conv.metadata || {};
+      if (meta.contact_id === contactId || meta.phone === contactPhone) {
+        targetConversation = conv;
+        console.log(`Found matching conversation: ${conv.id}`);
+        break;
       }
+    }
 
-      if (targetConversation) {
-        // Add bot message to the conversation
-        await base44.asServiceRole.agents.addMessage(targetConversation, {
-          role: 'assistant',
-          content: botMessage,
-        });
-        console.log('Bot message sent to conversation:', targetConversation.id);
-      } else {
-        console.log('No existing conversation found for contact:', contactId);
-        // Log this as a timeline event so admin knows
-        await base44.asServiceRole.entities.ServiceRequestTimeline.create({
-          service_request_id: requestData.id,
-          event_type: 'system_note',
-          description: `הודעת המשך תהליך (${triggerType}) לא נשלחה - לא נמצאה שיחה פעילה עבור ${contactName}. יש לשלוח ידנית.`,
-        });
-      }
+    if (targetConversation) {
+      await base44.asServiceRole.agents.addMessage(targetConversation, {
+        role: 'assistant',
+        content: botMessage,
+      });
+      console.log('Bot message sent successfully');
+
+      await base44.asServiceRole.entities.ServiceRequestTimeline.create({
+        service_request_id: requestId,
+        event_type: 'message_sent',
+        description: `הודעת ${triggerType} נשלחה ל${contactName} בשיחת הבוט`,
+      });
+    } else {
+      console.log('No conversation found for contact:', contactId, contactPhone);
+      await base44.asServiceRole.entities.ServiceRequestTimeline.create({
+        service_request_id: requestId,
+        event_type: 'system_note',
+        description: `הודעת המשך תהליך (${triggerType}) לא נשלחה - לא נמצאה שיחה פעילה עבור ${contactName}. יש לשלוח ידנית.`,
+      });
     }
   } catch (error) {
     console.error('Error sending bot continuation:', error);
-    // Don't throw - we don't want to fail the whole update
     await base44.asServiceRole.entities.ServiceRequestTimeline.create({
-      service_request_id: requestData.id,
+      service_request_id: requestId,
       event_type: 'system_note',
       description: `שגיאה בשליחת הודעת המשך: ${error.message}`,
     });
