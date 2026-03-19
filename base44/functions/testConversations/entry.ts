@@ -9,50 +9,44 @@ Deno.serve(async (req) => {
       return Response.json({ error: 'Forbidden' }, { status: 403 });
     }
 
-    const results = {};
+    const conversations = await base44.agents.listConversations({ agent_name: 'dr_adri_bot' });
 
-    try {
-      console.log('Test 1: asServiceRole with q filter');
-      const c1 = await base44.asServiceRole.agents.listConversations({ q: { agent_name: 'dr_adri_bot' }, limit: 5 });
-      results.serviceRole_q = c1.length;
-      console.log('Test 1 OK:', c1.length);
-    } catch (e) {
-      results.serviceRole_q_error = e.message;
-      console.error('Test 1 error:', e.message);
+    // Check each conversation for tool calls that reference the contact
+    const results = [];
+    for (const conv of conversations) {
+      const msgs = conv.messages || [];
+      // Check tool_calls in messages for contact references
+      let foundContactId = null;
+      let foundPhone = null;
+      for (const msg of msgs) {
+        if (msg.tool_calls) {
+          for (const tc of msg.tool_calls) {
+            const args = tc.arguments_string || '';
+            if (args.includes('69bbe3bb909bb9d8c7ae086d')) {
+              foundContactId = '69bbe3bb909bb9d8c7ae086d';
+            }
+            if (args.includes('0544535688')) {
+              foundPhone = '0544535688';
+            }
+            if (args.includes('עינת')) {
+              foundContactId = foundContactId || 'mentioned_in_args';
+            }
+          }
+        }
+        if (msg.content && msg.content.includes('עינת')) {
+          foundContactId = foundContactId || 'mentioned_in_content';
+        }
+      }
+      results.push({
+        id: conv.id,
+        metadata: conv.metadata,
+        messages_count: msgs.length,
+        foundContactId,
+        foundPhone,
+      });
     }
 
-    try {
-      console.log('Test 2: asServiceRole with agent_name');
-      const c2 = await base44.asServiceRole.agents.listConversations({ agent_name: 'dr_adri_bot' });
-      results.serviceRole_agentName = c2.length;
-      console.log('Test 2 OK:', c2.length);
-    } catch (e) {
-      results.serviceRole_agentName_error = e.message;
-      console.error('Test 2 error:', e.message);
-    }
-
-    try {
-      console.log('Test 3: asServiceRole no filter');
-      const c3 = await base44.asServiceRole.agents.listConversations({});
-      results.serviceRole_noFilter = c3.length;
-      console.log('Test 3 OK:', c3.length);
-    } catch (e) {
-      results.serviceRole_noFilter_error = e.message;
-      console.error('Test 3 error:', e.message);
-    }
-
-    try {
-      console.log('Test 4: user scope');
-      const c4 = await base44.agents.listConversations({ agent_name: 'dr_adri_bot' });
-      results.userScope = c4.length;
-      results.userScope_all = c4.map(c => ({ id: c.id, metadata: c.metadata, msgs: c.messages?.length }));
-      console.log('Test 4 OK:', c4.length);
-    } catch (e) {
-      results.userScope_error = e.message;
-      console.error('Test 4 error:', e.message);
-    }
-
-    return Response.json(results);
+    return Response.json({ conversations: results });
   } catch (error) {
     console.error('Error:', error);
     return Response.json({ error: error.message }, { status: 500 });
