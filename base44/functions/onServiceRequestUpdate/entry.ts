@@ -117,6 +117,7 @@ Deno.serve(async (req) => {
         contactPhone: data.contact_phone,
         serviceType: data.service_type,
         triggerType: botTrigger,
+        conversationId: data.conversation_id || null,
       }).catch(err => console.error('Bot continuation invoke error:', err.message));
     }
 
