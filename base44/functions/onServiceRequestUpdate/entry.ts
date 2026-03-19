@@ -46,9 +46,6 @@ Deno.serve(async (req) => {
       } else if (serviceType === 'legal') {
         updates.current_step = 'send_privacy_message';
         await sendBotContinuation(base44, data, requestId, 'paid_legal');
-      } else if (serviceType === 'post_lecture') {
-        updates.current_step = 'confirm_payment';
-        await sendBotContinuation(base44, data, requestId, 'paid_post_lecture');
       } else if (serviceType === 'lectures') {
         updates.current_step = 'confirm_payment';
         await sendBotContinuation(base44, data, requestId, 'paid_lectures');
