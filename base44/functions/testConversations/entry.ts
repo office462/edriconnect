@@ -45,9 +45,7 @@ Deno.serve(async (req) => {
       console.log('Test 4: user scope');
       const c4 = await base44.agents.listConversations({ agent_name: 'dr_adri_bot' });
       results.userScope = c4.length;
-      if (c4.length > 0) {
-        results.userScope_first = { id: c4[0].id, metadata: c4[0].metadata };
-      }
+      results.userScope_all = c4.map(c => ({ id: c.id, metadata: c.metadata, msgs: c.messages?.length }));
       console.log('Test 4 OK:', c4.length);
     } catch (e) {
       results.userScope_error = e.message;
