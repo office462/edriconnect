@@ -38,7 +38,8 @@ export default function BotChat() {
   const loadConversations = async () => {
     setIsLoadingList(true);
     const list = await base44.agents.listConversations({ agent_name: AGENT_NAME });
-    setConversations(list || []);
+    const hidden = getHiddenIds();
+    setConversations((list || []).filter(c => !hidden.includes(c.id)));
     setIsLoadingList(false);
   };
 
