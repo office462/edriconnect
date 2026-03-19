@@ -213,7 +213,7 @@ async function sendBotContinuation(base44, requestData, requestId, triggerType) 
     }
 
     if (targetConversation) {
-      await base44.asServiceRole.agents.addMessage(targetConversation, {
+      await base44.agents.addMessage(targetConversation, {
         role: 'assistant',
         content: botMessage,
       });
