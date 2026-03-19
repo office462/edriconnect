@@ -156,18 +156,26 @@ async function sendBotContinuation(base44, requestData, triggerType) {
       }
 
     } else if (triggerType === 'paid_legal') {
-      // Send privacy message first
-      const privacySettings = await base44.asServiceRole.entities.SystemSetting.filter({ key: 'privacy' });
-      if (privacySettings.length > 0) {
-        botMessage = privacySettings[0].value;
+      // First send payment confirmation
+      const paymentConfirmContent = await base44.asServiceRole.entities.BotContent.filter({ key: 'legal_payment_confirmed' });
+      if (paymentConfirmContent.length > 0) {
+        botMessage = paymentConfirmContent[0].content;
       } else {
-        botMessage = 'רגע לפני שממשיכים, חשוב לנו לציין שכל המידע שתשתפו נשמר תחת חיסיון וסודיות רפואית מלאה.';
+        botMessage = 'ראינו ששילמת!';
+      }
+
+      // Then add privacy message
+      const privacyContent = await base44.asServiceRole.entities.BotContent.filter({ key: 'privacy_message' });
+      if (privacyContent.length > 0) {
+        botMessage += '\n\n' + privacyContent[0].content;
+      } else {
+        botMessage += '\n\nרגע לפני שממשיכים, חשוב לנו לציין שכל המידע שתשתפו נשמר תחת חיסיון וסודיות רפואית מלאה.';
       }
 
       // Then request documents
-      const docSettings = await base44.asServiceRole.entities.SystemSetting.filter({ key: 'legal_documents_request' });
-      if (docSettings.length > 0) {
-        botMessage += '\n\n' + docSettings[0].value;
+      const docContent = await base44.asServiceRole.entities.BotContent.filter({ key: 'legal_documents_request' });
+      if (docContent.length > 0) {
+        botMessage += '\n\n' + docContent[0].content;
       } else {
         botMessage += '\n\nאילו חומרים נדרשים למייל?\n• תיאור המקרה הרפואי\n• תוצאות בדיקות ותיקים רפואיים\n• דוחות רלוונטיים\n• כל מידע נוסף רלוונטי';
       }
