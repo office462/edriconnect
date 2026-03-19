@@ -132,7 +132,7 @@ Deno.serve(async (req) => {
 
       // Send reminder
       const personalizedMessage = reminderMessage.replace('{שם}', request.contact_name || '');
-      await base44.asServiceRole.agents.addMessage(targetConversation, {
+      await base44.agents.addMessage(targetConversation, {
         role: 'assistant',
         content: personalizedMessage,
       });
