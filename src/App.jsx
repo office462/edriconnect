@@ -15,6 +15,7 @@ import BotContent from '@/pages/BotContent';
 import ServiceContentPage from '@/pages/ServiceContentPage';
 import Lectures from '@/pages/Lectures';
 import SystemSettings from '@/pages/SystemSettings';
+import BotChat from '@/pages/BotChat';
 
 const AuthenticatedApp = () => {
   const { isLoadingAuth, isLoadingPublicSettings, authError, navigateToLogin } = useAuth();
@@ -44,6 +45,7 @@ const AuthenticatedApp = () => {
         <Route path="/Contacts" element={<Contacts />} />
         <Route path="/ServiceRequests" element={<ServiceRequests />} />
         <Route path="/ServiceRequestDetail" element={<ServiceRequestDetail />} />
+        <Route path="/BotChat" element={<BotChat />} />
         <Route path="/BotContent" element={<BotContent />} />
         <Route path="/ServiceContent" element={<ServiceContentPage />} />
         <Route path="/Lectures" element={<Lectures />} />

@@ -10,7 +10,8 @@ import {
   ChevronLeft,
   ChevronRight,
   FolderOpen,
-  BookOpen
+  BookOpen,
+  Bot
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -21,6 +22,7 @@ const navItems = [
   { path: '/ServiceRequests', label: 'פניות שירות', icon: FileText },
   { path: '/Lectures', label: 'קטלוג הרצאות', icon: BookOpen },
   { path: '/ServiceContent', label: 'ניהול תוכן', icon: FolderOpen },
+  { path: '/BotChat', label: 'בדיקת בוט', icon: Bot },
   { path: '/BotContent', label: 'תוכן הבוט', icon: MessageSquare },
   { path: '/SystemSettings', label: 'הגדרות מערכת', icon: Settings },
 ];
