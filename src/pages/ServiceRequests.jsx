@@ -77,12 +77,21 @@ export default function ServiceRequests() {
   });
 
   const updateMutation = useMutation({
-    mutationFn: async ({ id, data, oldStatus }) => {
+    mutationFn: async ({ id, data, oldStatus, fullRequest }) => {
       await base44.entities.ServiceRequest.update(id, data);
       if (data.status && data.status !== oldStatus) {
         await base44.entities.ServiceRequestTimeline.create({
           service_request_id: id, event_type: 'status_change', description: 'סטטוס שונה', old_value: oldStatus, new_value: data.status,
         });
+
+        // Trigger bot continuation for status changes
+        const reqData = fullRequest || requests.find(r => r.id === id) || {};
+        const updatedData = { ...reqData, ...data };
+        base44.functions.invoke('onServiceRequestUpdate', {
+          event: { type: 'update', entity_name: 'ServiceRequest', entity_id: id },
+          data: updatedData,
+          old_data: { ...reqData, status: oldStatus },
+        }).catch(err => console.warn('Bot trigger error:', err));
       }
     },
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['service-requests'] }); setShowEdit(false); setEditingReq(null); toast.success('עודכן'); },
