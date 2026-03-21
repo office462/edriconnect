@@ -121,7 +121,7 @@ export default function ServiceRequests() {
   const handleDelete = (req) => setDeleteTarget(req);
 
   const handleQuickStatus = (req, newStatus) => {
-    updateMutation.mutate({ id: req.id, data: { status: newStatus }, oldStatus: req.status });
+    updateMutation.mutate({ id: req.id, data: { status: newStatus }, oldStatus: req.status, fullRequest: req });
   };
 
   return (
