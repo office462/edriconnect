@@ -316,7 +316,8 @@ export default function ServiceRequests() {
             <Button variant="outline" onClick={() => setShowEdit(false)}>ביטול</Button>
             <Button onClick={() => {
               const { id, _oldStatus, contact_name, ...data } = editingReq;
-              updateMutation.mutate({ id, data, oldStatus: _oldStatus });
+              const fullRequest = requests.find(r => r.id === id);
+              updateMutation.mutate({ id, data, oldStatus: _oldStatus, fullRequest });
             }}>שמור</Button>
           </DialogFooter>
         </DialogContent>
