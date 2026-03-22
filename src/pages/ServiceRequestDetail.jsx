@@ -10,6 +10,7 @@ import StatusActions from '@/components/service-request/StatusActions';
 import TimelineView from '@/components/service-request/TimelineView';
 import FilesList from '@/components/service-request/FilesList';
 import { toast } from 'sonner';
+import { findAndSaveConversationId } from '@/lib/findConversationId';
 
 export default function ServiceRequestDetail() {
   const urlParams = new URLSearchParams(window.location.search);

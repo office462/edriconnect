@@ -20,6 +20,7 @@ import RequestCard from '@/components/service-requests/RequestCard';
 import { Link } from 'react-router-dom';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
+import { findAndSaveConversationId } from '@/lib/findConversationId';
 
 const statusOptions = [
   { value: 'new_lead', label: 'ליד חדש' },
