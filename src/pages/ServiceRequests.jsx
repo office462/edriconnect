@@ -91,7 +91,7 @@ export default function ServiceRequests() {
           event: { type: 'update', entity_name: 'ServiceRequest', entity_id: id },
           data: updatedData,
           old_data: { ...reqData, status: oldStatus },
-          source: 'admin_frontend',
+
         });
         console.log('Bot trigger result:', botResult?.data);
       }

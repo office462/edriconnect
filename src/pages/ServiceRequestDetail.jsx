@@ -56,7 +56,7 @@ export default function ServiceRequestDetail() {
           event: { type: 'update', entity_name: 'ServiceRequest', entity_id: id },
           data: currentData,
           old_data: { ...request, status: oldStatus },
-          source: 'admin_frontend',
+
         });
         console.log('Bot trigger result:', botResult?.data);
       }
