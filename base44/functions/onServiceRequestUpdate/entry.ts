@@ -180,9 +180,17 @@ Deno.serve(async (req) => {
 
         if (effectiveConversationId) {
           console.log(`Sending bot message to conversation ${effectiveConversationId}, message length: ${botMessage.length}`);
-          // Use minimal conversation object - addMessage only needs the id
+          // First get the full conversation object via service role
+          let targetConversation = null;
+          try {
+            targetConversation = await base44.asServiceRole.agents.getConversation(effectiveConversationId);
+            console.log('getConversation succeeded');
+          } catch (getErr) {
+            console.log('getConversation failed:', getErr.message, '- trying with minimal object');
+            targetConversation = { id: effectiveConversationId };
+          }
           const addResult = await base44.asServiceRole.agents.addMessage(
-            { id: effectiveConversationId }, 
+            targetConversation, 
             { role: 'assistant', content: botMessage }
           );
           console.log('addMessage result:', JSON.stringify(addResult || 'undefined'));
