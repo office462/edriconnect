@@ -44,7 +44,7 @@ export default function Sidebar({ collapsed, onToggle }) {
         </div>
         {!collapsed && (
           <div className="overflow-hidden">
-            <p className="font-bold text-sm text-foreground truncate">ד״ר ליאת אדרי</p>
+            <p className="font-bold text-sm text-foreground font-body">ד״ר ליאת אדרי</p>
             <p className="text-xs text-muted-foreground">מערכת שירות חכמה</p>
           </div>
         )}
@@ -64,9 +64,10 @@ export default function Sidebar({ collapsed, onToggle }) {
                   ? "bg-primary text-primary-foreground shadow-sm" 
                   : "text-muted-foreground hover:bg-muted hover:text-foreground"
               )}
+              style={{ borderRadius: '12px' }}
             >
               <item.icon className={cn("w-5 h-5 flex-shrink-0", isActive && "text-primary-foreground")} />
-              {!collapsed && <span className="text-sm font-medium">{item.label}</span>}
+              {!collapsed && <span className="text-sm font-medium font-body">{item.label}</span>}
             </Link>
           );
         })}

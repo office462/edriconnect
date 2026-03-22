@@ -11,12 +11,19 @@ module.exports = {
       'bg-cyan-100', 'text-cyan-700', 'border-cyan-200',
       'bg-gray-100', 'text-gray-600', 'border-gray-200', 'bg-gray-50',
       'bg-green-50', 'text-green-600',
-      'bg-purple-100', 'text-purple-700', 'border-purple-200',
+      'bg-rose-50', 'text-rose-700', 'border-rose-200', 'bg-rose-100', 'text-rose-600',
+      'bg-orange-50', 'text-orange-700', 'border-orange-200', 'bg-orange-100', 'text-orange-600',
+      'bg-yellow-50', 'text-yellow-700', 'border-yellow-200', 'bg-yellow-100', 'text-yellow-600',
+      'bg-stone-50', 'text-stone-700', 'border-stone-200', 'bg-stone-100', 'text-stone-600',
+      'bg-violet-50', 'text-violet-700', 'border-violet-200', 'bg-violet-100', 'text-violet-600',
+      'bg-teal-50', 'text-teal-700', 'border-teal-200', 'bg-teal-100', 'text-teal-600',
     ],
   theme: {
   	extend: {
   		fontFamily: {
-  			heebo: ['var(--font-heebo)']
+  			heebo: ['var(--font-body)'],
+  			headings: ['var(--font-headings)'],
+  			body: ['var(--font-body)'],
   		},
   		borderRadius: {
   			lg: 'var(--radius)',

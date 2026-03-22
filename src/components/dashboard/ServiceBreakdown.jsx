@@ -3,11 +3,11 @@ import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
 
 const COLORS = {
-  consultation: '#7A6C5D',
-  legal: '#C6B8A3',
-  lectures: '#A68B5B',
+  consultation: '#6D436D',
+  legal: '#D29486',
+  lectures: '#FAD980',
   clinic: '#5B8C7A',
-  post_lecture: '#8B7A5B',
+  post_lecture: '#5E4B35',
 };
 
 const LABELS = {
@@ -32,7 +32,7 @@ export default function ServiceBreakdown({ requests }) {
 
   if (data.length === 0) {
     return (
-      <Card>
+      <Card style={{ borderRadius: '12px' }}>
         <CardHeader><CardTitle className="text-lg">פילוח לפי סוג שירות</CardTitle></CardHeader>
         <CardContent className="flex items-center justify-center h-48 text-muted-foreground">
           אין נתונים עדיין
@@ -42,7 +42,7 @@ export default function ServiceBreakdown({ requests }) {
   }
 
   return (
-    <Card>
+    <Card style={{ borderRadius: '12px' }}>
       <CardHeader><CardTitle className="text-lg">פילוח לפי סוג שירות</CardTitle></CardHeader>
       <CardContent>
         <div className="flex items-center gap-6">
@@ -62,8 +62,8 @@ export default function ServiceBreakdown({ requests }) {
             {data.map((entry) => (
               <div key={entry.key} className="flex items-center gap-2">
                 <div className="w-3 h-3 rounded-full" style={{ backgroundColor: COLORS[entry.key] || '#999' }} />
-                <span className="text-sm text-foreground">{entry.name}</span>
-                <span className="text-sm font-bold mr-auto">{entry.value}</span>
+                <span className="text-sm text-foreground font-body">{entry.name}</span>
+                <span className="text-sm font-bold mr-auto font-body">{entry.value}</span>
               </div>
             ))}
           </div>
