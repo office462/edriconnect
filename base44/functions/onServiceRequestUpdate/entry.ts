@@ -14,16 +14,9 @@ Deno.serve(async (req) => {
     const newStatus = data.status;
     const oldStatus = old_data.status;
     const requestId = event.entity_id;
-    const source = body.source || 'unknown';
 
     if (newStatus === oldStatus) {
       return Response.json({ ok: true, skipped: true, reason: 'status_unchanged' });
-    }
-
-    // Block paid status unless triggered from admin frontend
-    if (newStatus === 'paid' && source !== 'admin_frontend') {
-      console.log(`Blocked paid trigger: source is "${source}", not admin_frontend`);
-      return Response.json({ ok: true, skipped: true, reason: 'paid_not_from_admin' });
     }
 
     console.log(`Status changed: ${oldStatus} -> ${newStatus} for request ${requestId}, type: ${data.service_type}`);
