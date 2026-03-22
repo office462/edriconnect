@@ -162,15 +162,17 @@ Deno.serve(async (req) => {
 
         // Fallback: search by phone
         if (!targetConversation && contactPhone) {
-          console.log('Searching for conversation by phone...');
+          console.log('Searching for conversation by phone...', { contactPhone });
           const conversations = await base44.asServiceRole.agents.listConversations({
             agent_name: 'dr_adri_bot',
             sort: '-created_date',
             limit: 50,
           });
+          console.log(`Listed ${conversations.length} conversations`);
 
           for (const conv of conversations) {
             const msgs = conv.messages || [];
+            console.log(`Checking conv ${conv.id}: ${msgs.length} messages, metadata:`, JSON.stringify(conv.metadata || {}));
             for (const msg of msgs) {
               if (msg.tool_calls) {
                 for (const tc of msg.tool_calls) {
@@ -178,7 +180,7 @@ Deno.serve(async (req) => {
                   if (args.includes(contactPhone)) {
                     targetConversation = conv;
                     await base44.asServiceRole.entities.ServiceRequest.update(requestId, { conversation_id: conv.id });
-                    console.log(`Found and saved conversation: ${conv.id}`);
+                    console.log(`Found conversation by phone in tool_calls args: ${conv.id}`);
                     break;
                   }
                 }
@@ -186,6 +188,10 @@ Deno.serve(async (req) => {
               }
             }
             if (targetConversation) break;
+          }
+          
+          if (!targetConversation) {
+            console.log('No conversation found after checking all conversations');
           }
         }
 
