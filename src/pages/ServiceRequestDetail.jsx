@@ -76,8 +76,22 @@ export default function ServiceRequestDetail() {
               old_data: { ...request, status: oldStatus },
             });
             console.log('Step 5 done - Bot trigger result:', botResult?.data);
+
+            // If backend returned a pending bot message, send it from frontend
+            const pending = botResult?.data?.pendingBotMessage;
+            if (pending?.conversationId && pending?.message) {
+              console.log('Step 6 - sending bot message from frontend...');
+              const conv = await base44.agents.getConversation(pending.conversationId);
+              await base44.agents.addMessage(conv, { role: 'assistant', content: pending.message });
+              await base44.entities.ServiceRequestTimeline.create({
+                service_request_id: id,
+                event_type: 'message_sent',
+                description: `הודעת ${pending.botTrigger} נשלחה ל${pending.contactName} בשיחת הבוט`,
+              });
+              console.log('Step 6 done - message sent');
+            }
           } catch (err) {
-            console.warn('Step 5 failed - Bot trigger error:', err.message);
+            console.warn('Step 5/6 failed - Bot trigger error:', err.message);
           }
         }
 
