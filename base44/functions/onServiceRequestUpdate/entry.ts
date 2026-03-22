@@ -168,79 +168,23 @@ Deno.serve(async (req) => {
       }
 
       if (botMessage) {
-        let targetConversation = null;
-
-        // שלב 1 - לפי conversation_id שמור (רק אם זה ID תקין)
         const isValidObjectId = (id) => /^[a-f0-9]{24}$/i.test(id);
-        if (conversationId && isValidObjectId(conversationId)) {
-          targetConversation = await base44.asServiceRole.agents.getConversation(conversationId);
-          console.log(`Step 1: Using conversation_id: ${conversationId}`);
-        } else if (conversationId) {
-          console.log(`Step 1: Skipping invalid conversation_id: ${conversationId}`);
-        }
 
-        // שלב 2 - חיפוש לפי metadata (contact_id או phone)
-        if (!targetConversation) {
-          console.log('Step 2: Searching by metadata...');
-          const conversations = await base44.asServiceRole.agents.listConversations({
-            agent_name: 'dr_adri_bot',
-            sort: '-created_date',
-            limit: 50,
-          });
-          console.log(`Step 2: listConversations returned ${conversations.length} conversations`);
+        // Also check if conversation_id was passed directly from the frontend
+        const passedConversationId = data.conversation_id || null;
+        const effectiveConversationId = (conversationId && isValidObjectId(conversationId)) 
+          ? conversationId 
+          : (passedConversationId && isValidObjectId(passedConversationId)) 
+            ? passedConversationId 
+            : null;
 
-          const contactId = fullRequest.contact_id || null;
-          for (const conv of conversations) {
-            const meta = conv.metadata || {};
-            if (meta.contact_id === contactId || meta.phone === contactPhone) {
-              targetConversation = conv;
-              await base44.asServiceRole.entities.ServiceRequest.update(requestId, {
-                conversation_id: conv.id,
-              });
-              console.log(`Step 2: Found conversation by metadata: ${conv.id}`);
-              break;
-            }
-          }
-        }
-
-        // שלב 3 - חיפוש בהודעות כגיבוי אחרון
-        if (!targetConversation && contactPhone) {
-          console.log('Step 3: Searching in message content...');
-          let step3Conversations;
-          try {
-            step3Conversations = await base44.asServiceRole.agents.listConversations({
-              agent_name: 'dr_adri_bot',
-              sort: '-created_date',
-              limit: 50,
-            });
-          } catch (e) {
-            step3Conversations = [];
-            console.log('Step 3: listConversations failed:', e.message);
-          }
-          const normalize = (p) => {
-            const d = p.replace(/\D/g, '');
-            return d.startsWith('972') ? d : d.startsWith('0') ? '972' + d.slice(1) : d;
-          };
-          const normalizedPhone = normalize(contactPhone);
-          for (const conv of step3Conversations) {
-            const messagesStr = JSON.stringify(conv.messages || []);
-            if (messagesStr.includes(contactPhone) || messagesStr.includes(normalizedPhone)) {
-              targetConversation = conv;
-              await base44.asServiceRole.entities.ServiceRequest.update(requestId, {
-                conversation_id: conv.id,
-              });
-              console.log(`Step 3: Found conversation by message content: ${conv.id}`);
-              break;
-            }
-          }
-        }
-
-        if (targetConversation) {
-          console.log(`Sending bot message to conversation ${targetConversation.id}, message length: ${botMessage.length}`);
-          const addResult = await base44.asServiceRole.agents.addMessage(targetConversation, {
-            role: 'assistant',
-            content: botMessage,
-          });
+        if (effectiveConversationId) {
+          console.log(`Sending bot message to conversation ${effectiveConversationId}, message length: ${botMessage.length}`);
+          // Use minimal conversation object - addMessage only needs the id
+          const addResult = await base44.asServiceRole.agents.addMessage(
+            { id: effectiveConversationId }, 
+            { role: 'assistant', content: botMessage }
+          );
           console.log('addMessage result:', JSON.stringify(addResult || 'undefined'));
 
           await base44.asServiceRole.entities.ServiceRequestTimeline.create({
