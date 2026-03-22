@@ -58,19 +58,16 @@ export default function ServiceRequestDetail() {
 
           // Find and save conversation_id before triggering bot
           const isValidObjectId = (checkId) => /^[a-f0-9]{24}$/i.test(checkId || '');
-          console.log('PAID DEBUG:', {
-            status: updates.status,
-            conversation_id: request.conversation_id,
-            contact_phone: request.contact_phone
-          });
+          let savedConversationId = request.conversation_id;
+
           if (updates.status === 'paid' && !isValidObjectId(request.conversation_id) && request.contact_phone) {
             console.log('Step 4 - finding conversation_id...');
-            await findAndSaveConversationId(id, request.contact_phone);
-            console.log('Step 4 done - conversation_id saved');
+            savedConversationId = await findAndSaveConversationId(id, request.contact_phone);
+            console.log('Step 4 done - conversation_id:', savedConversationId);
           }
 
           // Trigger bot continuation when status changes
-          const currentData = { ...request, ...updates };
+          const currentData = { ...request, ...updates, conversation_id: savedConversationId };
           try {
             console.log('Step 5 - triggering bot...');
             const botResult = await base44.functions.invoke('onServiceRequestUpdate', {

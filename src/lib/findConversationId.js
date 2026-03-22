@@ -25,12 +25,22 @@ export async function findAndSaveConversationId(requestId, contactPhone) {
   };
   const normalizedPhone = normalize(contactPhone);
 
-  // Search only in messages content — not the entire conversation object
+  // Search by metadata first
+  for (const conv of conversations) {
+    const meta = conv.metadata || {};
+    if (meta.phone === contactPhone || meta.phone === normalizedPhone) {
+      await base44.entities.ServiceRequest.update(requestId, { conversation_id: conv.id });
+      console.log('Found conversation_id by metadata:', conv.id, 'for phone:', contactPhone);
+      return conv.id;
+    }
+  }
+
+  // Fallback: search in messages content
   for (const conv of conversations) {
     const messagesStr = JSON.stringify(conv.messages || []);
     if (messagesStr.includes(contactPhone) || messagesStr.includes(normalizedPhone)) {
       await base44.entities.ServiceRequest.update(requestId, { conversation_id: conv.id });
-      console.log('Found and saved conversation_id:', conv.id, 'for phone:', contactPhone);
+      console.log('Found conversation_id by messages:', conv.id, 'for phone:', contactPhone);
       return conv.id;
     }
   }
