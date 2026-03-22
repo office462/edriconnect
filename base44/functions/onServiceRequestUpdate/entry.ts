@@ -108,11 +108,10 @@ Deno.serve(async (req) => {
     // Send bot message directly (instead of calling sendBotContinuation separately)
     let botSent = false;
     if (botTrigger) {
-      console.log(`Processing bot trigger: ${botTrigger}`);
-      
       const contactName = data.contact_name || '';
       const contactPhone = data.contact_phone || '';
       const conversationId = data.conversation_id || null;
+      console.log(`Processing bot trigger: ${botTrigger}`, { contactName, contactPhone, conversationId });
 
       let botMessage = '';
 
