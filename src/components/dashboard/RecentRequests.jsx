@@ -9,7 +9,7 @@ import { ExternalLink } from 'lucide-react';
 
 export default function RecentRequests({ requests }) {
   return (
-    <Card>
+    <Card style={{ borderRadius: '12px' }}>
       <CardHeader className="pb-3">
         <div className="flex items-center justify-between">
           <CardTitle className="text-lg">פניות אחרונות</CardTitle>

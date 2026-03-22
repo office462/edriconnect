@@ -10,7 +10,7 @@ import { Link } from 'react-router-dom';
 
 export default function RequestCard({ request, selected, onSelect, onEdit, onDelete }) {
   return (
-    <Card className="hover:shadow-md transition-shadow group relative">
+    <Card className="hover:shadow-md transition-shadow group relative" style={{ borderRadius: '12px' }}>
       <CardContent className="p-4">
         <div className="flex items-start gap-3">
           <Checkbox
