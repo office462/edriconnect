@@ -24,10 +24,10 @@ export default function Dashboard() {
   const completed = requests.filter(r => r.status === 'completed').length;
 
   const stats = [
-    { label: 'אנשי קשר', value: contacts.length, icon: Users, bgColor: 'bg-violet-100', iconColor: 'text-violet-600' },
-    { label: 'פניות פעילות', value: requests.filter(r => r.status !== 'completed').length, icon: FileText, bgColor: 'bg-rose-100', iconColor: 'text-rose-600' },
-    { label: 'בטיפול', value: inReview, icon: Clock, bgColor: 'bg-yellow-100', iconColor: 'text-yellow-600' },
-    { label: 'הושלמו', value: completed, icon: CheckCircle2, bgColor: 'bg-emerald-100', iconColor: 'text-emerald-600' },
+    { label: 'אנשי קשר', value: contacts.length, icon: Users, bgStyle: { backgroundColor: '#E8D5E8' }, iconStyle: { color: '#6D436D' } },
+    { label: 'פניות פעילות', value: requests.filter(r => r.status !== 'completed').length, icon: FileText, bgStyle: { backgroundColor: '#F2D0C9' }, iconStyle: { color: '#8B3A2F' } },
+    { label: 'בטיפול', value: inReview, icon: Clock, bgStyle: { backgroundColor: '#FAD980' }, iconStyle: { color: '#5E4B35' } },
+    { label: 'הושלמו', value: completed, icon: CheckCircle2, bgStyle: { backgroundColor: '#D5E8D5' }, iconStyle: { color: '#3A6B3A' } },
   ];
 
   return (
