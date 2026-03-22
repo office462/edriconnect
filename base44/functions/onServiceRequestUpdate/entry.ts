@@ -196,11 +196,12 @@ Deno.serve(async (req) => {
         }
 
         if (targetConversation) {
-          await base44.asServiceRole.agents.addMessage(targetConversation, {
+          console.log(`Sending bot message to conversation ${targetConversation.id}, message length: ${botMessage.length}`);
+          const addResult = await base44.asServiceRole.agents.addMessage(targetConversation, {
             role: 'assistant',
             content: botMessage,
           });
-          console.log('Bot message sent successfully');
+          console.log('addMessage result:', JSON.stringify(addResult || 'undefined'));
 
           await base44.asServiceRole.entities.ServiceRequestTimeline.create({
             service_request_id: requestId,
