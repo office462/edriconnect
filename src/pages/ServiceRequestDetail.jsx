@@ -53,6 +53,11 @@ export default function ServiceRequestDetail() {
 
         // Find and save conversation_id before triggering bot
         const isValidObjectId = (id) => /^[a-f0-9]{24}$/i.test(id || '');
+        console.log('PAID DEBUG:', {
+          status: updates.status,
+          conversation_id: request.conversation_id,
+          contact_phone: request.contact_phone
+        });
         if (updates.status === 'paid' && !isValidObjectId(request.conversation_id) && request.contact_phone) {
           await findAndSaveConversationId(id, request.contact_phone);
         }
