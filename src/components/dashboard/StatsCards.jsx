@@ -12,8 +12,8 @@ export default function StatsCards({ stats }) {
               <p className="text-sm text-muted-foreground font-medium font-body">{stat.label}</p>
               <p className="text-3xl font-bold mt-1 text-foreground font-body">{stat.value}</p>
             </div>
-            <div className={cn("p-2.5 rounded-xl", stat.bgColor)}>
-              <stat.icon className={cn("w-5 h-5", stat.iconColor)} />
+            <div className="p-2.5 rounded-xl" style={stat.bgStyle || {}}>
+              <stat.icon className="w-5 h-5" style={stat.iconStyle || {}} />
             </div>
           </div>
           {stat.sub && (
