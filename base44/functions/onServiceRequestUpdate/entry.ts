@@ -170,10 +170,13 @@ Deno.serve(async (req) => {
       if (botMessage) {
         let targetConversation = null;
 
-        // שלב 1 - לפי conversation_id שמור
-        if (conversationId) {
+        // שלב 1 - לפי conversation_id שמור (רק אם זה ID תקין)
+        const isValidObjectId = (id) => /^[a-f0-9]{24}$/i.test(id);
+        if (conversationId && isValidObjectId(conversationId)) {
           targetConversation = await base44.asServiceRole.agents.getConversation(conversationId);
           console.log(`Step 1: Using conversation_id: ${conversationId}`);
+        } else if (conversationId) {
+          console.log(`Step 1: Skipping invalid conversation_id: ${conversationId}`);
         }
 
         // שלב 2 - חיפוש לפי metadata (contact_id או phone)
@@ -203,19 +206,23 @@ Deno.serve(async (req) => {
         // שלב 3 - חיפוש בהודעות כגיבוי אחרון
         if (!targetConversation && contactPhone) {
           console.log('Step 3: Searching in message content...');
-          if (!conversations) {
-            var conversations = await base44.asServiceRole.agents.listConversations({
+          let step3Conversations;
+          try {
+            step3Conversations = await base44.asServiceRole.agents.listConversations({
               agent_name: 'dr_adri_bot',
               sort: '-created_date',
               limit: 50,
             });
+          } catch (e) {
+            step3Conversations = [];
+            console.log('Step 3: listConversations failed:', e.message);
           }
           const normalize = (p) => {
             const d = p.replace(/\D/g, '');
             return d.startsWith('972') ? d : d.startsWith('0') ? '972' + d.slice(1) : d;
           };
           const normalizedPhone = normalize(contactPhone);
-          for (const conv of conversations) {
+          for (const conv of step3Conversations) {
             const messagesStr = JSON.stringify(conv.messages || []);
             if (messagesStr.includes(contactPhone) || messagesStr.includes(normalizedPhone)) {
               targetConversation = conv;
