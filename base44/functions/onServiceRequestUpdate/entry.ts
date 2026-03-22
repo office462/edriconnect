@@ -112,7 +112,9 @@ Deno.serve(async (req) => {
       const fullRequest = await base44.asServiceRole.entities.ServiceRequest.get(requestId);
       let contactName = fullRequest.contact_name || '';
       let contactPhone = fullRequest.contact_phone || '';
-      const conversationId = fullRequest.conversation_id || null;
+      // Ignore conversation_id if it equals contact_id (bot sometimes saves wrong value)
+      const rawConversationId = fullRequest.conversation_id || null;
+      const conversationId = (rawConversationId && rawConversationId !== fullRequest.contact_id) ? rawConversationId : null;
 
       // If contact_name/phone missing, fetch from Contact entity
       if ((!contactName || !contactPhone) && fullRequest.contact_id) {
