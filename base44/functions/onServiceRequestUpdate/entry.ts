@@ -194,11 +194,11 @@ Deno.serve(async (req) => {
           });
           botSent = true;
         } else {
-          console.log('No conversation found for contact:', contactPhone);
+          console.log('No valid conversation_id found for contact:', contactPhone);
           await base44.asServiceRole.entities.ServiceRequestTimeline.create({
             service_request_id: requestId,
             event_type: 'system_note',
-            description: `הודעת המשך תהליך (${botTrigger}) לא נשלחה - לא נמצאה שיחה פעילה עבור ${contactName}. יש לשלוח ידנית.`,
+            description: `הודעת המשך תהליך (${botTrigger}) לא נשלחה - לא נמצא conversation_id עבור ${contactName}. יש לשלוח ידנית.`,
           });
         }
       }
