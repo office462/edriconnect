@@ -2,24 +2,38 @@ import React from 'react';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 
+// Colors matching the Pantherray palette:
+// Primary purple: #6D436D, Terracotta: #D29486, Gold: #FAD980, Brown text: #5E4B35
 const statusConfig = {
-  new_lead: { label: 'ליד חדש', color: 'bg-yellow-100 text-yellow-700 border-yellow-200' },
-  pending: { label: 'ממתין', color: 'bg-orange-100 text-orange-700 border-orange-200' },
-  whatsapp_message_to_check: { label: 'הודעה לבדיקה', color: 'bg-rose-100 text-rose-700 border-rose-200' },
-  in_review: { label: 'בטיפול', color: 'bg-violet-100 text-violet-700 border-violet-200' },
-  paid: { label: 'שולם', color: 'bg-emerald-100 text-emerald-700 border-emerald-200' },
-  scheduled: { label: 'נקבע תור', color: 'bg-teal-100 text-teal-700 border-teal-200' },
-  completed: { label: 'הושלם', color: 'bg-stone-100 text-stone-600 border-stone-200' },
+  new_lead: { label: 'ליד חדש', bg: '#FAD980', text: '#5E4B35', border: '#E8C45A' },
+  pending: { label: 'ממתין', bg: '#F5E6C8', text: '#5E4B35', border: '#E0CBA5' },
+  whatsapp_message_to_check: { label: 'הודעה לבדיקה', bg: '#F2D0C9', text: '#8B3A2F', border: '#D29486' },
+  in_review: { label: 'בטיפול', bg: '#E8D5E8', text: '#6D436D', border: '#C9A5C9' },
+  paid: { label: 'שולם', bg: '#D5E8D5', text: '#3A6B3A', border: '#A5C9A5' },
+  scheduled: { label: 'נקבע תור', bg: '#D5DDE8', text: '#3A4F6B', border: '#A5B5C9' },
+  completed: { label: 'הושלם', bg: '#E8E0D5', text: '#6B5C4F', border: '#C9B9A5' },
 };
 
 export default function StatusBadge({ status }) {
-  const config = statusConfig[status] || { label: status, color: 'bg-stone-100 text-stone-600' };
+  const config = statusConfig[status];
+  
+  if (!config) {
+    return (
+      <Badge variant="outline" className="text-xs font-medium border px-3 py-0.5" style={{ borderRadius: '50px' }}>
+        {status}
+      </Badge>
+    );
+  }
 
   return (
     <Badge 
-      variant="outline" 
-      className={cn("text-xs font-medium border px-3 py-0.5", config.color)}
-      style={{ borderRadius: '50px' }}
+      className="text-xs font-medium px-3 py-0.5 border"
+      style={{ 
+        borderRadius: '50px',
+        backgroundColor: config.bg,
+        color: config.text,
+        borderColor: config.border,
+      }}
     >
       {config.label}
     </Badge>
