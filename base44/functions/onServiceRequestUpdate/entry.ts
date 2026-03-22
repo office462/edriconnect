@@ -170,11 +170,62 @@ Deno.serve(async (req) => {
       if (botMessage) {
         let targetConversation = null;
 
+        // שלב 1 - לפי conversation_id שמור
         if (conversationId) {
           targetConversation = await base44.asServiceRole.agents.getConversation(conversationId);
-          console.log(`Using conversation_id: ${conversationId}`);
-        } else {
-          console.log('No conversation_id on request - cannot send bot message');
+          console.log(`Step 1: Using conversation_id: ${conversationId}`);
+        }
+
+        // שלב 2 - חיפוש לפי metadata (contact_id או phone)
+        if (!targetConversation) {
+          console.log('Step 2: Searching by metadata...');
+          const conversations = await base44.asServiceRole.agents.listConversations({
+            agent_name: 'dr_adri_bot',
+            sort: '-created_date',
+            limit: 50,
+          });
+          console.log(`Step 2: listConversations returned ${conversations.length} conversations`);
+
+          const contactId = fullRequest.contact_id || null;
+          for (const conv of conversations) {
+            const meta = conv.metadata || {};
+            if (meta.contact_id === contactId || meta.phone === contactPhone) {
+              targetConversation = conv;
+              await base44.asServiceRole.entities.ServiceRequest.update(requestId, {
+                conversation_id: conv.id,
+              });
+              console.log(`Step 2: Found conversation by metadata: ${conv.id}`);
+              break;
+            }
+          }
+        }
+
+        // שלב 3 - חיפוש בהודעות כגיבוי אחרון
+        if (!targetConversation && contactPhone) {
+          console.log('Step 3: Searching in message content...');
+          if (!conversations) {
+            var conversations = await base44.asServiceRole.agents.listConversations({
+              agent_name: 'dr_adri_bot',
+              sort: '-created_date',
+              limit: 50,
+            });
+          }
+          const normalize = (p) => {
+            const d = p.replace(/\D/g, '');
+            return d.startsWith('972') ? d : d.startsWith('0') ? '972' + d.slice(1) : d;
+          };
+          const normalizedPhone = normalize(contactPhone);
+          for (const conv of conversations) {
+            const messagesStr = JSON.stringify(conv.messages || []);
+            if (messagesStr.includes(contactPhone) || messagesStr.includes(normalizedPhone)) {
+              targetConversation = conv;
+              await base44.asServiceRole.entities.ServiceRequest.update(requestId, {
+                conversation_id: conv.id,
+              });
+              console.log(`Step 3: Found conversation by message content: ${conv.id}`);
+              break;
+            }
+          }
         }
 
         if (targetConversation) {
