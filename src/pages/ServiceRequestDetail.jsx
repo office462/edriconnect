@@ -52,11 +52,12 @@ export default function ServiceRequestDetail() {
 
         // Trigger bot continuation when status changes
         const currentData = { ...request, ...updates };
-        base44.functions.invoke('onServiceRequestUpdate', {
+        const botResult = await base44.functions.invoke('onServiceRequestUpdate', {
           event: { type: 'update', entity_name: 'ServiceRequest', entity_id: id },
           data: currentData,
           old_data: { ...request, status: oldStatus },
-        }).catch(err => console.warn('Bot trigger error:', err));
+        });
+        console.log('Bot trigger result:', botResult?.data);
       }
 
       // Log step change
