@@ -39,51 +39,62 @@ export default function ServiceRequestDetail() {
 
   const updateMutation = useMutation({
     mutationFn: async ({ updates, oldStatus }) => {
-      await base44.entities.ServiceRequest.update(id, updates);
-      
-      // Log status change
-      if (updates.status && updates.status !== oldStatus) {
-        await base44.entities.ServiceRequestTimeline.create({
-          service_request_id: id,
-          event_type: 'status_change',
-          description: `סטטוס שונה`,
-          old_value: oldStatus,
-          new_value: updates.status,
-        });
+      try {
+        await base44.entities.ServiceRequest.update(id, updates);
+        console.log('Step 1 done - DB updated');
+        
+        // Log status change
+        if (updates.status && updates.status !== oldStatus) {
+          console.log('Step 2 - status changed:', oldStatus, '->', updates.status);
 
-        // Find and save conversation_id before triggering bot
-        const isValidObjectId = (id) => /^[a-f0-9]{24}$/i.test(id || '');
-        console.log('PAID DEBUG:', {
-          status: updates.status,
-          conversation_id: request.conversation_id,
-          contact_phone: request.contact_phone
-        });
-        if (updates.status === 'paid' && !isValidObjectId(request.conversation_id) && request.contact_phone) {
-          await findAndSaveConversationId(id, request.contact_phone);
-        }
-
-        // Trigger bot continuation when status changes
-        const currentData = { ...request, ...updates };
-        try {
-          const botResult = await base44.functions.invoke('onServiceRequestUpdate', {
-            event: { type: 'update', entity_name: 'ServiceRequest', entity_id: id },
-            data: currentData,
-            old_data: { ...request, status: oldStatus },
+          await base44.entities.ServiceRequestTimeline.create({
+            service_request_id: id,
+            event_type: 'status_change',
+            description: `סטטוס שונה`,
+            old_value: oldStatus,
+            new_value: updates.status,
           });
-          console.log('Bot trigger result:', botResult?.data);
-        } catch (err) {
-          console.warn('Bot trigger error:', err.message);
-        }
-      }
+          console.log('Step 3 done - timeline created');
 
-      // Log step change
-      if (updates.current_step && updates.current_step !== request?.current_step) {
-        await base44.entities.ServiceRequestTimeline.create({
-          service_request_id: id,
-          event_type: 'step_change',
-          description: `שלב שונה ל: ${updates.current_step}`,
-          new_value: updates.current_step,
-        });
+          // Find and save conversation_id before triggering bot
+          const isValidObjectId = (checkId) => /^[a-f0-9]{24}$/i.test(checkId || '');
+          console.log('PAID DEBUG:', {
+            status: updates.status,
+            conversation_id: request.conversation_id,
+            contact_phone: request.contact_phone
+          });
+          if (updates.status === 'paid' && !isValidObjectId(request.conversation_id) && request.contact_phone) {
+            console.log('Step 4 - finding conversation_id...');
+            await findAndSaveConversationId(id, request.contact_phone);
+            console.log('Step 4 done - conversation_id saved');
+          }
+
+          // Trigger bot continuation when status changes
+          const currentData = { ...request, ...updates };
+          try {
+            console.log('Step 5 - triggering bot...');
+            const botResult = await base44.functions.invoke('onServiceRequestUpdate', {
+              event: { type: 'update', entity_name: 'ServiceRequest', entity_id: id },
+              data: currentData,
+              old_data: { ...request, status: oldStatus },
+            });
+            console.log('Step 5 done - Bot trigger result:', botResult?.data);
+          } catch (err) {
+            console.warn('Step 5 failed - Bot trigger error:', err.message);
+          }
+        }
+
+        // Log step change
+        if (updates.current_step && updates.current_step !== request?.current_step) {
+          await base44.entities.ServiceRequestTimeline.create({
+            service_request_id: id,
+            event_type: 'step_change',
+            description: `שלב שונה ל: ${updates.current_step}`,
+            new_value: updates.current_step,
+          });
+        }
+      } catch (e) {
+        console.error('MUTATION FAILED AT:', e.message);
       }
     },
     onSuccess: () => {

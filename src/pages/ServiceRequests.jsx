@@ -79,36 +79,48 @@ export default function ServiceRequests() {
 
   const updateMutation = useMutation({
     mutationFn: async ({ id, data, oldStatus, fullRequest }) => {
-      await base44.entities.ServiceRequest.update(id, data);
-      if (data.status && data.status !== oldStatus) {
-        await base44.entities.ServiceRequestTimeline.create({
-          service_request_id: id, event_type: 'status_change', description: 'סטטוס שונה', old_value: oldStatus, new_value: data.status,
-        });
+      try {
+        await base44.entities.ServiceRequest.update(id, data);
+        console.log('Step 1 done - DB updated');
 
-        // Find and save conversation_id before triggering bot
-        const reqData = fullRequest || requests.find(r => r.id === id) || {};
-        const isValidObjectId = (checkId) => /^[a-f0-9]{24}$/i.test(checkId || '');
-        console.log('PAID DEBUG:', {
-          status: data.status,
-          conversation_id: reqData.conversation_id,
-          contact_phone: reqData.contact_phone
-        });
-        if (data.status === 'paid' && !isValidObjectId(reqData.conversation_id) && reqData.contact_phone) {
-          await findAndSaveConversationId(id, reqData.contact_phone);
-        }
+        if (data.status && data.status !== oldStatus) {
+          console.log('Step 2 - status changed:', oldStatus, '->', data.status);
 
-        // Trigger bot continuation for status changes
-        const updatedData = { ...reqData, ...data };
-        try {
-          const botResult = await base44.functions.invoke('onServiceRequestUpdate', {
-            event: { type: 'update', entity_name: 'ServiceRequest', entity_id: id },
-            data: updatedData,
-            old_data: { ...reqData, status: oldStatus },
+          await base44.entities.ServiceRequestTimeline.create({
+            service_request_id: id, event_type: 'status_change', description: 'סטטוס שונה', old_value: oldStatus, new_value: data.status,
           });
-          console.log('Bot trigger result:', botResult?.data);
-        } catch (err) {
-          console.warn('Bot trigger error:', err.message);
+          console.log('Step 3 done - timeline created');
+
+          // Find and save conversation_id before triggering bot
+          const reqData = fullRequest || requests.find(r => r.id === id) || {};
+          const isValidObjectId = (checkId) => /^[a-f0-9]{24}$/i.test(checkId || '');
+          console.log('PAID DEBUG:', {
+            status: data.status,
+            conversation_id: reqData.conversation_id,
+            contact_phone: reqData.contact_phone
+          });
+          if (data.status === 'paid' && !isValidObjectId(reqData.conversation_id) && reqData.contact_phone) {
+            console.log('Step 4 - finding conversation_id...');
+            await findAndSaveConversationId(id, reqData.contact_phone);
+            console.log('Step 4 done - conversation_id saved');
+          }
+
+          // Trigger bot continuation for status changes
+          const updatedData = { ...reqData, ...data };
+          try {
+            console.log('Step 5 - triggering bot...');
+            const botResult = await base44.functions.invoke('onServiceRequestUpdate', {
+              event: { type: 'update', entity_name: 'ServiceRequest', entity_id: id },
+              data: updatedData,
+              old_data: { ...reqData, status: oldStatus },
+            });
+            console.log('Step 5 done - Bot trigger result:', botResult?.data);
+          } catch (err) {
+            console.warn('Step 5 failed - Bot trigger error:', err.message);
+          }
         }
+      } catch (e) {
+        console.error('MUTATION FAILED AT:', e.message);
       }
     },
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['service-requests'] }); setShowEdit(false); setEditingReq(null); toast.success('עודכן'); },
