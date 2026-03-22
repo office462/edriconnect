@@ -99,12 +99,16 @@ export default function ServiceRequests() {
 
         // Trigger bot continuation for status changes
         const updatedData = { ...reqData, ...data };
-        const botResult = await base44.functions.invoke('onServiceRequestUpdate', {
-          event: { type: 'update', entity_name: 'ServiceRequest', entity_id: id },
-          data: updatedData,
-          old_data: { ...reqData, status: oldStatus },
-        });
-        console.log('Bot trigger result:', botResult?.data);
+        try {
+          const botResult = await base44.functions.invoke('onServiceRequestUpdate', {
+            event: { type: 'update', entity_name: 'ServiceRequest', entity_id: id },
+            data: updatedData,
+            old_data: { ...reqData, status: oldStatus },
+          });
+          console.log('Bot trigger result:', botResult?.data);
+        } catch (err) {
+          console.warn('Bot trigger error:', err.message);
+        }
       }
     },
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['service-requests'] }); setShowEdit(false); setEditingReq(null); toast.success('עודכן'); },
