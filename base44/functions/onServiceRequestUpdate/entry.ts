@@ -178,37 +178,20 @@ Deno.serve(async (req) => {
             ? passedConversationId 
             : null;
 
-        if (effectiveConversationId) {
-          console.log(`Sending bot message to conversation ${effectiveConversationId}, message length: ${botMessage.length}`);
-          // First get the full conversation object via service role
-          let targetConversation = null;
-          try {
-            targetConversation = await base44.asServiceRole.agents.getConversation(effectiveConversationId);
-            console.log('getConversation succeeded');
-          } catch (getErr) {
-            console.log('getConversation failed:', getErr.message, '- trying with minimal object');
-            targetConversation = { id: effectiveConversationId };
+        // Return bot message to frontend for sending (service role can't access WhatsApp conversations)
+        return Response.json({ 
+          ok: true, 
+          updates, 
+          timelineCount: timelineEntries.length, 
+          botTrigger, 
+          botSent: false,
+          pendingBotMessage: {
+            conversationId: effectiveConversationId,
+            message: botMessage,
+            contactName,
+            botTrigger,
           }
-          const addResult = await base44.asServiceRole.agents.addMessage(
-            targetConversation, 
-            { role: 'assistant', content: botMessage }
-          );
-          console.log('addMessage result:', JSON.stringify(addResult || 'undefined'));
-
-          await base44.asServiceRole.entities.ServiceRequestTimeline.create({
-            service_request_id: requestId,
-            event_type: 'message_sent',
-            description: `הודעת ${botTrigger} נשלחה ל${contactName} בשיחת הבוט`,
-          });
-          botSent = true;
-        } else {
-          console.log('No valid conversation_id found for contact:', contactPhone);
-          await base44.asServiceRole.entities.ServiceRequestTimeline.create({
-            service_request_id: requestId,
-            event_type: 'system_note',
-            description: `הודעת המשך תהליך (${botTrigger}) לא נשלחה - לא נמצא conversation_id עבור ${contactName}. יש לשלוח ידנית.`,
-          });
-        }
+        });
       }
     }
 
