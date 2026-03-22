@@ -3,11 +3,11 @@ import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
 
 const COLORS = {
-  consultation: '#B45309',
-  legal: '#C2410C',
-  lectures: '#A16207',
-  clinic: '#78716C',
-  post_lecture: '#BE123C',
+  consultation: '#7A6C5D',
+  legal: '#C6B8A3',
+  lectures: '#A68B5B',
+  clinic: '#5B8C7A',
+  post_lecture: '#8B7A5B',
 };
 
 const LABELS = {
