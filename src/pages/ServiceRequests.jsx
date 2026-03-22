@@ -96,7 +96,7 @@ export default function ServiceRequests() {
           const isValidObjectId = (checkId) => /^[a-f0-9]{24}$/i.test(checkId || '');
           let savedConversationId = reqData.conversation_id;
 
-          if (data.status === 'paid' && !isValidObjectId(reqData.conversation_id) && reqData.contact_phone) {
+          if (data.status === 'paid' && (!isValidObjectId(reqData.conversation_id) || reqData.conversation_id === reqData.contact_id) && reqData.contact_phone) {
             console.log('Step 4 - finding conversation_id...');
             savedConversationId = await findAndSaveConversationId(id, reqData.contact_phone);
             console.log('Step 4 done - conversation_id:', savedConversationId);

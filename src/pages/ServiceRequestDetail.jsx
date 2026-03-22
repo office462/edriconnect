@@ -60,7 +60,7 @@ export default function ServiceRequestDetail() {
           const isValidObjectId = (checkId) => /^[a-f0-9]{24}$/i.test(checkId || '');
           let savedConversationId = request.conversation_id;
 
-          if (updates.status === 'paid' && !isValidObjectId(request.conversation_id) && request.contact_phone) {
+          if (updates.status === 'paid' && (!isValidObjectId(request.conversation_id) || request.conversation_id === request.contact_id) && request.contact_phone) {
             console.log('Step 4 - finding conversation_id...');
             savedConversationId = await findAndSaveConversationId(id, request.contact_phone);
             console.log('Step 4 done - conversation_id:', savedConversationId);
