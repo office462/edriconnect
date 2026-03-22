@@ -175,9 +175,18 @@ Deno.serve(async (req) => {
           console.log(`Using conversation_id: ${conversationId}`);
         }
 
-        // Fallback: search by phone
+        // Fallback: search by phone with normalization
         if (!targetConversation && contactPhone) {
-          console.log('Searching for conversation by phone...', { contactPhone });
+          function normalizePhone(phone) {
+            const digits = phone.replace(/\D/g, '');
+            if (digits.startsWith('972')) return digits;
+            if (digits.startsWith('0')) return '972' + digits.slice(1);
+            return digits;
+          }
+
+          const normalizedPhone = normalizePhone(contactPhone);
+          console.log('Searching for conversation by phone...', { contactPhone, normalizedPhone });
+
           const conversations = await base44.asServiceRole.agents.listConversations({
             agent_name: 'dr_adri_bot',
             sort: '-created_date',
@@ -187,22 +196,29 @@ Deno.serve(async (req) => {
 
           for (const conv of conversations) {
             const msgs = conv.messages || [];
-            console.log(`Checking conv ${conv.id}: ${msgs.length} messages, metadata:`, JSON.stringify(conv.metadata || {}));
             for (const msg of msgs) {
-              if (msg.tool_calls) {
-                for (const tc of msg.tool_calls) {
-                  const args = tc.arguments_string || '';
-                  if (args.includes(contactPhone)) {
-                    targetConversation = conv;
-                    await base44.asServiceRole.entities.ServiceRequest.update(requestId, { conversation_id: conv.id });
-                    console.log(`Found conversation by phone in tool_calls args: ${conv.id}`);
-                    break;
-                  }
-                }
-                if (targetConversation) break;
+              // 1. Search in message content
+              const content = typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content || '');
+              if (content.includes(contactPhone) || content.includes(normalizedPhone)) {
+                targetConversation = conv;
+                break;
               }
+
+              // 2. Search in tool_calls (arguments + results)
+              for (const tc of msg.tool_calls || []) {
+                const tcStr = (tc.arguments_string || '') + JSON.stringify(tc.results || '');
+                if (tcStr.includes(contactPhone) || tcStr.includes(normalizedPhone)) {
+                  targetConversation = conv;
+                  break;
+                }
+              }
+              if (targetConversation) break;
             }
-            if (targetConversation) break;
+            if (targetConversation) {
+              await base44.asServiceRole.entities.ServiceRequest.update(requestId, { conversation_id: conv.id });
+              console.log(`Found conversation by phone: ${conv.id}`);
+              break;
+            }
           }
           
           if (!targetConversation) {
