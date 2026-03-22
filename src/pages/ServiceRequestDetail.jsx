@@ -52,7 +52,8 @@ export default function ServiceRequestDetail() {
         });
 
         // Find and save conversation_id before triggering bot
-        if (updates.status === 'paid' && !request.conversation_id && request.contact_phone) {
+        const isValidObjectId = (id) => /^[a-f0-9]{24}$/i.test(id || '');
+        if (updates.status === 'paid' && !isValidObjectId(request.conversation_id) && request.contact_phone) {
           await findAndSaveConversationId(id, request.contact_phone);
         }
 

@@ -87,7 +87,8 @@ export default function ServiceRequests() {
 
         // Find and save conversation_id before triggering bot
         const reqData = fullRequest || requests.find(r => r.id === id) || {};
-        if (data.status === 'paid' && !reqData.conversation_id && reqData.contact_phone) {
+        const isValidObjectId = (checkId) => /^[a-f0-9]{24}$/i.test(checkId || '');
+        if (data.status === 'paid' && !isValidObjectId(reqData.conversation_id) && reqData.contact_phone) {
           await findAndSaveConversationId(id, reqData.contact_phone);
         }
 
