@@ -108,9 +108,11 @@ Deno.serve(async (req) => {
     // Send bot message directly (instead of calling sendBotContinuation separately)
     let botSent = false;
     if (botTrigger) {
-      const contactName = data.contact_name || '';
-      const contactPhone = data.contact_phone || '';
-      const conversationId = data.conversation_id || null;
+      // Fetch full request from DB to ensure we have all fields
+      const fullRequest = await base44.asServiceRole.entities.ServiceRequest.get(requestId);
+      const contactName = fullRequest.contact_name || '';
+      const contactPhone = fullRequest.contact_phone || '';
+      const conversationId = fullRequest.conversation_id || null;
       console.log(`Processing bot trigger: ${botTrigger}`, { contactName, contactPhone, conversationId });
 
       let botMessage = '';
