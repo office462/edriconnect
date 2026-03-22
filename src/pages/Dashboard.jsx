@@ -24,17 +24,17 @@ export default function Dashboard() {
   const completed = requests.filter(r => r.status === 'completed').length;
 
   const stats = [
-    { label: 'אנשי קשר', value: contacts.length, icon: Users, bgColor: 'bg-primary/10', iconColor: 'text-primary' },
-    { label: 'פניות פעילות', value: requests.filter(r => r.status !== 'completed').length, icon: FileText, bgColor: 'bg-blue-50', iconColor: 'text-blue-600' },
-    { label: 'בטיפול', value: inReview, icon: Clock, bgColor: 'bg-amber-50', iconColor: 'text-amber-600' },
-    { label: 'הושלמו', value: completed, icon: CheckCircle2, bgColor: 'bg-emerald-50', iconColor: 'text-emerald-600' },
+    { label: 'אנשי קשר', value: contacts.length, icon: Users, bgColor: 'bg-violet-100', iconColor: 'text-violet-600' },
+    { label: 'פניות פעילות', value: requests.filter(r => r.status !== 'completed').length, icon: FileText, bgColor: 'bg-rose-100', iconColor: 'text-rose-600' },
+    { label: 'בטיפול', value: inReview, icon: Clock, bgColor: 'bg-yellow-100', iconColor: 'text-yellow-600' },
+    { label: 'הושלמו', value: completed, icon: CheckCircle2, bgColor: 'bg-emerald-100', iconColor: 'text-emerald-600' },
   ];
 
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-foreground">לוח בקרה</h1>
-        <p className="text-muted-foreground text-sm mt-1">ד״ר ליאת אדרי — מערכת שירות חכמה 24/7</p>
+        <h1 className="text-4xl font-bold text-foreground">לוח בקרה</h1>
+        <p className="text-muted-foreground text-sm mt-1 font-body">ד״ר ליאת אדרי — מערכת שירות חכמה 24/7</p>
       </div>
 
       <AlertCards newLeads={newLeads} toCheck={toCheck} />
