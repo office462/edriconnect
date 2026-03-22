@@ -173,10 +173,12 @@ Deno.serve(async (req) => {
         const isValidObjectId = (id) => /^[a-f0-9]{24}$/i.test(id);
 
         // Also check if conversation_id was passed directly from the frontend
+        // But ignore it if it equals contact_id (bot sometimes saves wrong value)
         const passedConversationId = data.conversation_id || null;
+        const contactId = fullRequest.contact_id || data.contact_id || null;
         const effectiveConversationId = (conversationId && isValidObjectId(conversationId)) 
           ? conversationId 
-          : (passedConversationId && isValidObjectId(passedConversationId)) 
+          : (passedConversationId && isValidObjectId(passedConversationId) && passedConversationId !== contactId) 
             ? passedConversationId 
             : null;
 
