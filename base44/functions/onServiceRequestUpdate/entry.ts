@@ -110,9 +110,22 @@ Deno.serve(async (req) => {
     if (botTrigger) {
       // Fetch full request from DB to ensure we have all fields
       const fullRequest = await base44.asServiceRole.entities.ServiceRequest.get(requestId);
-      const contactName = fullRequest.contact_name || '';
-      const contactPhone = fullRequest.contact_phone || '';
+      let contactName = fullRequest.contact_name || '';
+      let contactPhone = fullRequest.contact_phone || '';
       const conversationId = fullRequest.conversation_id || null;
+
+      // If contact_name/phone missing, fetch from Contact entity
+      if ((!contactName || !contactPhone) && fullRequest.contact_id) {
+        const contact = await base44.asServiceRole.entities.Contact.get(fullRequest.contact_id);
+        if (contact) {
+          if (!contactName) contactName = contact.full_name || '';
+          if (!contactPhone) contactPhone = contact.phone || '';
+          // Save back to request for future use
+          await base44.asServiceRole.entities.ServiceRequest.update(requestId, { contact_name: contactName, contact_phone: contactPhone });
+          console.log('Fetched contact details from Contact entity and saved to request');
+        }
+      }
+
       console.log(`Processing bot trigger: ${botTrigger}`, { contactName, contactPhone, conversationId });
 
       let botMessage = '';
