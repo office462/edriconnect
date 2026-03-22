@@ -6,7 +6,7 @@
 
 @layer base {
   :root {
-    --font-headings: 'Amatic SC', cursive;
+    --font-headings: 'Rubik', sans-serif;
     --font-body: 'Rubik', sans-serif;
 
     --background: 34 60% 96%;
@@ -95,7 +95,7 @@
   }
 
   h1, h2, h3, h4, h5, h6 {
-    font-family: var(--font-headings);
+    font-family: var(--font-body);
     font-weight: 700;
   }
 }

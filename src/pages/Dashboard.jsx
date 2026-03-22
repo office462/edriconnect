@@ -33,7 +33,7 @@ export default function Dashboard() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-4xl font-bold text-foreground">לוח בקרה</h1>
+        <h1 className="text-2xl font-bold text-foreground">לוח בקרה</h1>
         <p className="text-muted-foreground text-sm mt-1 font-body">ד״ר ליאת אדרי — מערכת שירות חכמה 24/7</p>
       </div>
 
