@@ -85,14 +85,18 @@ export default function ServiceRequests() {
           service_request_id: id, event_type: 'status_change', description: 'סטטוס שונה', old_value: oldStatus, new_value: data.status,
         });
 
-        // Trigger bot continuation for status changes
+        // Find and save conversation_id before triggering bot
         const reqData = fullRequest || requests.find(r => r.id === id) || {};
+        if (data.status === 'paid' && !reqData.conversation_id && reqData.contact_phone) {
+          await findAndSaveConversationId(id, reqData.contact_phone);
+        }
+
+        // Trigger bot continuation for status changes
         const updatedData = { ...reqData, ...data };
         const botResult = await base44.functions.invoke('onServiceRequestUpdate', {
           event: { type: 'update', entity_name: 'ServiceRequest', entity_id: id },
           data: updatedData,
           old_data: { ...reqData, status: oldStatus },
-
         });
         console.log('Bot trigger result:', botResult?.data);
       }

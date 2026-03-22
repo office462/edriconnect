@@ -51,13 +51,17 @@ export default function ServiceRequestDetail() {
           new_value: updates.status,
         });
 
+        // Find and save conversation_id before triggering bot
+        if (updates.status === 'paid' && !request.conversation_id && request.contact_phone) {
+          await findAndSaveConversationId(id, request.contact_phone);
+        }
+
         // Trigger bot continuation when status changes
         const currentData = { ...request, ...updates };
         const botResult = await base44.functions.invoke('onServiceRequestUpdate', {
           event: { type: 'update', entity_name: 'ServiceRequest', entity_id: id },
           data: currentData,
           old_data: { ...request, status: oldStatus },
-
         });
         console.log('Bot trigger result:', botResult?.data);
       }
