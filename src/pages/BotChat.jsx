@@ -9,6 +9,7 @@ const AGENT_NAME = 'dr_adri_bot';
 
 export default function BotChat() {
   const [conversations, setConversations] = useState([]);
+  const [allConversations, setAllConversations] = useState([]);
   const [activeConvId, setActiveConvId] = useState(null);
   const [activeConv, setActiveConv] = useState(null);
   const [messages, setMessages] = useState([]);
@@ -24,7 +25,9 @@ export default function BotChat() {
   const loadConversations = async () => {
     setIsLoadingList(true);
     const list = await base44.agents.listConversations({ agent_name: AGENT_NAME });
-    setConversations(list || []);
+    const all = list || [];
+    setAllConversations(all);
+    setConversations(all.filter(c => !c.metadata?.hidden));
     setIsLoadingList(false);
   };
 
@@ -61,8 +64,30 @@ export default function BotChat() {
       agent_name: AGENT_NAME,
       metadata: { name: `בדיקה ${new Date().toLocaleDateString('he-IL')}` },
     });
+    setAllConversations(prev => [conv, ...prev]);
     setConversations(prev => [conv, ...prev]);
     setActiveConvId(conv.id);
+  };
+
+  const handleHideConversation = async (conv) => {
+    await base44.agents.updateConversation(conv.id, {
+      metadata: { ...conv.metadata, hidden: true },
+    });
+    setAllConversations(prev => prev.map(c => c.id === conv.id ? { ...c, metadata: { ...c.metadata, hidden: true } } : c));
+    setConversations(prev => prev.filter(c => c.id !== conv.id));
+    if (activeConvId === conv.id) {
+      setActiveConvId(null);
+    }
+  };
+
+  const handleRestoreAll = async () => {
+    const hidden = allConversations.filter(c => c.metadata?.hidden);
+    for (const conv of hidden) {
+      await base44.agents.updateConversation(conv.id, {
+        metadata: { ...conv.metadata, hidden: false },
+      });
+    }
+    await loadConversations();
   };
 
   const handleSend = async (text) => {
@@ -81,6 +106,9 @@ export default function BotChat() {
           activeId={activeConvId}
           onSelect={setActiveConvId}
           onCreate={handleCreateConversation}
+          onHide={handleHideConversation}
+          onRestoreAll={handleRestoreAll}
+          hasHidden={allConversations.some(c => c.metadata?.hidden)}
           isLoading={isLoadingList}
         />
       </div>
