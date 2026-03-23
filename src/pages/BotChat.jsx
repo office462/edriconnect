@@ -10,6 +10,10 @@ const AGENT_NAME = 'dr_adri_bot';
 export default function BotChat() {
   const [conversations, setConversations] = useState([]);
   const [allConversations, setAllConversations] = useState([]);
+  const [hiddenIds, setHiddenIds] = useState(() => {
+    const saved = localStorage.getItem('hidden_conversations');
+    return saved ? JSON.parse(saved) : [];
+  });
   const [activeConvId, setActiveConvId] = useState(null);
   const [activeConv, setActiveConv] = useState(null);
   const [messages, setMessages] = useState([]);
@@ -27,7 +31,7 @@ export default function BotChat() {
     const list = await base44.agents.listConversations({ agent_name: AGENT_NAME });
     const all = list || [];
     setAllConversations(all);
-    setConversations(all.filter(c => !c.metadata?.hidden));
+    setConversations(all.filter(c => !hiddenIds.includes(c.id)));
     setIsLoadingList(false);
   };
 
@@ -69,25 +73,20 @@ export default function BotChat() {
     setActiveConvId(conv.id);
   };
 
-  const handleHideConversation = async (conv) => {
-    await base44.agents.updateConversation(conv.id, {
-      metadata: { ...conv.metadata, hidden: true },
-    });
-    setAllConversations(prev => prev.map(c => c.id === conv.id ? { ...c, metadata: { ...c.metadata, hidden: true } } : c));
+  const handleHideConversation = (conv) => {
+    const newHidden = [...hiddenIds, conv.id];
+    setHiddenIds(newHidden);
+    localStorage.setItem('hidden_conversations', JSON.stringify(newHidden));
     setConversations(prev => prev.filter(c => c.id !== conv.id));
     if (activeConvId === conv.id) {
       setActiveConvId(null);
     }
   };
 
-  const handleRestoreAll = async () => {
-    const hidden = allConversations.filter(c => c.metadata?.hidden);
-    for (const conv of hidden) {
-      await base44.agents.updateConversation(conv.id, {
-        metadata: { ...conv.metadata, hidden: false },
-      });
-    }
-    await loadConversations();
+  const handleRestoreAll = () => {
+    setHiddenIds([]);
+    localStorage.removeItem('hidden_conversations');
+    setConversations(allConversations);
   };
 
   const handleSend = async (text) => {
@@ -108,7 +107,7 @@ export default function BotChat() {
           onCreate={handleCreateConversation}
           onHide={handleHideConversation}
           onRestoreAll={handleRestoreAll}
-          hasHidden={allConversations.some(c => c.metadata?.hidden)}
+          hasHidden={hiddenIds.length > 0}
           isLoading={isLoadingList}
         />
       </div>
