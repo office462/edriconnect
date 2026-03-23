@@ -53,6 +53,21 @@ Deno.serve(async (req) => {
       }
     }
 
+    // Handle status -> questionnaire_completed
+    if (newStatus === 'questionnaire_completed' && oldStatus !== 'questionnaire_completed') {
+      updates.questionnaire_completed = true;
+
+      timelineEntries.push({
+        service_request_id: requestId,
+        event_type: 'system_note',
+        description: 'שאלון מולא - הבוט ימשיך בתהליך',
+        old_value: oldStatus,
+        new_value: 'questionnaire_completed',
+      });
+
+      botTrigger = 'questionnaire_completed';
+    }
+
     // Handle status -> in_review
     if (newStatus === 'in_review' && oldStatus !== 'in_review') {
       if (!data.processing_start_date) {
@@ -167,6 +182,12 @@ Deno.serve(async (req) => {
         botMessage = locationSettings.length > 0
           ? locationSettings[0].value
           : 'הגעה ל-MedWork\n• מרכז מסחרי רננים, מודיעין מכבים רעות';
+
+      } else if (botTrigger === 'questionnaire_completed') {
+        const settings = await base44.asServiceRole.entities.SystemSetting.filter({ key: 'questionnaire_completed_message' });
+        botMessage = settings.length > 0
+          ? settings[0].value.replace('{שם פרטי}', contactName).replace('{שם}', contactName)
+          : `היי ${contactName}, ראינו שמילאת את השאלון! תודה רבה, אעבור עליו בהקדם.`;
       }
 
       if (botMessage) {
