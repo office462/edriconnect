@@ -163,6 +163,32 @@ Deno.serve(async (req) => {
         });
 
         console.log('Updated ServiceRequest to questionnaire_completed');
+
+        // Trigger bot continuation (same flow as manual status change)
+        try {
+          const botResult = await base44.asServiceRole.functions.invoke('onServiceRequestUpdate', {
+            event: { type: 'update', entity_name: 'ServiceRequest', entity_id: matchingReq.id },
+            data: { ...matchingReq, status: 'questionnaire_completed', questionnaire_completed: true, current_step: 'questionnaire_completed' },
+            old_data: { ...matchingReq },
+          });
+          console.log('Bot trigger result:', botResult?.data);
+
+          // If backend returned a pending bot message, send it directly via agent
+          const pending = botResult?.data?.pendingBotMessage;
+          if (pending?.conversationId && pending?.message) {
+            const conv = await base44.asServiceRole.agents.getConversation(pending.conversationId);
+            await base44.asServiceRole.agents.addMessage(conv, { role: 'assistant', content: pending.message });
+            await base44.asServiceRole.entities.ServiceRequestTimeline.create({
+              service_request_id: matchingReq.id,
+              event_type: 'message_sent',
+              description: `הודעת שאלון מולא נשלחה ל${matchingReq.contact_name} בשיחת הבוט`,
+            });
+            console.log('Bot message sent via conversation:', pending.conversationId);
+          }
+        } catch (botErr) {
+          console.warn('Bot trigger failed:', botErr.message);
+        }
+
         matched++;
       } else {
         console.log('ServiceRequest already in advanced status:', matchingReq.status);
