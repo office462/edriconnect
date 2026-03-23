@@ -11,6 +11,7 @@ const allStatuses = [
   { value: 'pending', label: 'ממתין' },
   { value: 'whatsapp_message_to_check', label: 'הודעה לבדיקה' },
   { value: 'in_review', label: 'בטיפול' },
+  { value: 'questionnaire_completed', label: 'מילא שאלון' },
   { value: 'paid', label: 'שולם' },
   { value: 'scheduled', label: 'נקבע תור' },
   { value: 'completed', label: 'הושלם' },
