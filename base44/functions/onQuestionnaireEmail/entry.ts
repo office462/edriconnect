@@ -95,11 +95,19 @@ Deno.serve(async (req) => {
 
       console.log('Found questionnaire email! Subject:', subject);
 
-      // Extract body text
-      let bodyText = '';
+      // Extract body text - collect both text/plain and text/html
+      let plainText = '';
+      let htmlText = '';
+
       const extractText = (part) => {
         if (part.mimeType === 'text/plain' && part.body?.data) {
-          bodyText += new TextDecoder().decode(Uint8Array.from(atob(part.body.data.replace(/-/g, '+').replace(/_/g, '/')), c => c.charCodeAt(0)));
+          plainText += new TextDecoder().decode(
+            Uint8Array.from(atob(part.body.data.replace(/-/g, '+').replace(/_/g, '/')), c => c.charCodeAt(0))
+          );
+        } else if (part.mimeType === 'text/html' && part.body?.data) {
+          htmlText += new TextDecoder().decode(
+            Uint8Array.from(atob(part.body.data.replace(/-/g, '+').replace(/_/g, '/')), c => c.charCodeAt(0))
+          );
         }
         if (part.parts) {
           for (const p of part.parts) extractText(p);
@@ -107,11 +115,27 @@ Deno.serve(async (req) => {
       };
       extractText(msg.payload);
 
+      // Use plain text if available, otherwise strip HTML tags
+      const bodyText = plainText.length > 0
+        ? plainText
+        : htmlText
+            .replace(/<br\s*\/?>/gi, '\n')
+            .replace(/<\/p>/gi, '\n')
+            .replace(/<\/div>/gi, '\n')
+            .replace(/<[^>]*>/g, ' ')
+            .replace(/&nbsp;/g, ' ')
+            .replace(/&amp;/g, '&')
+            .replace(/&lt;/g, '<')
+            .replace(/&gt;/g, '>')
+            .replace(/\s+/g, ' ')
+            .trim();
+
       console.log('Email body length:', bodyText.length);
+      console.log('Email body preview:', bodyText.substring(0, 300));
 
       // Extract name from body
-      const firstNameMatch = bodyText.match(/שם פרטי:\s*(.+)/);
-      const lastNameMatch = bodyText.match(/שם משפחה:\s*(.+)/);
+      const firstNameMatch = bodyText.match(/שם פרטי[:\s]+(.+?)(?:\n|שם משפחה|$)/);
+      const lastNameMatch = bodyText.match(/שם משפחה[:\s]+(.+?)(?:\n|$)/);
 
       const firstName = firstNameMatch ? firstNameMatch[1].trim() : '';
       const lastName = lastNameMatch ? lastNameMatch[1].trim() : '';
@@ -119,28 +143,7 @@ Deno.serve(async (req) => {
 
       if (!fullName) {
         console.log('Could not extract name from email');
-        continue;
-      }
-
-      console.log('Extracted name:', fullName);
-
-      // Find matching ServiceRequest by contact_name
-      const requests = await base44.asServiceRole.entities.ServiceRequest.filter({
-        service_type: 'consultation'
-      });
-
-      // Try to match by full name (case-insensitive, trim)
-      const matchingReq = requests.find(r => {
-        const reqName = (r.contact_name || '').trim().toLowerCase();
-        const emailName = fullName.toLowerCase();
-        // Match if contact name contains firstName or full match
-        return reqName === emailName || 
-               reqName.includes(firstName.toLowerCase()) ||
-               emailName.includes(reqName);
-      });
-
-      if (!matchingReq) {
-        console.log('No matching ServiceRequest found for name:', fullName);
+        console.log('Body text for debug:', bodyText.substring(0, 500));
         continue;
       }
 
