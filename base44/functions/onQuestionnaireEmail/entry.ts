@@ -186,11 +186,38 @@ Deno.serve(async (req) => {
 
         console.log('Updated ServiceRequest to questionnaire_completed');
 
+        // Ensure we have contact_phone
+        let contactPhone = matchingReq.contact_phone;
+        if (!contactPhone && matchingReq.contact_id) {
+          const contact = await base44.asServiceRole.entities.Contact.get(matchingReq.contact_id);
+          if (contact?.phone) {
+            contactPhone = contact.phone;
+            await base44.asServiceRole.entities.ServiceRequest.update(matchingReq.id, { contact_phone: contactPhone });
+          }
+        }
+
+        // Validate conversation_id (bot sometimes saves contact_id by mistake)
+        const isValidConversationId = (id, contactId) =>
+          /^[a-f0-9]{24}$/i.test(id || '') && id !== contactId;
+
+        const conversationId = isValidConversationId(matchingReq.conversation_id, matchingReq.contact_id)
+          ? matchingReq.conversation_id
+          : null;
+
+        console.log('conversation_id for bot:', conversationId);
+
         // Trigger bot continuation (same flow as manual status change)
         try {
           const botResult = await base44.asServiceRole.functions.invoke('onServiceRequestUpdate', {
             event: { type: 'update', entity_name: 'ServiceRequest', entity_id: matchingReq.id },
-            data: { ...matchingReq, status: 'questionnaire_completed', questionnaire_completed: true, current_step: 'questionnaire_completed' },
+            data: { 
+              ...matchingReq, 
+              status: 'questionnaire_completed', 
+              questionnaire_completed: true, 
+              current_step: 'questionnaire_completed',
+              contact_phone: contactPhone,
+              conversation_id: conversationId
+            },
             old_data: { ...matchingReq },
           });
           console.log('Bot trigger result:', botResult?.data);
