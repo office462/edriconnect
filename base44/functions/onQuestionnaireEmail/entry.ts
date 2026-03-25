@@ -168,12 +168,22 @@ Deno.serve(async (req) => {
 
       console.log('Matched ServiceRequest:', matchingReq.id, 'current status:', matchingReq.status);
 
-      // Update status to questionnaire_completed
+      // Check if questionnaire message was already sent
+      const existingTimeline = await base44.asServiceRole.entities.ServiceRequestTimeline.filter({
+        service_request_id: matchingReq.id,
+        event_type: 'message_sent',
+      });
+      const alreadySentQuestionnaire = existingTimeline.some(t => 
+        t.description && t.description.includes('שאלון')
+      );
+
+      // Update status to questionnaire_completed (only if not already in advanced status)
       if (matchingReq.status !== 'questionnaire_completed' && matchingReq.status !== 'paid' && matchingReq.status !== 'scheduled' && matchingReq.status !== 'completed') {
         await base44.asServiceRole.entities.ServiceRequest.update(matchingReq.id, {
           status: 'questionnaire_completed',
           questionnaire_completed: true,
           current_step: 'questionnaire_completed',
+          pending_bot_message: alreadySentQuestionnaire ? null : 'questionnaire_completed',
         });
 
         await base44.asServiceRole.entities.ServiceRequestTimeline.create({
@@ -184,63 +194,18 @@ Deno.serve(async (req) => {
           new_value: 'questionnaire_completed',
         });
 
-        console.log('Updated ServiceRequest to questionnaire_completed');
-
-        // Ensure we have contact_phone
-        let contactPhone = matchingReq.contact_phone;
-        if (!contactPhone && matchingReq.contact_id) {
-          const contact = await base44.asServiceRole.entities.Contact.get(matchingReq.contact_id);
-          if (contact?.phone) {
-            contactPhone = contact.phone;
-            await base44.asServiceRole.entities.ServiceRequest.update(matchingReq.id, { contact_phone: contactPhone });
-          }
-        }
-
-        // Validate conversation_id (bot sometimes saves contact_id by mistake)
-        const isValidConversationId = (id, contactId) =>
-          /^[a-f0-9]{24}$/i.test(id || '') && id !== contactId;
-
-        const conversationId = isValidConversationId(matchingReq.conversation_id, matchingReq.contact_id)
-          ? matchingReq.conversation_id
-          : null;
-
-        console.log('conversation_id for bot:', conversationId);
-
-        // Trigger bot continuation (same flow as manual status change)
-        try {
-          const botResult = await base44.asServiceRole.functions.invoke('onServiceRequestUpdate', {
-            event: { type: 'update', entity_name: 'ServiceRequest', entity_id: matchingReq.id },
-            data: { 
-              ...matchingReq, 
-              status: 'questionnaire_completed', 
-              questionnaire_completed: true, 
-              current_step: 'questionnaire_completed',
-              contact_phone: contactPhone,
-              conversation_id: conversationId
-            },
-            old_data: { ...matchingReq },
-          });
-          console.log('Bot trigger result:', botResult?.data);
-
-          // If backend returned a pending bot message, send it directly via agent
-          const pending = botResult?.data?.pendingBotMessage;
-          if (pending?.conversationId && pending?.message) {
-            const conv = await base44.asServiceRole.agents.getConversation(pending.conversationId);
-            await base44.asServiceRole.agents.addMessage(conv, { role: 'assistant', content: pending.message });
-            await base44.asServiceRole.entities.ServiceRequestTimeline.create({
-              service_request_id: matchingReq.id,
-              event_type: 'message_sent',
-              description: `הודעת שאלון מולא נשלחה ל${matchingReq.contact_name} בשיחת הבוט`,
-            });
-            console.log('Bot message sent via conversation:', pending.conversationId);
-          }
-        } catch (botErr) {
-          console.warn('Bot trigger failed:', botErr.message);
-        }
-
+        console.log('Updated ServiceRequest to questionnaire_completed, pending_bot_message:', alreadySentQuestionnaire ? 'null (already sent)' : 'questionnaire_completed');
+        matched++;
+      } else if (!alreadySentQuestionnaire) {
+        // Status already advanced but message never sent — set pending flag
+        await base44.asServiceRole.entities.ServiceRequest.update(matchingReq.id, {
+          questionnaire_completed: true,
+          pending_bot_message: 'questionnaire_completed',
+        });
+        console.log('Status already advanced, but set pending_bot_message for frontend to send');
         matched++;
       } else {
-        console.log('ServiceRequest already in advanced status:', matchingReq.status);
+        console.log('ServiceRequest already in advanced status and message already sent:', matchingReq.status);
       }
     }
 

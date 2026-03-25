@@ -21,6 +21,7 @@ import { Link } from 'react-router-dom';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
 import { findAndSaveConversationId } from '@/lib/findConversationId';
+import { sendPendingBotMessage } from '@/lib/sendPendingBotMessage';
 
 const statusOptions = [
   { value: 'new_lead', label: 'ליד חדש' },
@@ -136,7 +137,23 @@ export default function ServiceRequests() {
         console.error('MUTATION FAILED AT:', e.message);
       }
     },
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['service-requests'] }); setShowEdit(false); setEditingReq(null); toast.success('עודכן'); },
+    onSuccess: async (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['service-requests'] });
+      setShowEdit(false);
+      setEditingReq(null);
+      toast.success('עודכן');
+
+      // Check if updated request has a pending bot message
+      const updatedReq = requests.find(r => r.id === variables.id);
+      if (updatedReq?.pending_bot_message && updatedReq?.conversation_id) {
+        const isValidConvId = /^[a-f0-9]{24}$/i.test(updatedReq.conversation_id) &&
+                              updatedReq.conversation_id !== updatedReq.contact_id;
+        if (isValidConvId) {
+          await sendPendingBotMessage(updatedReq);
+          queryClient.invalidateQueries({ queryKey: ['service-requests'] });
+        }
+      }
+    },
   });
 
   const deleteMutation = useMutation({

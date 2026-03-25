@@ -11,6 +11,7 @@ import TimelineView from '@/components/service-request/TimelineView';
 import FilesList from '@/components/service-request/FilesList';
 import { toast } from 'sonner';
 import { findAndSaveConversationId } from '@/lib/findConversationId';
+import { sendPendingBotMessage } from '@/lib/sendPendingBotMessage';
 
 export default function ServiceRequestDetail() {
   const urlParams = new URLSearchParams(window.location.search);
@@ -36,6 +37,26 @@ export default function ServiceRequestDetail() {
     select: (data) => data[0],
     enabled: !!request?.contact_id,
   });
+
+  // Handle pending bot messages from backend (e.g. questionnaire email)
+  const [isSendingPendingMessage, setIsSendingPendingMessage] = React.useState(false);
+
+  React.useEffect(() => {
+    if (!request?.pending_bot_message || !request?.conversation_id) return;
+    if (isSendingPendingMessage) return;
+
+    const isValidConvId = /^[a-f0-9]{24}$/i.test(request.conversation_id) &&
+                          request.conversation_id !== request.contact_id;
+    if (!isValidConvId) return;
+
+    setIsSendingPendingMessage(true);
+    sendPendingBotMessage(request)
+      .then(() => {
+        queryClient.invalidateQueries({ queryKey: ['service-request', id] });
+        queryClient.invalidateQueries({ queryKey: ['timeline', id] });
+      })
+      .finally(() => setIsSendingPendingMessage(false));
+  }, [request?.pending_bot_message, request?.conversation_id]);
 
   const updateMutation = useMutation({
     mutationFn: async ({ updates, oldStatus }) => {
