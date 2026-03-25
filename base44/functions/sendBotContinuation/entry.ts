@@ -55,6 +55,12 @@ Deno.serve(async (req) => {
       botMessage = locationSettings.length > 0
         ? locationSettings[0].value
         : 'הגעה ל-MedWork\n• מרכז מסחרי רננים, מודיעין מכבים רעות';
+
+    } else if (triggerType === 'questionnaire_completed') {
+      const settings = await base44.asServiceRole.entities.SystemSetting.filter({ key: 'questionnaire_completed_message' });
+      botMessage = settings.length > 0
+        ? settings[0].value.replace('{שם פרטי}', contactName).replace('{שם}', contactName)
+        : `היי ${contactName}, ראינו שמילאת את השאלון! תודה רבה, אעבור עליו בהקדם.`;
     }
 
     if (!botMessage) {
