@@ -31,6 +31,7 @@ export async function sendPendingBotMessage(request) {
       event: { type: 'update', entity_name: 'ServiceRequest', entity_id: request.id },
       data: {
         ...request,
+        conversation_id: conversationId,
         status: request.pending_bot_message === 'questionnaire_completed' ? 'questionnaire_completed' : request.status,
       },
       old_data: {
