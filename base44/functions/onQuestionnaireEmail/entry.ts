@@ -147,6 +147,25 @@ Deno.serve(async (req) => {
         continue;
       }
 
+      console.log('Extracted name:', fullName);
+
+      const requests = await base44.asServiceRole.entities.ServiceRequest.filter({
+        service_type: 'consultation'
+      });
+
+      const matchingReq = requests.find(r => {
+        const reqName = (r.contact_name || '').trim().toLowerCase();
+        const emailName = fullName.toLowerCase();
+        return reqName === emailName ||
+               reqName.includes(firstName.toLowerCase()) ||
+               emailName.includes(reqName);
+      });
+
+      if (!matchingReq) {
+        console.log('No matching ServiceRequest found for name:', fullName);
+        continue;
+      }
+
       console.log('Matched ServiceRequest:', matchingReq.id, 'current status:', matchingReq.status);
 
       // Update status to questionnaire_completed
