@@ -68,68 +68,19 @@ Deno.serve(async (req) => {
       return Response.json({ ok: true, sent: false, reason: 'no_message' });
     }
 
-    // Find conversation - use provided ID or search
-    let targetConversation = null;
-
-    if (conversationId) {
-      targetConversation = await base44.asServiceRole.agents.getConversation(conversationId);
-      console.log(`Using provided conversation_id: ${conversationId}`);
-    }
-
-    // Fallback: search by phone in recent conversations
-    if (!targetConversation && contactPhone) {
-      console.log('Searching for conversation by phone...');
-      const conversations = await base44.asServiceRole.agents.listConversations({
-        agent_name: 'dr_adri_bot',
-        sort: '-created_date',
-        limit: 50,
-      });
-
-      for (const conv of conversations) {
-        const msgs = conv.messages || [];
-        for (const msg of msgs) {
-          if (msg.tool_calls) {
-            for (const tc of msg.tool_calls) {
-              const args = tc.arguments_string || '';
-              if (args.includes(contactPhone)) {
-                targetConversation = conv;
-                // Save conversation_id on the request for future use
-                await base44.asServiceRole.entities.ServiceRequest.update(requestId, { conversation_id: conv.id });
-                console.log(`Found and saved conversation: ${conv.id}`);
-                break;
-              }
-            }
-            if (targetConversation) break;
-          }
-        }
-        if (targetConversation) break;
+    // Return message to frontend for sending (service role cannot access WhatsApp conversations)
+    console.log('Returning bot message for frontend to send, trigger:', triggerType);
+    return Response.json({
+      ok: true,
+      sent: false,
+      pendingMessage: {
+        conversationId: conversationId || null,
+        message: botMessage,
+        triggerType,
+        contactName,
       }
-    }
+    });
 
-    if (targetConversation) {
-      await base44.asServiceRole.agents.addMessage(targetConversation, {
-        role: 'assistant',
-        content: botMessage,
-      });
-      console.log('Bot message sent successfully');
-
-      await base44.asServiceRole.entities.ServiceRequestTimeline.create({
-        service_request_id: requestId,
-        event_type: 'message_sent',
-        description: `הודעת ${triggerType} נשלחה ל${contactName} בשיחת הבוט`,
-      });
-
-      return Response.json({ ok: true, sent: true });
-    } else {
-      console.log('No conversation found for contact:', contactId, contactPhone);
-      await base44.asServiceRole.entities.ServiceRequestTimeline.create({
-        service_request_id: requestId,
-        event_type: 'system_note',
-        description: `הודעת המשך תהליך (${triggerType}) לא נשלחה - לא נמצאה שיחה פעילה עבור ${contactName}. יש לשלוח ידנית.`,
-      });
-
-      return Response.json({ ok: true, sent: false, reason: 'no_conversation' });
-    }
   } catch (error) {
     console.error('Error in sendBotContinuation:', error);
     return Response.json({ error: error.message }, { status: 500 });
