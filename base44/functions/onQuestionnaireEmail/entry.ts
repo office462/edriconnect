@@ -183,7 +183,6 @@ Deno.serve(async (req) => {
           status: 'questionnaire_completed',
           questionnaire_completed: true,
           current_step: 'questionnaire_completed',
-          pending_bot_message: alreadySentQuestionnaire ? null : 'questionnaire_completed',
         });
 
         await base44.asServiceRole.entities.ServiceRequestTimeline.create({
@@ -194,15 +193,38 @@ Deno.serve(async (req) => {
           new_value: 'questionnaire_completed',
         });
 
-        console.log('Updated ServiceRequest to questionnaire_completed, pending_bot_message:', alreadySentQuestionnaire ? 'null (already sent)' : 'questionnaire_completed');
+        // Send bot message directly via sendBotContinuation
+        if (!alreadySentQuestionnaire) {
+          console.log('Calling sendBotContinuation for questionnaire_completed...');
+          const botResult = await base44.asServiceRole.functions.invoke('sendBotContinuation', {
+            requestId: matchingReq.id,
+            contactId: matchingReq.contact_id,
+            contactName: matchingReq.contact_name || fullName,
+            contactPhone: matchingReq.contact_phone,
+            serviceType: matchingReq.service_type,
+            triggerType: 'questionnaire_completed',
+          });
+          console.log('sendBotContinuation result:', botResult);
+        }
+
+        console.log('Updated ServiceRequest to questionnaire_completed');
         matched++;
       } else if (!alreadySentQuestionnaire) {
-        // Status already advanced but message never sent — set pending flag
+        // Status already advanced but message never sent
         await base44.asServiceRole.entities.ServiceRequest.update(matchingReq.id, {
           questionnaire_completed: true,
-          pending_bot_message: 'questionnaire_completed',
         });
-        console.log('Status already advanced, but set pending_bot_message for frontend to send');
+        
+        console.log('Status already advanced, sending bot message...');
+        const botResult = await base44.asServiceRole.functions.invoke('sendBotContinuation', {
+          requestId: matchingReq.id,
+          contactId: matchingReq.contact_id,
+          contactName: matchingReq.contact_name || fullName,
+          contactPhone: matchingReq.contact_phone,
+          serviceType: matchingReq.service_type,
+          triggerType: 'questionnaire_completed',
+        });
+        console.log('sendBotContinuation result:', botResult);
         matched++;
       } else {
         console.log('ServiceRequest already in advanced status and message already sent:', matchingReq.status);
