@@ -16,6 +16,7 @@ Deno.serve(async (req) => {
 
     const attendeeName = attendee.name || '';
     const attendeePhone = attendee.phoneNumber || payload.responses?.phone?.value || payload.metadata?.phone || '';
+    const attendeeEmail = attendee.email || '';
     const startTimeRaw = payload.startTime;
     const durationMinutes = payload.length;
     const eventSlug = payload.eventType?.slug || payload.type || '';
@@ -32,12 +33,21 @@ Deno.serve(async (req) => {
     const appointmentField = isWhatsapp ? 'scheduled_date_whatsapp' : 'scheduled_date_clinic';
     const appointmentType = isWhatsapp ? 'זמינות בווצאפ (10 דק\')' : 'ייעוץ מלא (שעה וחצי)';
 
-    console.log('Calendar booking received:', { attendeeName, attendeePhone, appointmentType, startTimeRaw, durationMinutes, eventSlug });
+    console.log('Calendar booking received:', { attendeeName, attendeeEmail, attendeePhone, appointmentType, startTimeRaw, durationMinutes, eventSlug });
 
-    // Try to match by phone number first
     let matchingReq = null;
 
-    if (attendeePhone) {
+    // Search by email first (most reliable — Cal.com always collects email)
+    if (attendeeEmail) {
+      const allRequests = await base44.asServiceRole.entities.ServiceRequest.filter({ service_type: 'consultation' });
+      matchingReq = allRequests.find(r => {
+        const reqEmail = (r.contact_email || '').toLowerCase().trim();
+        return reqEmail && reqEmail === attendeeEmail.toLowerCase().trim();
+      });
+    }
+
+    // Fallback: match by phone
+    if (!matchingReq && attendeePhone) {
       const normalizedPhone = attendeePhone.replace(/\D/g, '');
       const allRequests = await base44.asServiceRole.entities.ServiceRequest.filter({ service_type: 'consultation' });
       matchingReq = allRequests.find(r => {
@@ -58,9 +68,11 @@ Deno.serve(async (req) => {
     }
 
     if (!matchingReq) {
-      console.log('No matching ServiceRequest found for:', { attendeeName, attendeePhone });
+      console.log('No matching ServiceRequest found for:', { attendeeName, attendeeEmail, attendeePhone });
       return Response.json({ status: 'no_match', attendee: attendeeName });
     }
+
+    console.log('Matched ServiceRequest:', matchingReq.id, 'for attendee:', attendeeName, attendeeEmail);
 
     // Build update data
     const updateData = {
