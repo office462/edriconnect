@@ -64,22 +64,31 @@ export default function ServiceRequests() {
 
   // Handle pending bot messages set by backend automations
   useEffect(() => {
-    if (!requests) return;
+    if (!requests?.length) return;
+    const pendingRequests = requests.filter(r => r.pending_bot_message);
+    if (!pendingRequests.length) return;
 
-    requests.forEach(async (req) => {
-      if (!req.pending_bot_message) return;
-
-      const isValidId = (id) => /^[a-f0-9]{24}$/i.test(id || '') && id !== req.contact_id;
-      if (!isValidId(req.conversation_id)) return;
-
-      // Clear flag immediately to prevent duplicate sends
-      await base44.entities.ServiceRequest.update(req.id, { pending_bot_message: null });
-
-      // Use existing flow — same as paid
+    pendingRequests.forEach(async (req) => {
       try {
+        // Clear flag immediately to prevent duplicate sends
+        await base44.entities.ServiceRequest.update(req.id, { pending_bot_message: null });
+
+        // Find conversation_id from frontend (service role cannot do this)
+        let conversationId = req.conversation_id;
+        const isValidId = (id) => /^[a-f0-9]{24}$/i.test(id || '') && id !== req.contact_id;
+
+        if (!isValidId(conversationId) && req.contact_phone) {
+          conversationId = await findAndSaveConversationId(req.id, req.contact_phone);
+        }
+
+        if (!conversationId) {
+          console.log('No conversation_id found for pending message:', req.id);
+          return;
+        }
+
         const botResult = await base44.functions.invoke('onServiceRequestUpdate', {
           event: { type: 'update', entity_name: 'ServiceRequest', entity_id: req.id },
-          data: { ...req, status: req.pending_bot_message },
+          data: { ...req, status: req.pending_bot_message, conversation_id: conversationId },
           old_data: { ...req, status: 'previous' },
         });
 
@@ -90,11 +99,12 @@ export default function ServiceRequests() {
           await base44.entities.ServiceRequestTimeline.create({
             service_request_id: req.id,
             event_type: 'message_sent',
-            description: `הודעת ${pending.botTrigger} נשלחה אוטומטית`,
+            description: `הודעת ${pending.botTrigger || req.pending_bot_message} נשלחה אוטומטית`,
           });
+          queryClient.invalidateQueries({ queryKey: ['service-requests'] });
         }
       } catch (err) {
-        console.warn('Pending bot message send failed:', err.message);
+        console.warn('Pending bot message failed:', err.message);
       }
     });
   }, [requests]);
