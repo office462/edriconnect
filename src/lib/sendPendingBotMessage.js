@@ -1,4 +1,5 @@
 import { base44 } from '@/api/base44Client';
+import { findAndSaveConversationId } from '@/lib/findConversationId';
 
 /**
  * Sends a pending bot message for a ServiceRequest from the frontend.
@@ -6,11 +7,21 @@ import { base44 } from '@/api/base44Client';
  * because only the frontend has permissions to interact with agent conversations.
  */
 export async function sendPendingBotMessage(request) {
-  if (!request?.pending_bot_message || !request?.conversation_id) return;
+  if (!request?.pending_bot_message) return;
 
-  const isValidConvId = /^[a-f0-9]{24}$/i.test(request.conversation_id) &&
-                        request.conversation_id !== request.contact_id;
-  if (!isValidConvId) return;
+  const isValidConvId = (id) => /^[a-f0-9]{24}$/i.test(id) && id !== request.contact_id;
+
+  // If conversation_id is missing, try to find it from the frontend
+  let conversationId = request.conversation_id;
+  if (!isValidConvId(conversationId) && request.contact_phone) {
+    console.log('conversation_id missing, searching from frontend...');
+    conversationId = await findAndSaveConversationId(request.id, request.contact_phone);
+  }
+
+  if (!isValidConvId(conversationId)) {
+    console.log('No valid conversation_id found, cannot send pending message');
+    return;
+  }
 
   try {
     console.log('Sending pending bot message:', request.pending_bot_message, 'for request:', request.id);
