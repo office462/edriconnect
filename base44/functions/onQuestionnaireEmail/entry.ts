@@ -193,18 +193,12 @@ Deno.serve(async (req) => {
           new_value: 'questionnaire_completed',
         });
 
-        // Send bot message directly via sendBotContinuation
+        // Set flag for frontend to send bot message
         if (!alreadySentQuestionnaire) {
-          console.log('Calling sendBotContinuation for questionnaire_completed...');
-          const botResult = await base44.asServiceRole.functions.invoke('sendBotContinuation', {
-            requestId: matchingReq.id,
-            contactId: matchingReq.contact_id,
-            contactName: matchingReq.contact_name || fullName,
-            contactPhone: matchingReq.contact_phone,
-            serviceType: matchingReq.service_type,
-            triggerType: 'questionnaire_completed',
+          await base44.asServiceRole.entities.ServiceRequest.update(matchingReq.id, {
+            pending_bot_message: 'questionnaire_completed'
           });
-          console.log('sendBotContinuation result:', botResult);
+          console.log('Set pending_bot_message flag for frontend to handle');
         }
 
         console.log('Updated ServiceRequest to questionnaire_completed');
@@ -213,18 +207,9 @@ Deno.serve(async (req) => {
         // Status already advanced but message never sent
         await base44.asServiceRole.entities.ServiceRequest.update(matchingReq.id, {
           questionnaire_completed: true,
+          pending_bot_message: 'questionnaire_completed'
         });
-        
-        console.log('Status already advanced, sending bot message...');
-        const botResult = await base44.asServiceRole.functions.invoke('sendBotContinuation', {
-          requestId: matchingReq.id,
-          contactId: matchingReq.contact_id,
-          contactName: matchingReq.contact_name || fullName,
-          contactPhone: matchingReq.contact_phone,
-          serviceType: matchingReq.service_type,
-          triggerType: 'questionnaire_completed',
-        });
-        console.log('sendBotContinuation result:', botResult);
+        console.log('Status already advanced, set pending_bot_message flag');
         matched++;
       } else {
         console.log('ServiceRequest already in advanced status and message already sent:', matchingReq.status);

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { base44 } from '@/api/base44Client';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Card, CardHeader, CardContent } from '@/components/ui/card';
@@ -21,7 +21,6 @@ import { Link } from 'react-router-dom';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
 import { findAndSaveConversationId } from '@/lib/findConversationId';
-import { sendPendingBotMessage } from '@/lib/sendPendingBotMessage';
 
 const statusOptions = [
   { value: 'new_lead', label: 'ליד חדש' },
@@ -62,6 +61,43 @@ export default function ServiceRequests() {
     queryKey: ['service-requests'],
     queryFn: () => base44.entities.ServiceRequest.list('-created_date', 200),
   });
+
+  // Handle pending bot messages set by backend automations
+  useEffect(() => {
+    if (!requests) return;
+
+    requests.forEach(async (req) => {
+      if (!req.pending_bot_message) return;
+
+      const isValidId = (id) => /^[a-f0-9]{24}$/i.test(id || '') && id !== req.contact_id;
+      if (!isValidId(req.conversation_id)) return;
+
+      // Clear flag immediately to prevent duplicate sends
+      await base44.entities.ServiceRequest.update(req.id, { pending_bot_message: null });
+
+      // Use existing flow — same as paid
+      try {
+        const botResult = await base44.functions.invoke('onServiceRequestUpdate', {
+          event: { type: 'update', entity_name: 'ServiceRequest', entity_id: req.id },
+          data: { ...req, status: req.pending_bot_message },
+          old_data: { ...req, status: 'previous' },
+        });
+
+        const pending = botResult?.data?.pendingBotMessage;
+        if (pending?.conversationId && pending?.message) {
+          const conv = await base44.agents.getConversation(pending.conversationId);
+          await base44.agents.addMessage(conv, { role: 'assistant', content: pending.message });
+          await base44.entities.ServiceRequestTimeline.create({
+            service_request_id: req.id,
+            event_type: 'message_sent',
+            description: `הודעת ${pending.botTrigger} נשלחה אוטומטית`,
+          });
+        }
+      } catch (err) {
+        console.warn('Pending bot message send failed:', err.message);
+      }
+    });
+  }, [requests]);
 
   const { data: contacts = [] } = useQuery({
     queryKey: ['contacts'],
@@ -137,22 +173,11 @@ export default function ServiceRequests() {
         console.error('MUTATION FAILED AT:', e.message);
       }
     },
-    onSuccess: async (_, variables) => {
+    onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['service-requests'] });
       setShowEdit(false);
       setEditingReq(null);
       toast.success('עודכן');
-
-      // Check if updated request has a pending bot message
-      const updatedReq = requests.find(r => r.id === variables.id);
-      if (updatedReq?.pending_bot_message && updatedReq?.conversation_id) {
-        const isValidConvId = /^[a-f0-9]{24}$/i.test(updatedReq.conversation_id) &&
-                              updatedReq.conversation_id !== updatedReq.contact_id;
-        if (isValidConvId) {
-          await sendPendingBotMessage(updatedReq);
-          queryClient.invalidateQueries({ queryKey: ['service-requests'] });
-        }
-      }
     },
   });
 
