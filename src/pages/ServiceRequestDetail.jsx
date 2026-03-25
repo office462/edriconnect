@@ -81,7 +81,7 @@ export default function ServiceRequestDetail() {
           const isValidObjectId = (checkId) => /^[a-f0-9]{24}$/i.test(checkId || '');
           let savedConversationId = request.conversation_id;
 
-          if ((updates.status === 'paid' || updates.status === 'questionnaire_completed') && request.contact_phone) {
+          if (['paid', 'questionnaire_completed', 'scheduled'].includes(updates.status) && request.contact_phone) {
             // Always search for the real conversation - bot sometimes saves wrong conversation_id
             console.log('Step 4 - finding conversation_id...');
             savedConversationId = await findAndSaveConversationId(id, request.contact_phone);

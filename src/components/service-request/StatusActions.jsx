@@ -74,13 +74,30 @@ export default function StatusActions({ request, onUpdate, isUpdating }) {
         {(request.service_type === 'consultation') && (
           <>
             <div>
-              <Label>תור וואטסאפ</Label>
+              <Label>תור וואטסאפ {request.scheduled_date_whatsapp ? '✅' : ''}</Label>
               <Input type="datetime-local" value={whatsappDate} onChange={(e) => setWhatsappDate(e.target.value)} />
+              {request.scheduled_date_whatsapp && (
+                <p className="text-xs text-muted-foreground mt-1">
+                  {new Date(request.scheduled_date_whatsapp).toLocaleString('he-IL', { timeZone: 'Asia/Jerusalem', weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' })}
+                </p>
+              )}
             </div>
             <div>
-              <Label>תור קליניקה</Label>
+              <Label>תור קליניקה {request.scheduled_date_clinic ? '✅' : ''}</Label>
               <Input type="datetime-local" value={clinicDate} onChange={(e) => setClinicDate(e.target.value)} />
+              {request.scheduled_date_clinic && (
+                <p className="text-xs text-muted-foreground mt-1">
+                  {new Date(request.scheduled_date_clinic).toLocaleString('he-IL', { timeZone: 'Asia/Jerusalem', weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' })}
+                </p>
+              )}
             </div>
+            {request.last_appointment_type && (
+              <div className="text-xs p-2 bg-muted rounded-md">
+                <p className="font-medium">תור אחרון שנקבע:</p>
+                <p>{request.last_appointment_type}</p>
+                <p>{request.last_appointment_time_str}</p>
+              </div>
+            )}
           </>
         )}
 
