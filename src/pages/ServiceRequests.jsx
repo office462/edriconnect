@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { base44 } from '@/api/base44Client';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Card, CardHeader, CardContent } from '@/components/ui/card';
@@ -56,7 +56,6 @@ export default function ServiceRequests() {
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [newReq, setNewReq] = useState({ contact_id: '', service_type: 'consultation', notes: '' });
   const queryClient = useQueryClient();
-  const processingPendingRef = useRef(new Set());
 
   const { data: requests = [], isLoading } = useQuery({
     queryKey: ['service-requests'],
@@ -66,13 +65,10 @@ export default function ServiceRequests() {
   // Handle pending bot messages set by backend automations
   useEffect(() => {
     if (!requests?.length) return;
-    const pendingRequests = requests.filter(r => r.pending_bot_message && !processingPendingRef.current.has(r.id));
+    const pendingRequests = requests.filter(r => r.pending_bot_message);
     if (!pendingRequests.length) return;
 
     pendingRequests.forEach(async (req) => {
-      // Mark as processing immediately to prevent duplicates
-      processingPendingRef.current.add(req.id);
-
       try {
         // Clear flag immediately to prevent duplicate sends
         await base44.entities.ServiceRequest.update(req.id, { pending_bot_message: null });
@@ -90,37 +86,25 @@ export default function ServiceRequests() {
           return;
         }
 
-        // Only trigger for the specific pending message type — NOT a general status change
-        const triggerType = req.pending_bot_message;
-        const botResult = await base44.functions.invoke('sendBotContinuation', {
-          requestId: req.id,
-          contactId: req.contact_id,
-          contactName: req.contact_name,
-          contactPhone: req.contact_phone,
-          serviceType: req.service_type,
-          triggerType: triggerType,
-          conversationId: conversationId,
+        const botResult = await base44.functions.invoke('onServiceRequestUpdate', {
+          event: { type: 'update', entity_name: 'ServiceRequest', entity_id: req.id },
+          data: { ...req, status: req.pending_bot_message, conversation_id: conversationId },
+          old_data: { ...req, status: 'previous' },
         });
 
-        console.log('Pending bot message result:', botResult?.data);
-
-        // Backend returns the message, frontend sends it via agent SDK
-        const pending = botResult?.data?.pendingMessage;
+        const pending = botResult?.data?.pendingBotMessage;
         if (pending?.conversationId && pending?.message) {
           const conv = await base44.agents.getConversation(pending.conversationId);
           await base44.agents.addMessage(conv, { role: 'assistant', content: pending.message });
           await base44.entities.ServiceRequestTimeline.create({
             service_request_id: req.id,
             event_type: 'message_sent',
-            description: `הודעת ${pending.triggerType} נשלחה אוטומטית ל${pending.contactName}`,
+            description: `הודעת ${pending.botTrigger || req.pending_bot_message} נשלחה אוטומטית`,
           });
           queryClient.invalidateQueries({ queryKey: ['service-requests'] });
-          console.log('Bot message sent from frontend for:', pending.triggerType);
         }
       } catch (err) {
         console.warn('Pending bot message failed:', err.message);
-      } finally {
-        processingPendingRef.current.delete(req.id);
       }
     });
   }, [requests]);
