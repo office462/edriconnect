@@ -159,15 +159,11 @@ Deno.serve(async (req) => {
 
       if (botTrigger === 'paid_consultation') {
         const settings = await base44.asServiceRole.entities.SystemSetting.filter({ key: 'consultation_payment_confirmed' });
-        botMessage = settings.length > 0
+        const openingText = settings.length > 0
           ? settings[0].value.replace('{שם פרטי}', contactName).replace('{שם}', contactName)
           : `היי ${contactName}, קיבלתי את התשלום והשאלון ואעבור עליו בהקדם!`;
 
-        const appointmentSettings = await base44.asServiceRole.entities.SystemSetting.filter({ key: 'consultation_appointments' });
-        if (appointmentSettings.length > 0) botMessage += '\n\n' + appointmentSettings[0].value;
-
-        const calendarSettings = await base44.asServiceRole.entities.SystemSetting.filter({ key: 'calendar_link' });
-        if (calendarSettings.length > 0) botMessage += '\n\nקישור ליומן: ' + calendarSettings[0].value;
+        botMessage = openingText + ` יש לזמן 2 תורים:\n\n1. תור לזמינות בווצאפ (קוד קופ״ח) - 10 דקות:\nhttps://cal.com/dr-liat-edry/whatsapp-availability\n\n2. תור לייעוץ מלא - שעה וחצי:\nhttps://cal.com/dr-liat-edry/full-consultation`;
 
       } else if (botTrigger === 'paid_legal') {
         const settings = await base44.asServiceRole.entities.SystemSetting.filter({ key: 'consultation_payment_confirmed' });
