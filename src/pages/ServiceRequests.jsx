@@ -70,6 +70,9 @@ export default function ServiceRequests() {
 
     pendingRequests.forEach(async (req) => {
       try {
+        // Save the pending message value BEFORE clearing it
+        const savedPendingMessage = req.pending_bot_message;
+
         // Clear flag immediately to prevent duplicate sends
         await base44.entities.ServiceRequest.update(req.id, { pending_bot_message: null });
 
@@ -77,18 +80,26 @@ export default function ServiceRequests() {
         let conversationId = req.conversation_id;
         const isValidId = (id) => /^[a-f0-9]{24}$/i.test(id || '') && id !== req.contact_id;
 
-        if (!isValidId(conversationId) && req.contact_phone) {
+        // Use savedPendingMessage to check — includes Cal.com appointment triggers
+        const needsConversation = [
+          'paid_consultation', 'paid_legal', 'paid_post_lecture', 'paid_lectures',
+          'questionnaire_completed',
+          'whatsapp_appointment_scheduled', 'clinic_appointment_scheduled', 'both_appointments_scheduled'
+        ].includes(savedPendingMessage);
+
+        if (!isValidId(conversationId) && req.contact_phone && needsConversation) {
           conversationId = await findAndSaveConversationId(req.id, req.contact_phone);
         }
 
         if (!conversationId) {
-          console.log('No conversation_id found for pending message:', req.id);
+          console.log('No conversation_id found for pending message:', req.id, savedPendingMessage);
           return;
         }
 
+        // Use savedPendingMessage (not the cleared value) when calling the backend
         const botResult = await base44.functions.invoke('onServiceRequestUpdate', {
           event: { type: 'update', entity_name: 'ServiceRequest', entity_id: req.id },
-          data: { ...req, status: req.pending_bot_message, conversation_id: conversationId },
+          data: { ...req, status: savedPendingMessage, conversation_id: conversationId, pending_bot_message: savedPendingMessage },
           old_data: { ...req, status: 'previous' },
         });
 
@@ -99,7 +110,7 @@ export default function ServiceRequests() {
           await base44.entities.ServiceRequestTimeline.create({
             service_request_id: req.id,
             event_type: 'message_sent',
-            description: `הודעת ${pending.botTrigger || req.pending_bot_message} נשלחה אוטומטית`,
+            description: `הודעת ${pending.botTrigger || savedPendingMessage} נשלחה אוטומטית`,
           });
           queryClient.invalidateQueries({ queryKey: ['service-requests'] });
         }
