@@ -84,6 +84,7 @@ export default function ServiceRequests() {
         const needsConversation = [
           'paid_consultation', 'paid_legal', 'paid_post_lecture', 'paid_lectures',
           'questionnaire_completed',
+          'ready_to_schedule', 'payment_confirmed_awaiting_questionnaire', 'questionnaire_completed_awaiting_payment',
           'whatsapp_appointment_scheduled', 'clinic_appointment_scheduled', 'both_appointments_scheduled'
         ].includes(savedPendingMessage);
 

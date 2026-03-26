@@ -193,23 +193,45 @@ Deno.serve(async (req) => {
           new_value: 'questionnaire_completed',
         });
 
-        // Set flag for frontend to send bot message
+        // Determine the right bot trigger based on payment status
         if (!alreadySentQuestionnaire) {
-          await base44.asServiceRole.entities.ServiceRequest.update(matchingReq.id, {
-            pending_bot_message: 'questionnaire_completed'
-          });
-          console.log('Set pending_bot_message flag for frontend to handle');
+          // Re-fetch the request to get latest payment_confirmed status
+          const freshReq = await base44.asServiceRole.entities.ServiceRequest.get(matchingReq.id);
+          const paymentDone = freshReq.payment_confirmed === true;
+
+          let pendingMessage;
+          if (paymentDone) {
+            // Both conditions met — ready to schedule
+            pendingMessage = 'ready_to_schedule';
+            await base44.asServiceRole.entities.ServiceRequest.update(matchingReq.id, {
+              current_step: 'ready_to_schedule',
+              pending_bot_message: pendingMessage,
+            });
+          } else {
+            // Questionnaire done but payment missing
+            pendingMessage = 'questionnaire_completed_awaiting_payment';
+            await base44.asServiceRole.entities.ServiceRequest.update(matchingReq.id, {
+              current_step: 'questionnaire_completed_awaiting_payment',
+              pending_bot_message: pendingMessage,
+            });
+          }
+          console.log('Set pending_bot_message:', pendingMessage, '(payment_confirmed:', paymentDone, ')');
         }
 
         console.log('Updated ServiceRequest to questionnaire_completed');
         matched++;
       } else if (!alreadySentQuestionnaire) {
         // Status already advanced but message never sent
+        const freshReq2 = await base44.asServiceRole.entities.ServiceRequest.get(matchingReq.id);
+        const paymentDone2 = freshReq2.payment_confirmed === true;
+        const pendingMessage2 = paymentDone2 ? 'ready_to_schedule' : 'questionnaire_completed_awaiting_payment';
+
         await base44.asServiceRole.entities.ServiceRequest.update(matchingReq.id, {
           questionnaire_completed: true,
-          pending_bot_message: 'questionnaire_completed'
+          pending_bot_message: pendingMessage2,
+          current_step: paymentDone2 ? 'ready_to_schedule' : 'questionnaire_completed_awaiting_payment',
         });
-        console.log('Status already advanced, set pending_bot_message flag');
+        console.log('Status already advanced, set pending_bot_message:', pendingMessage2);
         matched++;
       } else {
         console.log('ServiceRequest already in advanced status and message already sent:', matchingReq.status);

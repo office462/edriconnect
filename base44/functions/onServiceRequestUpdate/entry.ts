@@ -29,18 +29,30 @@ Deno.serve(async (req) => {
     if (newStatus === 'paid' && oldStatus !== 'paid') {
       updates.payment_confirmed = true;
 
+      // Fetch latest request to check questionnaire status
+      const latestReq = await base44.asServiceRole.entities.ServiceRequest.get(requestId);
+      const questionnaireAlreadyDone = latestReq.questionnaire_completed === true;
+
       timelineEntries.push({
         service_request_id: requestId,
         event_type: 'system_note',
-        description: 'תשלום אושר אוטומטית - הבוט ימשיך בתהליך',
+        description: 'תשלום אושר אוטומטית',
         old_value: oldStatus,
         new_value: 'paid',
       });
 
       const serviceType = data.service_type;
+
       if (serviceType === 'consultation') {
-        updates.current_step = 'confirm_payment';
-        botTrigger = 'paid_consultation';
+        if (questionnaireAlreadyDone) {
+          // Both conditions met — ready to schedule
+          updates.current_step = 'ready_to_schedule';
+          botTrigger = 'ready_to_schedule';
+        } else {
+          // Paid but questionnaire missing
+          updates.current_step = 'payment_confirmed_awaiting_questionnaire';
+          botTrigger = 'payment_confirmed_awaiting_questionnaire';
+        }
       } else if (serviceType === 'legal') {
         updates.current_step = 'send_privacy_message';
         botTrigger = 'paid_legal';
@@ -57,15 +69,27 @@ Deno.serve(async (req) => {
     if (newStatus === 'questionnaire_completed' && oldStatus !== 'questionnaire_completed') {
       updates.questionnaire_completed = true;
 
+      // Fetch latest request to check payment status
+      const latestReqQ = await base44.asServiceRole.entities.ServiceRequest.get(requestId);
+      const paymentAlreadyDone = latestReqQ.payment_confirmed === true;
+
       timelineEntries.push({
         service_request_id: requestId,
         event_type: 'system_note',
-        description: 'שאלון מולא - הבוט ימשיך בתהליך',
+        description: 'שאלון מולא',
         old_value: oldStatus,
         new_value: 'questionnaire_completed',
       });
 
-      botTrigger = 'questionnaire_completed';
+      if (paymentAlreadyDone) {
+        // Both conditions met — ready to schedule
+        updates.current_step = 'ready_to_schedule';
+        botTrigger = 'ready_to_schedule';
+      } else {
+        // Questionnaire done but payment missing
+        updates.current_step = 'questionnaire_completed_awaiting_payment';
+        botTrigger = 'questionnaire_completed_awaiting_payment';
+      }
     }
 
     // Handle status -> in_review
@@ -85,20 +109,33 @@ Deno.serve(async (req) => {
 
     // Handle status -> scheduled
     if (newStatus === 'scheduled' && oldStatus !== 'scheduled') {
-      timelineEntries.push({
-        service_request_id: requestId,
-        event_type: 'status_change',
-        description: 'תור נקבע',
-        old_value: oldStatus,
-        new_value: 'scheduled',
-      });
+      // Verify both conditions are met before allowing scheduling
+      const latestReqSched = await base44.asServiceRole.entities.ServiceRequest.get(requestId);
+      if (data.service_type === 'consultation' && (!latestReqSched.payment_confirmed || !latestReqSched.questionnaire_completed)) {
+        console.log('Cannot schedule: payment_confirmed=' + latestReqSched.payment_confirmed + ', questionnaire_completed=' + latestReqSched.questionnaire_completed);
+        // Don't proceed with scheduling trigger
+        timelineEntries.push({
+          service_request_id: requestId,
+          event_type: 'system_note',
+          description: 'ניסיון קביעת תור נחסם - לא כל התנאים מולאו',
+          old_value: oldStatus,
+          new_value: 'scheduled',
+        });
+      } else {
+        timelineEntries.push({
+          service_request_id: requestId,
+          event_type: 'status_change',
+          description: 'תור נקבע',
+          old_value: oldStatus,
+          new_value: 'scheduled',
+        });
 
-      if (data.service_type === 'consultation') {
-        // Check if this was triggered by Cal.com (pending_bot_message already set)
-        if (data.pending_bot_message === 'both_appointments_scheduled') {
-          botTrigger = 'both_appointments_scheduled';
-        } else {
-          botTrigger = 'scheduled_consultation';
+        if (data.service_type === 'consultation') {
+          if (data.pending_bot_message === 'both_appointments_scheduled') {
+            botTrigger = 'both_appointments_scheduled';
+          } else {
+            botTrigger = 'scheduled_consultation';
+          }
         }
       }
     }
@@ -168,13 +205,30 @@ Deno.serve(async (req) => {
 
       let botMessage = '';
 
-      if (botTrigger === 'paid_consultation') {
+      // NEW: Ready to schedule — both payment and questionnaire confirmed
+      if (botTrigger === 'ready_to_schedule') {
+        botMessage = `היי ${contactName}, קיבלתי את התשלום והשאלון ואעבור עליו בהקדם!\n\nחשוב מאוד! יש לזמן 2 תורים:\n\n1. תור לזמינות בווצאפ (קוד קופ״ח) - 10 דקות:\nhttps://cal.com/dr-liat-edry/whatsapp-availability\n\n2. תור לייעוץ מלא - שעה וחצי:\nhttps://cal.com/dr-liat-edry/full-consultation\n\nלאחר קביעת התורים, אנא רשום/י \"קבעתי תור\". אעדכן אותך על אישור התור, יום ושעה.`;
+
+      } else if (botTrigger === 'payment_confirmed_awaiting_questionnaire') {
+        // Paid but questionnaire not done yet
+        const questionnaireContent = await base44.asServiceRole.entities.ServiceContent.filter({ service_type: 'consultation', content_type: 'questionnaire' });
+        const questionnaireUrl = questionnaireContent.length > 0 ? questionnaireContent[0].url : '';
+        botMessage = `היי ${contactName}, ראינו שהעברת את התשלום, תודה רבה! 🙏\n\nכדי שנוכל להתקדם לזימון תורים, יש למלא את השאלון הבא:\n${questionnaireUrl ? 'שאלון: ' + questionnaireUrl : ''}\n\nלאחר שתמלא/י את השאלון, אנא רשום/י \"מילאתי\". אנו נעדכן אותך לאחר שנקבל את השאלון.`;
+
+      } else if (botTrigger === 'questionnaire_completed_awaiting_payment') {
+        // Questionnaire done but payment not confirmed yet
+        const paymentContent = await base44.asServiceRole.entities.ServiceContent.filter({ service_type: 'consultation', content_type: 'payment_link' });
+        const paymentUrl = paymentContent.length > 0 ? paymentContent[0].url : '';
+        botMessage = `היי ${contactName}, ראינו שמילאת את השאלון, תודה רבה! 🙏\n\nכדי שנוכל להתקדם לזימון תורים, יש לבצע תשלום כאן:\n${paymentUrl ? 'תשלום: ' + paymentUrl : ''}\n\nלאחר ביצוע התשלום, אנא רשום/י \"ביצעתי\". התשלום ייבדק על ידי הצוות ויאושר בהקדם, ואז נמשיך בתהליך.`;
+
+      } else if (botTrigger === 'paid_consultation') {
+        // Legacy fallback — should not normally be reached with new logic
         const settings = await base44.asServiceRole.entities.SystemSetting.filter({ key: 'consultation_payment_confirmed' });
         const openingText = settings.length > 0
           ? settings[0].value.replace('{שם פרטי}', contactName).replace('{שם}', contactName)
           : `היי ${contactName}, קיבלתי את התשלום והשאלון ואעבור עליו בהקדם!`;
 
-        botMessage = openingText + ` יש לזמן 2 תורים:\n\n1. תור לזמינות בווצאפ (קוד קופ״ח) - 10 דקות:\nhttps://cal.com/dr-liat-edry/whatsapp-availability\n\n2. תור לייעוץ מלא - שעה וחצי:\nhttps://cal.com/dr-liat-edry/full-consultation`;
+        botMessage = openingText + `\n\nיש לזמן 2 תורים:\n\n1. תור לזמינות בווצאפ (קוד קופ״ח) - 10 דקות:\nhttps://cal.com/dr-liat-edry/whatsapp-availability\n\n2. תור לייעוץ מלא - שעה וחצי:\nhttps://cal.com/dr-liat-edry/full-consultation\n\nלאחר קביעת התורים, אנא רשום/י \"קבעתי תור\". אעדכן אותך על אישור התור, יום ושעה.`;
 
       } else if (botTrigger === 'paid_legal') {
         const settings = await base44.asServiceRole.entities.SystemSetting.filter({ key: 'consultation_payment_confirmed' });
@@ -201,6 +255,7 @@ Deno.serve(async (req) => {
           : 'הגעה ל-MedWork\n• מרכז מסחרי רננים, מודיעין מכבים רעות';
 
       } else if (botTrigger === 'questionnaire_completed') {
+        // Legacy fallback for questionnaire_completed without payment check
         const settings = await base44.asServiceRole.entities.SystemSetting.filter({ key: 'questionnaire_completed_message' });
         botMessage = settings.length > 0
           ? settings[0].value.replace('{שם פרטי}', contactName).replace('{שם}', contactName)
