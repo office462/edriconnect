@@ -249,8 +249,8 @@ Deno.serve(async (req) => {
 
         botMessage = openingText + `\n\nיש לזמן 2 תורים:\n\n1. תור לזמינות בווצאפ (קוד קופ״ח) - 10 דקות:\nhttps://cal.com/dr-liat-edry/whatsapp-availability\n\n2. תור לייעוץ מלא - שעה וחצי:\nhttps://cal.com/dr-liat-edry/full-consultation\n\nלאחר קביעת התורים, אנא רשום/י \"קבעתי תור\". אעדכן אותך על אישור התור, יום ושעה.`;
 
-      } else if (botTrigger === 'paid_legal') {
-        const settings = await base44.asServiceRole.entities.SystemSetting.filter({ key: 'consultation_payment_confirmed' });
+        } else if (botTrigger === 'paid_legal') {
+        const settings = await base44.asServiceRole.entities.SystemSetting.filter({ key: 'legal_payment_confirmed' });
         botMessage = settings.length > 0
           ? settings[0].value.replace('{שם פרטי}', contactName).replace('{שם}', contactName)
           : `היי ${contactName}, ראינו ששילמת! תודה רבה.`;
@@ -258,8 +258,13 @@ Deno.serve(async (req) => {
         const privacySettings = await base44.asServiceRole.entities.SystemSetting.filter({ key: 'privacy' });
         if (privacySettings.length > 0) botMessage += '\n\n' + privacySettings[0].value;
 
+        // Fetch legal email for document request
+        const emailSettings = await base44.asServiceRole.entities.SystemSetting.filter({ key: 'legal_email' });
+        const legalEmail = emailSettings.length > 0 ? emailSettings[0].value : 'office@drliatedry.co.il';
+
         const docSettings = await base44.asServiceRole.entities.SystemSetting.filter({ key: 'legal_documents_request' });
-        if (docSettings.length > 0) botMessage += '\n\n' + docSettings[0].value;
+        const docText = docSettings.length > 0 ? docSettings[0].value : 'אילו חומרים נדרשים?\n• תיאור המקרה הרפואי\n• תוצאות בדיקות ותיקים רפואיים\n• דוחות רלוונטיים\n• כל מידע נוסף רלוונטי';
+        botMessage += `\n\n${docText}\n\n📧 יש לשלוח את המסמכים למייל: ${legalEmail}\n\nלאחר השליחה, אנא רשום/י \"שלחתי\".\nכדי להמשיך בתהליך, אנא רשום/י \"המשך\".`;
 
       } else if (botTrigger === 'paid_post_lecture') {
         botMessage = `היי ${contactName}, קיבלנו את התשלום! תודה רבה.`;
