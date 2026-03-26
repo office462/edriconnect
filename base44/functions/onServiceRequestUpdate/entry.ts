@@ -109,11 +109,25 @@ Deno.serve(async (req) => {
 
     // Handle status -> scheduled
     if (newStatus === 'scheduled' && oldStatus !== 'scheduled') {
-      // Verify both conditions are met before allowing scheduling
+      // Verify conditions are met before allowing scheduling
       const latestReqSched = await base44.asServiceRole.entities.ServiceRequest.get(requestId);
-      if (data.service_type === 'consultation' && (!latestReqSched.payment_confirmed || !latestReqSched.questionnaire_completed)) {
+
+      // Legal: require payment + agreement
+      if (data.service_type === 'legal' && (!latestReqSched.payment_confirmed || !latestReqSched.agreement_confirmed)) {
+        const missing = [];
+        if (!latestReqSched.payment_confirmed) missing.push('תשלום');
+        if (!latestReqSched.agreement_confirmed) missing.push('הסכם');
+        console.log('Cannot schedule legal: missing ' + missing.join(', '));
+        timelineEntries.push({
+          service_request_id: requestId,
+          event_type: 'system_note',
+          description: `ניסיון קביעת תור נחסם - חסר: ${missing.join(', ')}`,
+          old_value: oldStatus,
+          new_value: 'scheduled',
+        });
+      // Consultation: require payment + questionnaire
+      } else if (data.service_type === 'consultation' && (!latestReqSched.payment_confirmed || !latestReqSched.questionnaire_completed)) {
         console.log('Cannot schedule: payment_confirmed=' + latestReqSched.payment_confirmed + ', questionnaire_completed=' + latestReqSched.questionnaire_completed);
-        // Don't proceed with scheduling trigger
         timelineEntries.push({
           service_request_id: requestId,
           event_type: 'system_note',
@@ -158,6 +172,7 @@ Deno.serve(async (req) => {
 
     // Handle status -> whatsapp_message_to_check
     if (newStatus === 'whatsapp_message_to_check') {
+      botTrigger = 'waiting_for_admin_approval';
       timelineEntries.push({
         service_request_id: requestId,
         event_type: 'system_note',
@@ -205,8 +220,12 @@ Deno.serve(async (req) => {
 
       let botMessage = '';
 
-      // NEW: Ready to schedule — both payment and questionnaire confirmed
-      if (botTrigger === 'ready_to_schedule') {
+      // Admin approval wait — stop here, don't continue to next steps
+      if (botTrigger === 'waiting_for_admin_approval') {
+        botMessage = `תודה על העדכון. התשלום ייבדק על ידי הצוות ויאושר בהקדם. נמשיך בתהליך ברגע שהתשלום יאושר. אנא המתן/י לעדכון מאיתנו.`;
+
+      // Ready to schedule — both payment and questionnaire confirmed
+      } else if (botTrigger === 'ready_to_schedule') {
         botMessage = `היי ${contactName}, קיבלתי את התשלום והשאלון ואעבור עליו בהקדם!\n\nחשוב מאוד! יש לזמן 2 תורים:\n\n1. תור לזמינות בווצאפ (קוד קופ״ח) - 10 דקות:\nhttps://cal.com/dr-liat-edry/whatsapp-availability\n\n2. תור לייעוץ מלא - שעה וחצי:\nhttps://cal.com/dr-liat-edry/full-consultation\n\nלאחר קביעת התורים, אנא רשום/י \"קבעתי תור\". אעדכן אותך על אישור התור, יום ושעה.`;
 
       } else if (botTrigger === 'payment_confirmed_awaiting_questionnaire') {
