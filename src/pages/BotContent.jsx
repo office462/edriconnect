@@ -26,6 +26,15 @@ const categories = [
   { value: 'post_lecture', label: 'פוסט הרצאה' },
 ];
 
+const serviceFlows = [
+  { value: 'consultation', label: 'מסלול ייעוץ' },
+  { value: 'legal', label: 'מסלול משפטי' },
+  { value: 'lectures', label: 'מסלול הרצאות' },
+  { value: 'clinic', label: 'מסלול קליניקה' },
+  { value: 'post_lecture', label: 'מסלול פוסט הרצאה' },
+  { value: 'general', label: 'כללי' },
+];
+
 const mediaTypes = [
   { value: 'none', label: 'ללא' },
   { value: 'video', label: 'סרטון' },
@@ -34,13 +43,14 @@ const mediaTypes = [
   { value: 'link', label: 'קישור' },
 ];
 
-const emptyContent = { key: '', title: '', content: '', category: 'general', media_url: '', media_type: 'none', is_active: true };
+const emptyContent = { key: '', title: '', content: '', category: 'general', media_url: '', media_type: 'none', is_active: true, service_type_flow: '', step_label: '' };
 
 export default function BotContent() {
   const [showDialog, setShowDialog] = useState(false);
   const [form, setForm] = useState(emptyContent);
   const [editId, setEditId] = useState(null);
   const [filterCat, setFilterCat] = useState('all');
+  const [filterFlow, setFilterFlow] = useState('all');
   const [view, setView] = useState('cards');
   const [selected, setSelected] = useState([]);
   const [deleteTarget, setDeleteTarget] = useState(null);
@@ -66,12 +76,15 @@ export default function BotContent() {
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['bot-content'] }); setSelected([]); toast.success('נמחקו'); },
   });
 
-  const filtered = filterCat === 'all' ? contents : contents.filter(c => c.category === filterCat);
+  const filtered = contents
+    .filter(c => filterCat === 'all' || c.category === filterCat)
+    .filter(c => filterFlow === 'all' || c.service_type_flow === filterFlow)
+    .sort((a, b) => (a.step_label || '').localeCompare(b.step_label || ''));
   const toggleSelect = (id) => setSelected(prev => prev.includes(id) ? prev.filter(s => s !== id) : [...prev, id]);
   const toggleAll = () => setSelected(selected.length === filtered.length ? [] : filtered.map(c => c.id));
 
   const handleEdit = (item) => {
-    setForm({ key: item.key || '', title: item.title || '', content: item.content || '', category: item.category || 'general', media_url: item.media_url || '', media_type: item.media_type || 'none', is_active: item.is_active !== false });
+    setForm({ key: item.key || '', title: item.title || '', content: item.content || '', category: item.category || 'general', media_url: item.media_url || '', media_type: item.media_type || 'none', is_active: item.is_active !== false, service_type_flow: item.service_type_flow || '', step_label: item.step_label || '' });
     setEditId(item.id);
     setShowDialog(true);
   };
@@ -102,9 +115,17 @@ export default function BotContent() {
 
       <BulkActions selectedCount={selected.length} onDelete={() => bulkDeleteMutation.mutate(selected)} onClear={() => setSelected([])} />
 
-      <div className="flex gap-2 flex-wrap">
-        <Button variant={filterCat === 'all' ? 'default' : 'outline'} size="sm" onClick={() => setFilterCat('all')}>הכל</Button>
-        {categories.map(c => <Button key={c.value} variant={filterCat === c.value ? 'default' : 'outline'} size="sm" onClick={() => setFilterCat(c.value)}>{c.label}</Button>)}
+      <div className="space-y-2">
+        <div className="flex gap-2 flex-wrap">
+          <span className="text-sm font-medium text-muted-foreground self-center">קטגוריה:</span>
+          <Button variant={filterCat === 'all' ? 'default' : 'outline'} size="sm" onClick={() => setFilterCat('all')}>הכל</Button>
+          {categories.map(c => <Button key={c.value} variant={filterCat === c.value ? 'default' : 'outline'} size="sm" onClick={() => setFilterCat(c.value)}>{c.label}</Button>)}
+        </div>
+        <div className="flex gap-2 flex-wrap">
+          <span className="text-sm font-medium text-muted-foreground self-center">מסלול:</span>
+          <Button variant={filterFlow === 'all' ? 'default' : 'outline'} size="sm" onClick={() => setFilterFlow('all')}>הכל</Button>
+          {serviceFlows.map(f => <Button key={f.value} variant={filterFlow === f.value ? 'default' : 'outline'} size="sm" onClick={() => setFilterFlow(f.value)}>{f.label}</Button>)}
+        </div>
       </div>
 
       {view === 'cards' ? (
@@ -127,6 +148,8 @@ export default function BotContent() {
                       <div className="flex items-center gap-2 flex-wrap">
                         <Badge variant="outline" className="text-xs">{item.key}</Badge>
                         <Badge variant="secondary" className="text-xs">{categories.find(c => c.value === item.category)?.label || item.category}</Badge>
+                        {item.service_type_flow && <Badge className="text-xs bg-blue-100 text-blue-700">{serviceFlows.find(f => f.value === item.service_type_flow)?.label || item.service_type_flow}</Badge>}
+                        {item.step_label && <Badge variant="outline" className="text-xs bg-amber-50 text-amber-700 border-amber-200">{item.step_label}</Badge>}
                         {item.media_type && item.media_type !== 'none' && <Badge variant="outline" className="text-xs flex items-center gap-1">{mediaIcon(item.media_type)}{mediaTypes.find(m => m.value === item.media_type)?.label}</Badge>}
                         {!item.is_active && <Badge variant="destructive" className="text-xs">לא פעיל</Badge>}
                       </div>
@@ -147,19 +170,23 @@ export default function BotContent() {
                   <TableHead className="text-right">כותרת</TableHead>
                   <TableHead className="text-right">מפתח</TableHead>
                   <TableHead className="text-right">קטגוריה</TableHead>
+                  <TableHead className="text-right">מסלול</TableHead>
+                  <TableHead className="text-right">שלב</TableHead>
                   <TableHead className="text-right">מדיה</TableHead>
                   <TableHead className="text-right">סטטוס</TableHead>
                   <TableHead className="text-right w-20">פעולות</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {isLoading ? <TableRow><TableCell colSpan={7} className="text-center py-8">טוען...</TableCell></TableRow> : filtered.length === 0 ? <TableRow><TableCell colSpan={7} className="text-center py-8 text-muted-foreground">אין הודעות</TableCell></TableRow> : (
+                {isLoading ? <TableRow><TableCell colSpan={9} className="text-center py-8">טוען...</TableCell></TableRow> : filtered.length === 0 ? <TableRow><TableCell colSpan={9} className="text-center py-8 text-muted-foreground">אין הודעות</TableCell></TableRow> : (
                   filtered.map((item) => (
                     <TableRow key={item.id} className="hover:bg-muted/50">
                       <TableCell><Checkbox checked={selected.includes(item.id)} onCheckedChange={() => toggleSelect(item.id)} /></TableCell>
                       <TableCell className="font-medium">{item.title}</TableCell>
                       <TableCell><Badge variant="outline" className="text-xs font-mono">{item.key}</Badge></TableCell>
                       <TableCell><Badge variant="secondary" className="text-xs">{categories.find(c => c.value === item.category)?.label}</Badge></TableCell>
+                      <TableCell>{item.service_type_flow ? <Badge className="text-xs bg-blue-100 text-blue-700">{serviceFlows.find(f => f.value === item.service_type_flow)?.label || item.service_type_flow}</Badge> : '-'}</TableCell>
+                      <TableCell className="text-sm text-muted-foreground">{item.step_label || '-'}</TableCell>
                       <TableCell className="text-sm">{item.media_type !== 'none' ? mediaTypes.find(m => m.value === item.media_type)?.label : '-'}</TableCell>
                       <TableCell>{item.is_active ? <Badge className="text-xs bg-emerald-100 text-emerald-700">פעיל</Badge> : <Badge variant="destructive" className="text-xs">לא פעיל</Badge>}</TableCell>
                       <TableCell>
@@ -185,6 +212,10 @@ export default function BotContent() {
             <div className="grid grid-cols-2 gap-3">
               <div><Label>מפתח *</Label><Input value={form.key} onChange={(e) => setForm({ ...form, key: e.target.value })} placeholder="welcome" /></div>
               <div><Label>קטגוריה</Label><Select value={form.category} onValueChange={(v) => setForm({ ...form, category: v })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{categories.map(c => <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>)}</SelectContent></Select></div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div><Label>מסלול שירות</Label><Select value={form.service_type_flow || 'none'} onValueChange={(v) => setForm({ ...form, service_type_flow: v === 'none' ? '' : v })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="none">ללא</SelectItem>{serviceFlows.map(f => <SelectItem key={f.value} value={f.value}>{f.label}</SelectItem>)}</SelectContent></Select></div>
+              <div><Label>שלב</Label><Input value={form.step_label} onChange={(e) => setForm({ ...form, step_label: e.target.value })} placeholder="שלב 3 — אישור תשלום" /></div>
             </div>
             <div><Label>כותרת *</Label><Input value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} /></div>
             <div><Label>תוכן ההודעה *</Label><Textarea value={form.content} onChange={(e) => setForm({ ...form, content: e.target.value })} rows={5} /></div>

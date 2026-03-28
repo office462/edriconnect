@@ -57,9 +57,15 @@ Deno.serve(async (req) => {
           }
 
           if (targetConversation) {
+            // Read message from BotContent instead of hardcoded text
+            let timeoutMessage = `הטיפול בחוות הדעת הסתיים. נשמח לתאם שיחה עם ד"ר אדרי.\nמעוניין/ת לתאם?`;
+            const botContentEntries = await base44.asServiceRole.entities.BotContent.filter({ key: 'legal_timeout_message' });
+            if (botContentEntries.length > 0) {
+              timeoutMessage = botContentEntries[0].content.replace('{שם פרטי}', contactName).replace('{שם}', contactName);
+            }
             await base44.asServiceRole.agents.addMessage(targetConversation, {
               role: 'assistant',
-              content: `הטיפול בחוות הדעת הסתיים. נשמח לתאם שיחה עם ד"ר אדרי.\nמעוניין/ת לתאם?`,
+              content: timeoutMessage,
             });
             console.log('30-day message sent to:', contactName);
           } else {

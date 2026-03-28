@@ -241,29 +241,29 @@ Deno.serve(async (req) => {
         botMessage = `היי ${contactName}, ראינו שמילאת את השאלון, תודה רבה! 🙏\n\nכדי שנוכל להתקדם לזימון תורים, יש לבצע תשלום כאן:\n${paymentUrl ? 'תשלום: ' + paymentUrl : ''}\n\nלאחר ביצוע התשלום, אנא רשום/י \"ביצעתי\". התשלום ייבדק על ידי הצוות ויאושר בהקדם, ואז נמשיך בתהליך.`;
 
       } else if (botTrigger === 'paid_consultation') {
-        // Legacy fallback — should not normally be reached with new logic
-        const settings = await base44.asServiceRole.entities.SystemSetting.filter({ key: 'consultation_payment_confirmed' });
+        // Legacy fallback
+        const settings = await base44.asServiceRole.entities.BotContent.filter({ key: 'consultation_payment_confirmed' });
         const openingText = settings.length > 0
-          ? settings[0].value.replace('{שם פרטי}', contactName).replace('{שם}', contactName)
+          ? settings[0].content.replace('{שם פרטי}', contactName).replace('{שם}', contactName)
           : `היי ${contactName}, קיבלתי את התשלום והשאלון ואעבור עליו בהקדם!`;
 
         botMessage = openingText + `\n\nיש לזמן 2 תורים:\n\n1. תור לזמינות בווצאפ (קוד קופ״ח) - 10 דקות:\nhttps://cal.com/dr-liat-edry/whatsapp-availability\n\n2. תור לייעוץ מלא - שעה וחצי:\nhttps://cal.com/dr-liat-edry/full-consultation\n\nלאחר קביעת התורים, אנא רשום/י \"קבעתי תור\". אעדכן אותך על אישור התור, יום ושעה.`;
 
         } else if (botTrigger === 'paid_legal') {
-        const settings = await base44.asServiceRole.entities.SystemSetting.filter({ key: 'legal_payment_confirmed' });
+        const settings = await base44.asServiceRole.entities.BotContent.filter({ key: 'consultation_payment_confirmed' });
         botMessage = settings.length > 0
-          ? settings[0].value.replace('{שם פרטי}', contactName).replace('{שם}', contactName)
+          ? settings[0].content.replace('{שם פרטי}', contactName).replace('{שם}', contactName)
           : `היי ${contactName}, ראינו ששילמת! תודה רבה.`;
 
-        const privacySettings = await base44.asServiceRole.entities.SystemSetting.filter({ key: 'privacy' });
-        if (privacySettings.length > 0) botMessage += '\n\n' + privacySettings[0].value;
+        const privacySettings = await base44.asServiceRole.entities.BotContent.filter({ key: 'privacy_message' });
+        if (privacySettings.length > 0) botMessage += '\n\n' + privacySettings[0].content;
 
-        // Fetch legal email for document request
+        // Fetch legal email from BotContent or fallback
         const emailSettings = await base44.asServiceRole.entities.SystemSetting.filter({ key: 'legal_email' });
         const legalEmail = emailSettings.length > 0 ? emailSettings[0].value : 'office@drliatedry.co.il';
 
-        const docSettings = await base44.asServiceRole.entities.SystemSetting.filter({ key: 'legal_documents_request' });
-        const docText = docSettings.length > 0 ? docSettings[0].value : 'אילו חומרים נדרשים?\n• תיאור המקרה הרפואי\n• תוצאות בדיקות ותיקים רפואיים\n• דוחות רלוונטיים\n• כל מידע נוסף רלוונטי';
+        const docSettings = await base44.asServiceRole.entities.BotContent.filter({ key: 'legal_documents_request' });
+        const docText = docSettings.length > 0 ? docSettings[0].content : 'אילו חומרים נדרשים?\n• תיאור המקרה הרפואי\n• תוצאות בדיקות ותיקים רפואיים\n• דוחות רלוונטיים\n• כל מידע נוסף רלוונטי';
         botMessage += `\n\n${docText}\n\n📧 יש לשלוח את המסמכים למייל: ${legalEmail}\n\nלאחר השליחה, אנא רשום/י \"שלחתי\".\nכדי להמשיך בתהליך, אנא רשום/י \"המשך\".`;
 
       } else if (botTrigger === 'paid_post_lecture') {
@@ -273,16 +273,16 @@ Deno.serve(async (req) => {
         botMessage = `היי ${contactName}, קיבלנו את התשלום! תודה רבה.`;
 
       } else if (botTrigger === 'scheduled_consultation') {
-        const locationSettings = await base44.asServiceRole.entities.SystemSetting.filter({ key: 'location_directions' });
+        const locationSettings = await base44.asServiceRole.entities.BotContent.filter({ key: 'location_directions' });
         botMessage = locationSettings.length > 0
-          ? locationSettings[0].value
+          ? locationSettings[0].content
           : 'הגעה ל-MedWork\n• מרכז מסחרי רננים, מודיעין מכבים רעות';
 
       } else if (botTrigger === 'questionnaire_completed') {
         // Legacy fallback for questionnaire_completed without payment check
-        const settings = await base44.asServiceRole.entities.SystemSetting.filter({ key: 'questionnaire_completed_message' });
+        const settings = await base44.asServiceRole.entities.BotContent.filter({ key: 'questionnaire_completed_message' });
         botMessage = settings.length > 0
-          ? settings[0].value.replace('{שם פרטי}', contactName).replace('{שם}', contactName)
+          ? settings[0].content.replace('{שם פרטי}', contactName).replace('{שם}', contactName)
           : `היי ${contactName}, ראינו שמילאת את השאלון! תודה רבה, אעבור עליו בהקדם.`;
 
       } else if (botTrigger === 'whatsapp_appointment_scheduled') {
@@ -291,8 +291,8 @@ Deno.serve(async (req) => {
 
       } else if (botTrigger === 'clinic_appointment_scheduled') {
         const timeStr = fullRequest.last_appointment_time_str || '';
-        const locationSettings = await base44.asServiceRole.entities.SystemSetting.filter({ key: 'location_directions' });
-        const location = locationSettings.length > 0 ? locationSettings[0].value : 'הגעה ל-MedWork\nמרכז מסחרי רננים, מודיעין מכבים רעות\nקומה 2 (מעל הפיצה, מול Remax וחב"ד)';
+        const locationSettings = await base44.asServiceRole.entities.BotContent.filter({ key: 'location_directions' });
+        const location = locationSettings.length > 0 ? locationSettings[0].content : 'הגעה ל-MedWork\nמרכז מסחרי רננים, מודיעין מכבים רעות\nקומה 2 (מעל הפיצה, מול Remax וחב"ד)';
         botMessage = `✅ נקבע תור לייעוץ מלא!\nיום ושעה: ${timeStr}\n\n📍 ${location}`;
 
       } else if (botTrigger === 'both_appointments_scheduled') {
@@ -302,8 +302,8 @@ Deno.serve(async (req) => {
         const clinicTime = fullRequest.scheduled_date_clinic
           ? new Date(fullRequest.scheduled_date_clinic).toLocaleString('he-IL', { timeZone: 'Asia/Jerusalem', weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' })
           : '';
-        const locationSettings = await base44.asServiceRole.entities.SystemSetting.filter({ key: 'location_directions' });
-        const location = locationSettings.length > 0 ? locationSettings[0].value : 'הגעה ל-MedWork\nמרכז מסחרי רננים, מודיעין מכבים רעות\nקומה 2 (מעל הפיצה, מול Remax וחב"ד)';
+        const locationSettings = await base44.asServiceRole.entities.BotContent.filter({ key: 'location_directions' });
+        const location = locationSettings.length > 0 ? locationSettings[0].content : 'הגעה ל-MedWork\nמרכז מסחרי רננים, מודיעין מכבים רעות\nקומה 2 (מעל הפיצה, מול Remax וחב"ד)';
         botMessage = `🎉 מעולה! שני התורים נקבעו:\n1. זמינות בווצאפ — ${whatsappTime}\n2. ייעוץ מלא — ${clinicTime}\n\n📍 ${location}\n\nשמחתי, נתראה! 😊`;
       }
 
