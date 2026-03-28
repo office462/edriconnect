@@ -154,20 +154,15 @@ Deno.serve(async (req) => {
       }
     }
 
-    // Handle appointment trigger values passed as newStatus (from pending_bot_message polling)
-    if (newStatus === 'whatsapp_appointment_scheduled') {
-      botTrigger = 'whatsapp_appointment_scheduled';
-    }
-    if (newStatus === 'clinic_appointment_scheduled') {
-      botTrigger = 'clinic_appointment_scheduled';
-    }
-    if (newStatus === 'both_appointments_scheduled') {
-      botTrigger = 'both_appointments_scheduled';
-    }
-
-    // Handle Cal.com appointment triggers (when status doesn't change but pending_bot_message is set)
-    if (!botTrigger && data.pending_bot_message && ['whatsapp_appointment_scheduled', 'clinic_appointment_scheduled', 'both_appointments_scheduled'].includes(data.pending_bot_message)) {
-      botTrigger = data.pending_bot_message;
+    // Handle appointment triggers — single unified path
+    // These come either as status values or via pending_bot_message field
+    const appointmentTriggers = ['whatsapp_appointment_scheduled', 'clinic_appointment_scheduled', 'both_appointments_scheduled'];
+    if (!botTrigger) {
+      if (appointmentTriggers.includes(newStatus)) {
+        botTrigger = newStatus;
+      } else if (data.pending_bot_message && appointmentTriggers.includes(data.pending_bot_message)) {
+        botTrigger = data.pending_bot_message;
+      }
     }
 
     // Handle status -> whatsapp_message_to_check

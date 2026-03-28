@@ -15,13 +15,13 @@ Deno.serve(async (req) => {
     let botMessage = '';
 
     if (triggerType === 'paid_consultation') {
-      const settings = await base44.asServiceRole.entities.SystemSetting.filter({ key: 'consultation_payment_confirmed' });
+      const settings = await base44.asServiceRole.entities.BotContent.filter({ key: 'consultation_payment_confirmed' });
       botMessage = settings.length > 0
-        ? settings[0].value.replace('{שם פרטי}', contactName).replace('{שם}', contactName)
+        ? settings[0].content.replace('{שם פרטי}', contactName).replace('{שם}', contactName)
         : `היי ${contactName}, קיבלתי את התשלום והשאלון ואעבור עליו בהקדם!`;
 
-      const appointmentSettings = await base44.asServiceRole.entities.SystemSetting.filter({ key: 'consultation_appointments' });
-      if (appointmentSettings.length > 0) botMessage += '\n\n' + appointmentSettings[0].value;
+      const appointmentSettings = await base44.asServiceRole.entities.BotContent.filter({ key: 'consultation_appointments' });
+      if (appointmentSettings.length > 0) botMessage += '\n\n' + appointmentSettings[0].content;
 
       const calendarSettings = await base44.asServiceRole.entities.SystemSetting.filter({ key: 'calendar_link' });
       if (calendarSettings.length > 0) botMessage += '\n\nקישור ליומן: ' + calendarSettings[0].value;
@@ -51,15 +51,15 @@ Deno.serve(async (req) => {
         : `היי ${contactName}, קיבלנו את התשלום! תודה רבה.`;
 
     } else if (triggerType === 'scheduled_consultation') {
-      const locationSettings = await base44.asServiceRole.entities.SystemSetting.filter({ key: 'location_directions' });
+      const locationSettings = await base44.asServiceRole.entities.BotContent.filter({ key: 'location_directions' });
       botMessage = locationSettings.length > 0
-        ? locationSettings[0].value
+        ? locationSettings[0].content
         : 'הגעה ל-MedWork\n• מרכז מסחרי רננים, מודיעין מכבים רעות';
 
     } else if (triggerType === 'questionnaire_completed') {
-      const settings = await base44.asServiceRole.entities.SystemSetting.filter({ key: 'questionnaire_completed_message' });
+      const settings = await base44.asServiceRole.entities.BotContent.filter({ key: 'questionnaire_completed_message' });
       botMessage = settings.length > 0
-        ? settings[0].value.replace('{שם פרטי}', contactName).replace('{שם}', contactName)
+        ? settings[0].content.replace('{שם פרטי}', contactName).replace('{שם}', contactName)
         : `היי ${contactName}, ראינו שמילאת את השאלון! תודה רבה, אעבור עליו בהקדם.`;
     }
 
