@@ -5,8 +5,13 @@ import { findAndSaveConversationId } from '@/lib/findConversationId';
  * After a status change in the frontend, directly calls the backend function
  * to get the bot message and sends it via WhatsApp.
  * No longer depends on the entity automation's timing.
+ * 
+ * Waits briefly for entity automation to finish DB updates before reading.
  */
 export async function handleBotMessage(requestId) {
+  // Wait for entity automation to finish writing its updates to DB
+  await new Promise(resolve => setTimeout(resolve, 2000));
+
   // Fetch fresh request data
   const requests = await base44.entities.ServiceRequest.filter({ id: requestId });
   const req = requests[0];
