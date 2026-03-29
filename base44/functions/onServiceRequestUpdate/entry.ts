@@ -109,11 +109,15 @@ Deno.serve(async (req) => {
 
     // Handle status -> scheduled
     if (newStatus === 'scheduled' && oldStatus !== 'scheduled') {
+      const isManualOverride = data._manual_override === true;
       // Verify conditions are met before allowing scheduling
       const latestReqSched = await base44.asServiceRole.entities.ServiceRequest.get(requestId);
+      // If DB already shows scheduled, it means an admin set it manually — treat as override
+      const isAlreadyScheduledInDB = latestReqSched.status === 'scheduled';
 
-      // Legal: require payment + agreement
-      if (data.service_type === 'legal' && (!latestReqSched.payment_confirmed || !latestReqSched.agreement_confirmed)) {
+      const skipChecks = isManualOverride || isAlreadyScheduledInDB;
+      // Legal: require payment + agreement (skip check if manual override from admin)
+      if (!skipChecks && data.service_type === 'legal' && (!latestReqSched.payment_confirmed || !latestReqSched.agreement_confirmed)) {
         const missing = [];
         if (!latestReqSched.payment_confirmed) missing.push('תשלום');
         if (!latestReqSched.agreement_confirmed) missing.push('הסכם');
@@ -125,8 +129,8 @@ Deno.serve(async (req) => {
           old_value: oldStatus,
           new_value: 'scheduled',
         });
-      // Consultation: require payment + questionnaire
-      } else if (data.service_type === 'consultation' && (!latestReqSched.payment_confirmed || !latestReqSched.questionnaire_completed)) {
+      // Consultation: require payment + questionnaire (skip check if manual override from admin)
+      } else if (!skipChecks && data.service_type === 'consultation' && (!latestReqSched.payment_confirmed || !latestReqSched.questionnaire_completed)) {
         console.log('Cannot schedule: payment_confirmed=' + latestReqSched.payment_confirmed + ', questionnaire_completed=' + latestReqSched.questionnaire_completed);
         timelineEntries.push({
           service_request_id: requestId,
@@ -136,6 +140,9 @@ Deno.serve(async (req) => {
           new_value: 'scheduled',
         });
       } else {
+        if (skipChecks) {
+          console.log('Skipping prerequisite checks for scheduled status (manual_override=' + isManualOverride + ', already_in_db=' + isAlreadyScheduledInDB + ')');
+        }
         timelineEntries.push({
           service_request_id: requestId,
           event_type: 'status_change',

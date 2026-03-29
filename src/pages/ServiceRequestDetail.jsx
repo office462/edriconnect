@@ -94,7 +94,7 @@ export default function ServiceRequestDetail() {
             console.log('Step 5 - triggering bot...');
             const botResult = await base44.functions.invoke('onServiceRequestUpdate', {
               event: { type: 'update', entity_name: 'ServiceRequest', entity_id: id },
-              data: currentData,
+              data: { ...currentData, _manual_override: true },
               old_data: { ...request, status: oldStatus },
             });
             console.log('Step 5 done - Bot trigger result:', botResult?.data);
