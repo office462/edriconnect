@@ -36,7 +36,11 @@ export default function ConversationsList({ conversations, activeId, onSelect, o
                 <MessageCircle className="w-4 h-4 text-muted-foreground flex-shrink-0" />
                 <div className="flex-1 overflow-hidden text-right">
                   <p className="text-sm font-medium truncate">{conv.metadata?.name || 'שיחה'}</p>
-                  <p className="text-xs text-muted-foreground">{new Date(conv.created_date).toLocaleString('he-IL', { timeZone: 'Asia/Jerusalem', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}</p>
+                  <p className="text-xs text-muted-foreground">{(() => {
+                    let d = conv.created_date;
+                    if (d && typeof d === 'string' && !d.endsWith('Z') && !d.includes('+')) d = d + 'Z';
+                    return new Date(d).toLocaleString('he-IL', { timeZone: 'Asia/Jerusalem', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+                  })()}</p>
                 </div>
               </button>
               <button
