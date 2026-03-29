@@ -1,4 +1,4 @@
-import { createClientFromRequest } from 'npm:@base44/sdk@0.8.21';
+import { createClientFromRequest } from 'npm:@base44/sdk@0.8.23';
 
 Deno.serve(async (req) => {
   try {
@@ -9,12 +9,25 @@ Deno.serve(async (req) => {
       return Response.json({ error: 'Forbidden: Admin access required' }, { status: 403 });
     }
 
+    const now = new Date();
+    const twentyFourHoursAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+
     // Get all active service requests (not completed)
     const activeStatuses = ['new_lead', 'pending', 'whatsapp_message_to_check', 'in_review', 'paid', 'scheduled'];
     const allRequests = await base44.asServiceRole.entities.ServiceRequest.list('-updated_date', 200);
 
-    const now = new Date();
-    const twentyFourHoursAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+    // Filter to only active requests that haven't been updated in 24h
+    const staleRequests = allRequests.filter(r => 
+      activeStatuses.includes(r.status) &&
+      r.contact_id &&
+      r.conversation_id &&
+      new Date(r.updated_date) < twentyFourHoursAgo
+    );
+
+    if (staleRequests.length === 0) {
+      console.log('24h Reminder: no stale requests found');
+      return Response.json({ ok: true, sent: 0, skipped: 0, details: [] });
+    }
 
     // Get reminder message from BotContent
     const reminderContent = await base44.asServiceRole.entities.BotContent.filter({ key: 'system_reminder_24h' });
@@ -22,117 +35,59 @@ Deno.serve(async (req) => {
       ? reminderContent[0].content
       : 'היי, רק רצינו לוודא שקיבלת את ההודעה שלנו. האם תרצה להמשיך?';
 
-    // Get all bot conversations (user scope - service role doesn't see conversations)
-    const conversations = await base44.agents.listConversations({ agent_name: 'dr_adri_bot' });
-
     let sentCount = 0;
     let skippedCount = 0;
     const results = [];
 
-    for (const request of allRequests) {
-      // Only process active requests
-      if (!activeStatuses.includes(request.status)) {
-        continue;
-      }
+    for (const request of staleRequests) {
+      const conversationId = request.conversation_id;
 
-      // Skip if status is completed
-      if (request.status === 'completed') {
-        continue;
-      }
-
-      // Check if last update was more than 24 hours ago
-      const lastUpdate = new Date(request.updated_date);
-      if (lastUpdate > twentyFourHoursAgo) {
-        // Updated within 24 hours, skip
+      // Validate conversation_id format (should be 24-char hex)
+      if (!/^[a-f0-9]{24}$/i.test(conversationId)) {
         skippedCount++;
         continue;
       }
 
-      const contactId = request.contact_id;
-      if (!contactId) {
+      let conversation;
+      try {
+        conversation = await base44.asServiceRole.agents.getConversation(conversationId);
+      } catch {
         skippedCount++;
+        results.push({ requestId: request.id, contactName: request.contact_name, status: 'conversation_not_found' });
         continue;
       }
 
-      // Find conversation for this contact (check metadata and tool_calls)
-      const contactPhone = request.contact_phone || '';
-      let targetConversation = null;
-      for (const conv of conversations) {
-        const meta = conv.metadata || {};
-        if (meta.contact_id === contactId || meta.phone === contactPhone) {
-          targetConversation = conv;
-          break;
-        }
-        // Search in tool_calls
-        const msgs = conv.messages || [];
-        let found = false;
-        for (const msg of msgs) {
-          if (msg.tool_calls) {
-            for (const tc of msg.tool_calls) {
-              const args = tc.arguments_string || '';
-              if (args.includes(contactId) || (contactPhone && args.includes(contactPhone))) {
-                found = true;
-                break;
-              }
-            }
-          }
-          if (found) break;
-        }
-        if (found) {
-          targetConversation = conv;
-          break;
-        }
-      }
-
-      if (!targetConversation) {
-        // No conversation found, log it
-        skippedCount++;
-        results.push({
-          requestId: request.id,
-          contactName: request.contact_name,
-          status: 'no_conversation',
-        });
-        continue;
-      }
-
-      // Check if the last message in the conversation was from the bot (assistant)
-      // If so, it means the user hasn't responded yet - send reminder
-      const messages = targetConversation.messages || [];
+      const messages = conversation.messages || [];
       if (messages.length === 0) {
         skippedCount++;
         continue;
       }
 
       const lastMessage = messages[messages.length - 1];
+
+      // Only remind if last message was from bot (user hasn't responded)
       if (lastMessage.role !== 'assistant') {
-        // Last message was from user, skip (they responded)
         skippedCount++;
         continue;
       }
 
       // Check if last message was sent more than 24 hours ago
-      const lastMessageDate = new Date(lastMessage.created_at || lastMessage.timestamp || targetConversation.updated_date);
+      const lastMessageDate = new Date(lastMessage.created_at || lastMessage.timestamp || conversation.updated_date);
       if (lastMessageDate > twentyFourHoursAgo) {
-        // Last bot message was within 24 hours, skip
         skippedCount++;
         continue;
       }
 
-      // Check if we already sent a reminder recently (avoid spamming)
-      const isLastMessageReminder = lastMessage.content && lastMessage.content.includes('רצינו לוודא');
-      if (isLastMessageReminder) {
+      // Avoid spamming — skip if last message is already a reminder
+      if (lastMessage.content && lastMessage.content.includes('רצינו לוודא')) {
         skippedCount++;
-        results.push({
-          requestId: request.id,
-          contactName: request.contact_name,
-          status: 'already_reminded',
-        });
+        results.push({ requestId: request.id, contactName: request.contact_name, status: 'already_reminded' });
         continue;
       }
 
       // Send reminder
       const personalizedMessage = reminderMessage.replace('{שם}', request.contact_name || '');
-      await base44.agents.addMessage(targetConversation, {
+      await base44.asServiceRole.agents.addMessage(conversation, {
         role: 'assistant',
         content: personalizedMessage,
       });
@@ -145,21 +100,12 @@ Deno.serve(async (req) => {
       });
 
       sentCount++;
-      results.push({
-        requestId: request.id,
-        contactName: request.contact_name,
-        status: 'reminder_sent',
-      });
+      results.push({ requestId: request.id, contactName: request.contact_name, status: 'reminder_sent' });
     }
 
-    console.log(`24h Reminder: sent=${sentCount}, skipped=${skippedCount}`);
+    console.log(`24h Reminder: sent=${sentCount}, skipped=${skippedCount}, checked=${staleRequests.length}`);
 
-    return Response.json({
-      ok: true,
-      sent: sentCount,
-      skipped: skippedCount,
-      details: results,
-    });
+    return Response.json({ ok: true, sent: sentCount, skipped: skippedCount, details: results });
   } catch (error) {
     console.error('Error in send24HourReminder:', error);
     return Response.json({ error: error.message }, { status: 500 });
