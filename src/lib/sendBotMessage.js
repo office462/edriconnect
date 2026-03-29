@@ -68,13 +68,18 @@ async function sendMessage(resultData, requestId, trigger, conversationId) {
   const pending = resultData?.pendingBotMessage;
   const effectiveConvId = pending?.conversationId || conversationId;
 
+  console.log('sendMessage: start', { trigger, effectiveConvId, hasMessage: !!pending?.message, pendingConvId: pending?.conversationId, fallbackConvId: conversationId });
+
   if (!effectiveConvId || !pending?.message) {
-    console.log('handleBotMessage: no conversation or message', { convId: effectiveConvId, hasMessage: !!pending?.message });
+    console.log('sendMessage: ABORT - no conversation or message');
     return null;
   }
 
+  console.log('sendMessage: getting conversation', effectiveConvId);
   const conv = await base44.agents.getConversation(effectiveConvId);
+  console.log('sendMessage: got conversation, sending message...');
   await base44.agents.addMessage(conv, { role: 'assistant', content: pending.message });
+  console.log('sendMessage: message sent successfully!');
 
   await base44.entities.ServiceRequestTimeline.create({
     service_request_id: requestId,
@@ -82,9 +87,9 @@ async function sendMessage(resultData, requestId, trigger, conversationId) {
     description: `הודעת ${trigger} נשלחה אוטומטית`,
   });
 
-  // Clear pending flag if it exists
+  // Clear pending flag after successful send
   await base44.entities.ServiceRequest.update(requestId, { pending_bot_message: '' });
 
-  console.log('handleBotMessage: sent', trigger, 'to', effectiveConvId);
+  console.log('sendMessage: completed', trigger, 'to', effectiveConvId);
   return { trigger, conversationId: effectiveConvId };
 }

@@ -12,7 +12,9 @@ export function usePendingBotMessages() {
   const queryClient = useQueryClient();
 
   useEffect(() => {
+    console.log('usePendingBotMessages: subscription started');
     const unsubscribe = base44.entities.ServiceRequest.subscribe((event) => {
+      console.log('usePendingBotMessages: event received', event.type, event.id, event.data?.pending_bot_message || '(none)');
       if (event.type !== 'update') return;
       
       const data = event.data;
