@@ -236,7 +236,15 @@ Deno.serve(async (req) => {
 
       // Ready to schedule — both payment and questionnaire confirmed
       } else if (botTrigger === 'ready_to_schedule') {
-        botMessage = `היי ${contactName}, קיבלתי את התשלום והשאלון ואעבור עליו בהקדם!\n\nחשוב מאוד! יש לזמן 2 תורים:\n\n1. תור לזמינות בווצאפ (קוד קופ״ח) - 10 דקות:\nhttps://cal.com/dr-liat-edry/whatsapp-availability\n\n2. תור לייעוץ מלא - שעה וחצי:\nhttps://cal.com/dr-liat-edry/full-consultation\n\nלאחר קביעת התורים, אנא רשום/י \"קבעתי תור\". אעדכן אותך על אישור התור, יום ושעה.`;
+        const whatsappLinkContent = await base44.asServiceRole.entities.ServiceContent.filter({
+          service_type: 'consultation', content_type: 'external_link', sub_type: 'whatsapp_appointment'
+        });
+        const clinicLinkContent = await base44.asServiceRole.entities.ServiceContent.filter({
+          service_type: 'consultation', content_type: 'external_link', sub_type: 'clinic_appointment'
+        });
+        const whatsappUrl = whatsappLinkContent[0]?.url || '';
+        const clinicUrl = clinicLinkContent[0]?.url || '';
+        botMessage = `היי ${contactName}, קיבלתי את התשלום והשאלון ואעבור עליו בהקדם!\n\nחשוב מאוד! יש לזמן 2 תורים:\n\n1. תור לזמינות בווצאפ (קוד קופ״ח) - 10 דקות:\n${whatsappUrl}\n\n2. תור לייעוץ מלא - שעה וחצי:\n${clinicUrl}\n\nלאחר קביעת התורים, אנא רשום/י "קבעתי תור".`;
 
       } else if (botTrigger === 'payment_confirmed_awaiting_questionnaire') {
         // Paid but questionnaire not done yet
@@ -250,16 +258,7 @@ Deno.serve(async (req) => {
         const paymentUrl = paymentContent.length > 0 ? paymentContent[0].url : '';
         botMessage = `היי ${contactName}, ראינו שמילאת את השאלון, תודה רבה! 🙏\n\nכדי שנוכל להתקדם לזימון תורים, יש לבצע תשלום כאן:\n${paymentUrl ? 'תשלום: ' + paymentUrl : ''}\n\nלאחר ביצוע התשלום, אנא רשום/י \"ביצעתי\". התשלום ייבדק על ידי הצוות ויאושר בהקדם, ואז נמשיך בתהליך.`;
 
-      } else if (botTrigger === 'paid_consultation') {
-        // Legacy fallback
-        const settings = await base44.asServiceRole.entities.BotContent.filter({ key: 'consultation_payment_confirmed' });
-        const openingText = settings.length > 0
-          ? settings[0].content.replace('{שם פרטי}', contactName).replace('{שם}', contactName)
-          : `היי ${contactName}, קיבלתי את התשלום והשאלון ואעבור עליו בהקדם!`;
-
-        botMessage = openingText + `\n\nיש לזמן 2 תורים:\n\n1. תור לזמינות בווצאפ (קוד קופ״ח) - 10 דקות:\nhttps://cal.com/dr-liat-edry/whatsapp-availability\n\n2. תור לייעוץ מלא - שעה וחצי:\nhttps://cal.com/dr-liat-edry/full-consultation\n\nלאחר קביעת התורים, אנא רשום/י \"קבעתי תור\". אעדכן אותך על אישור התור, יום ושעה.`;
-
-        } else if (botTrigger === 'paid_legal') {
+      } else if (botTrigger === 'paid_legal') {
         const settings = await base44.asServiceRole.entities.BotContent.filter({ key: 'legal_payment_confirmed' });
         botMessage = settings.length > 0
           ? settings[0].content.replace('{שם פרטי}', contactName).replace('{שם}', contactName)

@@ -70,41 +70,30 @@ export default function ServiceRequests() {
 
     pendingRequests.forEach(async (req) => {
       try {
-        // Save the pending message value BEFORE clearing it
-        const savedPendingMessage = req.pending_bot_message;
+        const trigger = req.pending_bot_message;
 
         // Clear flag immediately to prevent duplicate sends
         await base44.entities.ServiceRequest.update(req.id, { pending_bot_message: null });
 
-        // Find conversation_id from frontend (service role cannot do this)
+        // Find conversation_id
         let conversationId = req.conversation_id;
-        const isValidId = (id) => /^[a-f0-9]{24}$/i.test(id || '') && id !== req.contact_id;
-
-        // Use savedPendingMessage to check — includes Cal.com appointment triggers
-        const needsConversation = [
-          'paid_consultation', 'paid_legal', 'paid_post_lecture', 'paid_lectures',
-          'questionnaire_completed',
-          'ready_to_schedule', 'payment_confirmed_awaiting_questionnaire', 'questionnaire_completed_awaiting_payment',
-          'waiting_for_admin_approval',
-          'whatsapp_appointment_scheduled', 'clinic_appointment_scheduled', 'both_appointments_scheduled'
-        ].includes(savedPendingMessage);
-
-        if (!isValidId(conversationId) && req.contact_phone && needsConversation) {
+        const isValid = (id) => /^[a-f0-9]{24}$/i.test(id || '') && id !== req.contact_id;
+        if (!isValid(conversationId) && req.contact_phone) {
           conversationId = await findAndSaveConversationId(req.id, req.contact_phone);
         }
-
         if (!conversationId) {
-          console.log('No conversation_id found for pending message:', req.id, savedPendingMessage);
+          console.log('No conversation_id for pending message:', req.id, trigger);
           return;
         }
 
-        // Use savedPendingMessage (not the cleared value) when calling the backend
+        // Send to onServiceRequestUpdate with trigger as status
         const botResult = await base44.functions.invoke('onServiceRequestUpdate', {
           event: { type: 'update', entity_name: 'ServiceRequest', entity_id: req.id },
-          data: { ...req, status: savedPendingMessage, conversation_id: conversationId, pending_bot_message: savedPendingMessage },
+          data: { ...req, status: trigger, conversation_id: conversationId },
           old_data: { ...req, status: 'previous' },
         });
 
+        // Send message if we got a result
         const pending = botResult?.data?.pendingBotMessage;
         if (pending?.conversationId && pending?.message) {
           const conv = await base44.agents.getConversation(pending.conversationId);
@@ -112,7 +101,7 @@ export default function ServiceRequests() {
           await base44.entities.ServiceRequestTimeline.create({
             service_request_id: req.id,
             event_type: 'message_sent',
-            description: `הודעת ${pending.botTrigger || savedPendingMessage} נשלחה אוטומטית`,
+            description: `הודעת ${trigger} נשלחה אוטומטית`,
           });
           queryClient.invalidateQueries({ queryKey: ['service-requests'] });
         }
@@ -139,61 +128,12 @@ export default function ServiceRequests() {
   });
 
   const updateMutation = useMutation({
-    mutationFn: async ({ id, data, oldStatus, fullRequest }) => {
-      try {
-        await base44.entities.ServiceRequest.update(id, data);
-        console.log('Step 1 done - DB updated');
-
-        if (data.status && data.status !== oldStatus) {
-          console.log('Step 2 - status changed:', oldStatus, '->', data.status);
-
-          await base44.entities.ServiceRequestTimeline.create({
-            service_request_id: id, event_type: 'status_change', description: 'סטטוס שונה', old_value: oldStatus, new_value: data.status,
-          });
-          console.log('Step 3 done - timeline created');
-
-          // Find and save conversation_id before triggering bot
-          const reqData = fullRequest || requests.find(r => r.id === id) || {};
-          const isValidObjectId = (checkId) => /^[a-f0-9]{24}$/i.test(checkId || '');
-          let savedConversationId = reqData.conversation_id;
-
-          if (['paid', 'questionnaire_completed', 'scheduled'].includes(data.status) && reqData.contact_phone) {
-            // Always search for the real conversation - bot sometimes saves wrong conversation_id
-            console.log('Step 4 - finding conversation_id...');
-            savedConversationId = await findAndSaveConversationId(id, reqData.contact_phone);
-            console.log('Step 4 done - conversation_id:', savedConversationId);
-          }
-
-          // Trigger bot continuation for status changes
-          const updatedData = { ...reqData, ...data, conversation_id: savedConversationId };
-          try {
-            console.log('Step 5 - triggering bot...');
-            const botResult = await base44.functions.invoke('onServiceRequestUpdate', {
-              event: { type: 'update', entity_name: 'ServiceRequest', entity_id: id },
-              data: updatedData,
-              old_data: { ...reqData, status: oldStatus },
-            });
-            console.log('Step 5 done - Bot trigger result:', botResult?.data);
-
-            // If backend returned a pending bot message, send it from frontend
-            const pending = botResult?.data?.pendingBotMessage;
-            if (pending?.conversationId && pending?.message) {
-              console.log('Step 6 - sending bot message from frontend...');
-              const conv = await base44.agents.getConversation(pending.conversationId);
-              await base44.agents.addMessage(conv, { role: 'assistant', content: pending.message });
-              await base44.entities.ServiceRequestTimeline.create({
-                service_request_id: id,
-                event_type: 'message_sent',
-                description: `הודעת ${pending.botTrigger} נשלחה ל${pending.contactName} בשיחת הבוט`,
-              });
-              console.log('Step 6 done - message sent');
-            }
-          } catch (err) {
-            console.warn('Step 5/6 failed - Bot trigger error:', err.message);
-          }
-        }
-      } catch (e) {
-        console.error('MUTATION FAILED AT:', e.message);
+    mutationFn: async ({ id, data, oldStatus }) => {
+      await base44.entities.ServiceRequest.update(id, data);
+      if (data.status && data.status !== oldStatus) {
+        await base44.entities.ServiceRequestTimeline.create({
+          service_request_id: id, event_type: 'status_change', description: 'סטטוס שונה', old_value: oldStatus, new_value: data.status,
+        });
       }
     },
     onSuccess: () => {
