@@ -120,6 +120,10 @@ Deno.serve(async (req) => {
     });
 
     console.log('Updated ServiceRequest:', matchingReq.id, updateData);
+
+    // Bot message will be sent by the frontend via usePendingBotMessages subscription
+    // when it detects the pending_bot_message field update.
+
     return Response.json({ status: 'ok', updated: matchingReq.id, type: appointmentType });
 
   } catch (error) {
