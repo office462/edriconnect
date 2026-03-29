@@ -39,7 +39,7 @@ Deno.serve(async (req) => {
 
     // Search by email first (most reliable — Cal.com always collects email)
     if (attendeeEmail) {
-      const allRequests = await base44.asServiceRole.entities.ServiceRequest.filter({ service_type: 'consultation' });
+      const allRequests = await base44.asServiceRole.entities.ServiceRequest.list('-created_date', 200);
       matchingReq = allRequests.find(r => {
         const reqEmail = (r.contact_email || '').toLowerCase().trim();
         return reqEmail && reqEmail === attendeeEmail.toLowerCase().trim();
@@ -49,7 +49,7 @@ Deno.serve(async (req) => {
     // Fallback: match by phone
     if (!matchingReq && attendeePhone) {
       const normalizedPhone = attendeePhone.replace(/\D/g, '');
-      const allRequests = await base44.asServiceRole.entities.ServiceRequest.filter({ service_type: 'consultation' });
+      const allRequests = await base44.asServiceRole.entities.ServiceRequest.list('-created_date', 200);
       matchingReq = allRequests.find(r => {
         const reqPhone = (r.contact_phone || '').replace(/\D/g, '');
         return reqPhone && (reqPhone === normalizedPhone || normalizedPhone.endsWith(reqPhone) || reqPhone.endsWith(normalizedPhone));
@@ -58,7 +58,7 @@ Deno.serve(async (req) => {
 
     // Fallback: match by name
     if (!matchingReq && attendeeName) {
-      const allRequests = await base44.asServiceRole.entities.ServiceRequest.filter({ service_type: 'consultation' });
+      const allRequests = await base44.asServiceRole.entities.ServiceRequest.list('-created_date', 200);
       const nameLower = attendeeName.toLowerCase().trim();
       const firstName = nameLower.split(' ')[0];
       matchingReq = allRequests.find(r => {
@@ -72,7 +72,7 @@ Deno.serve(async (req) => {
       return Response.json({ status: 'no_match', attendee: attendeeName });
     }
 
-    console.log('Matched ServiceRequest:', matchingReq.id, 'for attendee:', attendeeName, attendeeEmail);
+    console.log('Matched ServiceRequest:', matchingReq.id, 'type:', matchingReq.service_type, 'for attendee:', attendeeName, attendeeEmail);
 
     // Build update data
     const updateData = {
@@ -81,17 +81,31 @@ Deno.serve(async (req) => {
       last_appointment_type: appointmentType,
     };
 
-    // Check if both appointments are now set
-    const updatedWhatsapp = isWhatsapp ? startTimeRaw : matchingReq.scheduled_date_whatsapp;
-    const updatedClinic = isWhatsapp ? matchingReq.scheduled_date_clinic : startTimeRaw;
+    const serviceType = matchingReq.service_type;
 
-    if (updatedWhatsapp && updatedClinic) {
-      updateData.status = 'scheduled';
-      updateData.pending_bot_message = 'both_appointments_scheduled';
+    if (serviceType === 'consultation') {
+      // Consultation requires two appointments (whatsapp + clinic)
+      const updatedWhatsapp = isWhatsapp ? startTimeRaw : matchingReq.scheduled_date_whatsapp;
+      const updatedClinic = isWhatsapp ? matchingReq.scheduled_date_clinic : startTimeRaw;
+
+      if (updatedWhatsapp && updatedClinic) {
+        updateData.status = 'scheduled';
+        updateData.pending_bot_message = 'both_appointments_scheduled';
+      } else {
+        updateData.pending_bot_message = isWhatsapp
+          ? 'whatsapp_appointment_scheduled'
+          : 'clinic_appointment_scheduled';
+      }
     } else {
-      updateData.pending_bot_message = isWhatsapp
-        ? 'whatsapp_appointment_scheduled'
-        : 'clinic_appointment_scheduled';
+      // All other service types — single appointment is enough
+      updateData.status = 'scheduled';
+      const triggerMap = {
+        legal: 'scheduled_legal',
+        lectures: 'scheduled_lectures',
+        clinic: 'scheduled_clinic',
+        post_lecture: 'scheduled_post_lecture',
+      };
+      updateData.pending_bot_message = triggerMap[serviceType] || 'scheduled_consultation';
     }
 
     await base44.asServiceRole.entities.ServiceRequest.update(matchingReq.id, updateData);
