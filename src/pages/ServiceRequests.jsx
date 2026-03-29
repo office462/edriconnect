@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { base44 } from '@/api/base44Client';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Card, CardHeader, CardContent } from '@/components/ui/card';
@@ -20,7 +20,7 @@ import RequestCard from '@/components/service-requests/RequestCard';
 import { Link } from 'react-router-dom';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
-import { findAndSaveConversationId } from '@/lib/findConversationId';
+import { handleBotMessage } from '@/lib/sendBotMessage';
 
 const statusOptions = [
   { value: 'new_lead', label: 'ליד חדש' },
@@ -62,54 +62,7 @@ export default function ServiceRequests() {
     queryFn: () => base44.entities.ServiceRequest.list('-created_date', 200),
   });
 
-  // Handle pending bot messages set by backend automations
-  useEffect(() => {
-    if (!requests?.length) return;
-    const pendingRequests = requests.filter(r => r.pending_bot_message);
-    if (!pendingRequests.length) return;
-
-    pendingRequests.forEach(async (req) => {
-      try {
-        const trigger = req.pending_bot_message;
-
-        // Clear flag immediately to prevent duplicate sends
-        await base44.entities.ServiceRequest.update(req.id, { pending_bot_message: null });
-
-        // Find conversation_id
-        let conversationId = req.conversation_id;
-        const isValid = (id) => /^[a-f0-9]{24}$/i.test(id || '') && id !== req.contact_id;
-        if (!isValid(conversationId) && req.contact_phone) {
-          conversationId = await findAndSaveConversationId(req.id, req.contact_phone);
-        }
-        if (!conversationId) {
-          console.log('No conversation_id for pending message:', req.id, trigger);
-          return;
-        }
-
-        // Send to onServiceRequestUpdate with trigger as status
-        const botResult = await base44.functions.invoke('onServiceRequestUpdate', {
-          event: { type: 'update', entity_name: 'ServiceRequest', entity_id: req.id },
-          data: { ...req, status: trigger, conversation_id: conversationId },
-          old_data: { ...req, status: 'previous' },
-        });
-
-        // Send message if we got a result
-        const pending = botResult?.data?.pendingBotMessage;
-        if (pending?.conversationId && pending?.message) {
-          const conv = await base44.agents.getConversation(pending.conversationId);
-          await base44.agents.addMessage(conv, { role: 'assistant', content: pending.message });
-          await base44.entities.ServiceRequestTimeline.create({
-            service_request_id: req.id,
-            event_type: 'message_sent',
-            description: `הודעת ${trigger} נשלחה אוטומטית`,
-          });
-          queryClient.invalidateQueries({ queryKey: ['service-requests'] });
-        }
-      } catch (err) {
-        console.warn('Pending bot message failed:', err.message);
-      }
-    });
-  }, [requests]);
+  // No more useEffect for pending messages - handled directly after status changes
 
   const { data: contacts = [] } = useQuery({
     queryKey: ['contacts'],
@@ -135,12 +88,24 @@ export default function ServiceRequests() {
           service_request_id: id, event_type: 'status_change', description: 'סטטוס שונה', old_value: oldStatus, new_value: data.status,
         });
       }
+      return { id, statusChanged: data.status && data.status !== oldStatus };
     },
-    onSuccess: () => {
+    onSuccess: async (result) => {
       queryClient.invalidateQueries({ queryKey: ['service-requests'] });
       setShowEdit(false);
       setEditingReq(null);
       toast.success('עודכן');
+      if (result?.statusChanged) {
+        try {
+          const sent = await handleBotMessage(result.id);
+          if (sent) {
+            toast.success(`הודעת ${sent.trigger} נשלחה`);
+            queryClient.invalidateQueries({ queryKey: ['service-requests'] });
+          }
+        } catch (err) {
+          console.warn('Bot message failed:', err.message);
+        }
+      }
     },
   });
 
