@@ -320,6 +320,7 @@ const sections = [
     ]
   },
   {
+    id: 'bot-chat',
     title: 'בדיקת בוט',
     icon: Bot,
     color: 'bg-blue-500 text-white',
