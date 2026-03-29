@@ -9,6 +9,7 @@ import RequestInfo from '@/components/service-request/RequestInfo';
 import StatusActions from '@/components/service-request/StatusActions';
 import TimelineView from '@/components/service-request/TimelineView';
 import FilesList from '@/components/service-request/FilesList';
+import TestBotMessageButton from '@/components/service-request/TestBotMessageButton';
 import { toast } from 'sonner';
 import { handleBotMessage } from '@/lib/sendBotMessage';
 
@@ -141,12 +142,13 @@ export default function ServiceRequestDetail() {
           </Card>
         </div>
 
-        <div>
+        <div className="space-y-4">
           <StatusActions 
             request={request} 
             onUpdate={(updates, oldStatus) => updateMutation.mutate({ updates, oldStatus })}
             isUpdating={updateMutation.isPending}
           />
+          <TestBotMessageButton requestId={id} />
         </div>
       </div>
     </div>
