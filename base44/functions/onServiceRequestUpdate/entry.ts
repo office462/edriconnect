@@ -23,11 +23,18 @@ Deno.serve(async (req) => {
       'payment_confirmed_awaiting_questionnaire', 'questionnaire_completed_awaiting_payment',
       'waiting_for_admin_approval',
       'whatsapp_appointment_scheduled', 'clinic_appointment_scheduled', 'both_appointments_scheduled',
-      'scheduled_consultation', 'scheduled_legal', 'scheduled_lectures', 'scheduled_clinic', 'scheduled_post_lecture'
+      'scheduled_consultation', 'scheduled_legal', 'scheduled_lectures', 'scheduled_clinic', 'scheduled_post_lecture',
+      // Also support raw entity statuses so the frontend can trigger directly
+      'paid', 'questionnaire_completed', 'scheduled', 'whatsapp_message_to_check', 'in_review'
     ];
 
+    // Raw entity statuses (paid, questionnaire_completed, etc.) need to be
+    // processed through the normal automation logic first to determine the actual trigger
+    const rawStatuses = ['paid', 'questionnaire_completed', 'scheduled', 'whatsapp_message_to_check', 'in_review'];
+    const isRawStatus = rawStatuses.includes(newStatus);
+
     if (oldStatus === 'previous' && knownTriggers.includes(newStatus)) {
-      console.log(`Frontend pending message request: trigger=${newStatus}, request=${requestId}`);
+      console.log(`Frontend pending message request: trigger=${newStatus}, request=${requestId}, isRaw=${isRawStatus}`);
 
       const fullRequest = await base44.asServiceRole.entities.ServiceRequest.get(requestId);
       let contactName = fullRequest.contact_name || '';
@@ -43,7 +50,17 @@ Deno.serve(async (req) => {
         }
       }
 
-      const botMessage = await buildBotMessage(base44, newStatus, fullRequest, contactName);
+      // For raw statuses, compute the actual trigger like the automation would
+      let effectiveTrigger = newStatus;
+      if (isRawStatus) {
+        effectiveTrigger = computeTriggerForStatus(newStatus, fullRequest);
+        console.log(`Raw status ${newStatus} resolved to trigger: ${effectiveTrigger}`);
+        if (!effectiveTrigger) {
+          return Response.json({ ok: true, botTrigger: null, reason: 'no_trigger_for_status' });
+        }
+      }
+
+      const botMessage = await buildBotMessage(base44, effectiveTrigger, fullRequest, contactName);
 
       if (botMessage) {
         const isValidObjectId = (id) => /^[a-f0-9]{24}$/i.test(id);
@@ -51,18 +68,18 @@ Deno.serve(async (req) => {
 
         return Response.json({
           ok: true,
-          botTrigger: newStatus,
+          botTrigger: effectiveTrigger,
           botSent: false,
           pendingBotMessage: {
             conversationId: effectiveConversationId,
             message: botMessage,
             contactName,
-            botTrigger: newStatus,
+            botTrigger: effectiveTrigger,
           }
         });
       }
 
-      return Response.json({ ok: true, botTrigger: newStatus, botSent: false, reason: 'no_message' });
+      return Response.json({ ok: true, botTrigger: effectiveTrigger, botSent: false, reason: 'no_message' });
     }
 
     // --- Normal entity automation path ---
@@ -294,6 +311,38 @@ Deno.serve(async (req) => {
     return Response.json({ error: error.message }, { status: 500 });
   }
 });
+
+// --- Compute trigger from raw status (for frontend-initiated calls) ---
+function computeTriggerForStatus(status, req) {
+  if (status === 'paid') {
+    const serviceType = req.service_type;
+    if (serviceType === 'consultation') return 'paid_consultation';
+    if (serviceType === 'legal') return 'paid_legal';
+    if (serviceType === 'lectures') return 'paid_lectures';
+    if (serviceType === 'clinic') return 'paid_clinic';
+    if (serviceType === 'post_lecture') return 'paid_post_lecture';
+    return null;
+  }
+  if (status === 'questionnaire_completed') {
+    if (req.payment_confirmed) return 'ready_to_schedule';
+    return 'questionnaire_completed_awaiting_payment';
+  }
+  if (status === 'scheduled') {
+    const serviceType = req.service_type;
+    if (req.pending_bot_message === 'both_appointments_scheduled') return 'both_appointments_scheduled';
+    const triggerMap = {
+      consultation: 'scheduled_consultation',
+      legal: 'scheduled_legal',
+      lectures: 'scheduled_lectures',
+      clinic: 'scheduled_clinic',
+      post_lecture: 'scheduled_post_lecture',
+    };
+    return triggerMap[serviceType] || null;
+  }
+  if (status === 'whatsapp_message_to_check') return 'waiting_for_admin_approval';
+  if (status === 'in_review') return null; // no bot message for in_review
+  return null;
+}
 
 // --- Bot message builder (shared between both paths) ---
 async function buildBotMessage(base44, trigger, fullRequest, contactName) {

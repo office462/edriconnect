@@ -2,13 +2,11 @@ import { base44 } from '@/api/base44Client';
 import { findAndSaveConversationId } from '@/lib/findConversationId';
 
 /**
- * After a status change, waits for the entity automation to set pending_bot_message,
- * then fetches the bot message and sends it via WhatsApp.
+ * After a status change in the frontend, directly calls the backend function
+ * to get the bot message and sends it via WhatsApp.
+ * No longer depends on the entity automation's timing.
  */
 export async function handleBotMessage(requestId) {
-  // Wait for the entity automation to run and set pending_bot_message
-  await new Promise(r => setTimeout(r, 3000));
-
   // Fetch fresh request data
   const requests = await base44.entities.ServiceRequest.filter({ id: requestId });
   const req = requests[0];
@@ -17,43 +15,60 @@ export async function handleBotMessage(requestId) {
     return null;
   }
 
-  const trigger = req.pending_bot_message;
-  if (!trigger) {
-    console.log('handleBotMessage: no pending_bot_message for', requestId, '- checking raw data:', JSON.stringify({ status: req.status, pending_bot_message: req.pending_bot_message }));
-    return null;
-  }
-
-  console.log('handleBotMessage: found trigger', trigger, 'for', requestId);
-
-  // Clear flag immediately
-  await base44.entities.ServiceRequest.update(requestId, { pending_bot_message: '' });
-
-  // Find conversation_id
+  // Find conversation_id if missing
   let conversationId = req.conversation_id;
   const isValid = (id) => /^[a-f0-9]{24}$/i.test(id || '') && id !== req.contact_id;
   if (!isValid(conversationId) && req.contact_phone) {
     conversationId = await findAndSaveConversationId(requestId, req.contact_phone);
   }
-  if (!conversationId) {
-    console.log('handleBotMessage: no conversation_id for', requestId);
-    return null;
+
+  // Check if automation already set pending_bot_message
+  const trigger = req.pending_bot_message;
+  if (trigger) {
+    console.log('handleBotMessage: found existing trigger', trigger);
+    await base44.entities.ServiceRequest.update(requestId, { pending_bot_message: '' });
+
+    // Get the message from backend
+    const botResult = await base44.functions.invoke('onServiceRequestUpdate', {
+      event: { type: 'update', entity_name: 'ServiceRequest', entity_id: requestId },
+      data: { ...req, status: trigger, conversation_id: conversationId },
+      old_data: { ...req, status: 'previous' },
+    });
+
+    return await sendMessage(botResult?.data, requestId, trigger, conversationId);
   }
 
-  // Get the bot message from onServiceRequestUpdate
+  // No trigger set yet — the entity automation hasn't run.
+  // Call the backend directly with old_data.status='previous' and data.status=current status
+  // The backend already supports this pattern for frontend-initiated triggers.
+  const currentStatus = req.status;
+  console.log('handleBotMessage: no trigger yet, calling backend with status', currentStatus, 'for', requestId);
+  
   const botResult = await base44.functions.invoke('onServiceRequestUpdate', {
     event: { type: 'update', entity_name: 'ServiceRequest', entity_id: requestId },
-    data: { ...req, status: trigger, conversation_id: conversationId },
+    data: { ...req, status: currentStatus, conversation_id: conversationId },
     old_data: { ...req, status: 'previous' },
   });
 
-  const pending = botResult?.data?.pendingBotMessage;
-  if (!pending?.conversationId || !pending?.message) {
-    console.log('handleBotMessage: no message from backend', JSON.stringify(botResult?.data));
+  const botTrigger = botResult?.data?.botTrigger;
+  if (botTrigger) {
+    return await sendMessage(botResult?.data, requestId, botTrigger, conversationId);
+  }
+
+  console.log('handleBotMessage: no message needed for status', currentStatus);
+  return null;
+}
+
+async function sendMessage(resultData, requestId, trigger, conversationId) {
+  const pending = resultData?.pendingBotMessage;
+  const effectiveConvId = pending?.conversationId || conversationId;
+
+  if (!effectiveConvId || !pending?.message) {
+    console.log('handleBotMessage: no conversation or message', { convId: effectiveConvId, hasMessage: !!pending?.message });
     return null;
   }
 
-  // Send message via frontend (which has permission)
-  const conv = await base44.agents.getConversation(pending.conversationId);
+  const conv = await base44.agents.getConversation(effectiveConvId);
   await base44.agents.addMessage(conv, { role: 'assistant', content: pending.message });
 
   await base44.entities.ServiceRequestTimeline.create({
@@ -62,6 +77,9 @@ export async function handleBotMessage(requestId) {
     description: `הודעת ${trigger} נשלחה אוטומטית`,
   });
 
-  console.log('handleBotMessage: sent', trigger, 'to', pending.conversationId);
-  return { trigger, conversationId: pending.conversationId };
+  // Clear pending flag if it exists
+  await base44.entities.ServiceRequest.update(requestId, { pending_bot_message: '' });
+
+  console.log('handleBotMessage: sent', trigger, 'to', effectiveConvId);
+  return { trigger, conversationId: effectiveConvId };
 }
