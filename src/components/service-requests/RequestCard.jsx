@@ -48,7 +48,7 @@ export default function RequestCard({ request, selected, onSelect, onEdit, onDel
               <p className="text-xs text-muted-foreground">שלב: {request.current_step}</p>
             )}
             <p className="text-xs text-muted-foreground mt-1">
-              {request.created_date ? format(new Date(request.created_date), 'dd/MM/yy HH:mm') : ''}
+              {request.created_date ? new Date(request.created_date).toLocaleString('he-IL', { timeZone: 'Asia/Jerusalem', day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' }) : ''}
             </p>
           </div>
         </div>

@@ -318,7 +318,7 @@ export default function ServiceRequests() {
                         </Select>
                       </TableCell>
                       <TableCell className="text-sm text-muted-foreground">{req.current_step || '-'}</TableCell>
-                      <TableCell className="text-sm text-muted-foreground">{req.created_date ? format(new Date(req.created_date), 'dd/MM/yy HH:mm') : '-'}</TableCell>
+                      <TableCell className="text-sm text-muted-foreground">{req.created_date ? new Date(req.created_date).toLocaleString('he-IL', { timeZone: 'Asia/Jerusalem', day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' }) : '-'}</TableCell>
                       <TableCell>
                         <div className="flex items-center gap-1">
                           <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => handleEdit(req)}><Pencil className="w-3.5 h-3.5" /></Button>

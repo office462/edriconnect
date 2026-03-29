@@ -121,7 +121,7 @@ export default function Contacts() {
                       <TableCell>{c.phone && <span className="flex items-center gap-1 text-sm"><Phone className="w-3 h-3" />{c.phone}</span>}</TableCell>
                       <TableCell>{c.email && <span className="flex items-center gap-1 text-sm"><Mail className="w-3 h-3" />{c.email}</span>}</TableCell>
                       <TableCell><SourceBadge source={c.source} /></TableCell>
-                      <TableCell className="text-sm text-muted-foreground">{c.created_date ? format(new Date(c.created_date), 'dd/MM/yy') : '-'}</TableCell>
+                      <TableCell className="text-sm text-muted-foreground">{c.created_date ? new Date(c.created_date).toLocaleDateString('he-IL', { timeZone: 'Asia/Jerusalem', day: '2-digit', month: '2-digit', year: '2-digit' }) : '-'}</TableCell>
                       <TableCell>
                         <div className="flex items-center gap-1">
                           <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => handleEdit(c)}><Pencil className="w-3.5 h-3.5" /></Button>
@@ -162,7 +162,7 @@ export default function Contacts() {
                           {c.email && <p className="text-xs text-muted-foreground flex items-center gap-1 mt-1"><Mail className="w-3 h-3" />{c.email}</p>}
                           <div className="flex items-center gap-2 mt-2">
                             <SourceBadge source={c.source} />
-                            <span className="text-xs text-muted-foreground">{c.created_date ? format(new Date(c.created_date), 'dd/MM/yy') : ''}</span>
+                            <span className="text-xs text-muted-foreground">{c.created_date ? new Date(c.created_date).toLocaleDateString('he-IL', { timeZone: 'Asia/Jerusalem', day: '2-digit', month: '2-digit', year: '2-digit' }) : ''}</span>
                           </div>
                         </div>
                       </div>

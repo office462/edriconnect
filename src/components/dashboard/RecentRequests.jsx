@@ -47,7 +47,7 @@ export default function RecentRequests({ requests }) {
                   <TableCell><ServiceTypeBadge type={req.service_type} /></TableCell>
                   <TableCell><StatusBadge status={req.status} /></TableCell>
                   <TableCell className="text-muted-foreground text-sm">
-                    {req.created_date ? format(new Date(req.created_date), 'dd/MM/yy HH:mm') : '-'}
+                    {req.created_date ? new Date(req.created_date).toLocaleString('he-IL', { timeZone: 'Asia/Jerusalem', day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' }) : '-'}
                   </TableCell>
                 </TableRow>
               ))

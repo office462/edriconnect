@@ -52,7 +52,7 @@ export default function TimelineView({ events }) {
                 </p>
               )}
               <p className="text-xs text-muted-foreground mt-1">
-                {event.created_date ? format(new Date(event.created_date), 'dd/MM/yy HH:mm') : ''}
+                {event.created_date ? new Date(event.created_date).toLocaleString('he-IL', { timeZone: 'Asia/Jerusalem', day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' }) : ''}
               </p>
             </div>
           </div>

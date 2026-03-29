@@ -19,21 +19,21 @@ export default function RequestInfo({ request }) {
   if (request.scheduled_date_whatsapp) {
     infoItems.push({ 
       label: 'תור וואטסאפ', 
-      value: format(new Date(request.scheduled_date_whatsapp), 'dd/MM/yy HH:mm'), 
+      value: new Date(request.scheduled_date_whatsapp).toLocaleString('he-IL', { timeZone: 'Asia/Jerusalem', day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' }), 
       icon: Calendar 
     });
   }
   if (request.scheduled_date_clinic) {
     infoItems.push({ 
       label: 'תור קליניקה', 
-      value: format(new Date(request.scheduled_date_clinic), 'dd/MM/yy HH:mm'), 
+      value: new Date(request.scheduled_date_clinic).toLocaleString('he-IL', { timeZone: 'Asia/Jerusalem', day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' }), 
       icon: Calendar 
     });
   }
   if (request.processing_start_date) {
     infoItems.push({ 
       label: 'תחילת טיפול', 
-      value: format(new Date(request.processing_start_date), 'dd/MM/yy HH:mm'), 
+      value: new Date(request.processing_start_date).toLocaleString('he-IL', { timeZone: 'Asia/Jerusalem', day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' }), 
       icon: Clock 
     });
   }

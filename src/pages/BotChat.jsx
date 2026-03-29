@@ -74,6 +74,7 @@ export default function BotChat() {
   };
 
   const handleHideConversation = (conv) => {
+    if (!window.confirm('להסתיר את השיחה? (ניתן לשחזר בהמשך)')) return;
     const newHidden = [...hiddenIds, conv.id];
     setHiddenIds(newHidden);
     localStorage.setItem('hidden_conversations', JSON.stringify(newHidden));
