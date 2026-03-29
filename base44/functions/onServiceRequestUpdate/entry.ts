@@ -150,6 +150,14 @@ Deno.serve(async (req) => {
           } else {
             botTrigger = 'scheduled_consultation';
           }
+        } else if (data.service_type === 'legal') {
+          botTrigger = 'scheduled_legal';
+        } else if (data.service_type === 'lectures') {
+          botTrigger = 'scheduled_lectures';
+        } else if (data.service_type === 'clinic') {
+          botTrigger = 'scheduled_clinic';
+        } else if (data.service_type === 'post_lecture') {
+          botTrigger = 'scheduled_post_lecture';
         }
       }
     }
@@ -245,7 +253,7 @@ Deno.serve(async (req) => {
         botMessage = openingText + `\n\nיש לזמן 2 תורים:\n\n1. תור לזמינות בווצאפ (קוד קופ״ח) - 10 דקות:\nhttps://cal.com/dr-liat-edry/whatsapp-availability\n\n2. תור לייעוץ מלא - שעה וחצי:\nhttps://cal.com/dr-liat-edry/full-consultation\n\nלאחר קביעת התורים, אנא רשום/י \"קבעתי תור\". אעדכן אותך על אישור התור, יום ושעה.`;
 
         } else if (botTrigger === 'paid_legal') {
-        const settings = await base44.asServiceRole.entities.BotContent.filter({ key: 'consultation_payment_confirmed' });
+        const settings = await base44.asServiceRole.entities.BotContent.filter({ key: 'legal_payment_confirmed' });
         botMessage = settings.length > 0
           ? settings[0].content.replace('{שם פרטי}', contactName).replace('{שם}', contactName)
           : `היי ${contactName}, ראינו ששילמת! תודה רבה.`;
@@ -272,6 +280,24 @@ Deno.serve(async (req) => {
         botMessage = locationSettings.length > 0
           ? locationSettings[0].content
           : 'הגעה ל-MedWork\n• מרכז מסחרי רננים, מודיעין מכבים רעות';
+
+      } else if (botTrigger === 'scheduled_legal') {
+        const timeStr = fullRequest.last_appointment_time_str || '';
+        botMessage = `✅ נקבע תור לשיחה עם ד"ר אדרי!\nיום ושעה: ${timeStr}\n\nנשמח לדבר אז! 😊`;
+
+      } else if (botTrigger === 'scheduled_lectures') {
+        const timeStr = fullRequest.last_appointment_time_str || '';
+        botMessage = `✅ נקבע תור להרצאה!\nיום ושעה: ${timeStr}\n\nנשמח לראותך! 😊`;
+
+      } else if (botTrigger === 'scheduled_clinic') {
+        const timeStr = fullRequest.last_appointment_time_str || '';
+        const locationSettings = await base44.asServiceRole.entities.BotContent.filter({ key: 'location_directions' });
+        const location = locationSettings.length > 0 ? locationSettings[0].content : 'הגעה ל-MedWork\nמרכז מסחרי רננים, מודיעין מכבים רעות';
+        botMessage = `✅ נקבע תור לקליניקה!\nיום ושעה: ${timeStr}\n\n📍 ${location}`;
+
+      } else if (botTrigger === 'scheduled_post_lecture') {
+        const timeStr = fullRequest.last_appointment_time_str || '';
+        botMessage = `✅ נקבע תור!\nיום ושעה: ${timeStr}\n\nתודה ונשמח לראותך! 😊`;
 
       } else if (botTrigger === 'questionnaire_completed') {
         // Legacy fallback for questionnaire_completed without payment check
