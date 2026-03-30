@@ -12,10 +12,18 @@ Deno.serve(async (req) => {
 
     console.log('Payment webhook received:', notificationText);
 
-    // 1. Validate webhook secret
+    // 1. Validate webhook secret (try env var first, then DB)
     const secretHeader = req.headers.get('X-Webhook-Secret') || '';
-    const secretSettings = await base44.asServiceRole.entities.SystemSetting.filter({ key: 'payment_webhook_secret' });
-    const expectedSecret = secretSettings.length > 0 ? secretSettings[0].value : null;
+    let expectedSecret = Deno.env.get('PAYMENT_WEBHOOK_SECRET') || null;
+
+    if (!expectedSecret) {
+      try {
+        const secretSettings = await base44.asServiceRole.entities.SystemSetting.filter({ key: 'payment_webhook_secret' });
+        expectedSecret = secretSettings.length > 0 ? secretSettings[0].value : null;
+      } catch (e) {
+        console.log('Could not read SystemSetting, falling back to env only:', e.message);
+      }
+    }
 
     if (!expectedSecret || secretHeader !== expectedSecret) {
       console.log('Webhook secret mismatch');
@@ -98,21 +106,21 @@ Deno.serve(async (req) => {
  */
 function extractPayerName(text) {
   const patterns = [
-    // Bit patterns
-    /קיבלת .+ מ(.+?) באפליקציית Bit/,
-    /קיבלת .+ מ(.+?) ב-?Bit/,
-    /התקבל תשלום .+ מ(.+?) ב-?Bit/,
+    // Bit patterns — מ- prefix handled by trimming result
+    /קיבלת .+ מ-?(.+?) באפליקציית Bit/,
+    /קיבלת .+ מ-?(.+?) ב-?Bit/,
+    /התקבל תשלום .+ מ-?(.+?) ב-?Bit/,
     /(.+?) שלח.? לך .+ ב-?Bit/,
     /(.+?) העביר.? לך .+ ב-?Bit/,
     // Paybox patterns
-    /קיבלת .+ מ(.+?) ב-?Paybox/,
-    /קיבלת .+ מ(.+?) ב-?פייבוקס/,
-    /התקבל תשלום .+ מ(.+?) ב-?Paybox/,
-    /התקבל תשלום .+ מ(.+?) ב-?פייבוקס/,
+    /קיבלת .+ מ-?(.+?) ב-?Paybox/,
+    /קיבלת .+ מ-?(.+?) ב-?פייבוקס/,
+    /התקבל תשלום .+ מ-?(.+?) ב-?Paybox/,
+    /התקבל תשלום .+ מ-?(.+?) ב-?פייבוקס/,
     /(.+?) שלח.? לך .+ ב-?Paybox/,
     /(.+?) העביר.? לך .+ ב-?Paybox/,
     // Generic fallback: "קיבלת X מ-<name>"
-    /קיבלת .+ מ(.+?)$/,
+    /קיבלת .+ מ-?(.+?)$/,
   ];
 
   for (const pattern of patterns) {
