@@ -106,6 +106,8 @@ Deno.serve(async (req) => {
  */
 function extractPayerName(text) {
   const patterns = [
+    // Bit "מחכים לך" pattern (actual SMS format)
+    /מחכים לך מ(.+?) באפליקציית bit/i,
     // Bit patterns — מ- prefix handled by trimming result
     /קיבלת .+ מ-?(.+?) באפליקציית Bit/,
     /קיבלת .+ מ-?(.+?) ב-?Bit/,
@@ -121,6 +123,8 @@ function extractPayerName(text) {
     /(.+?) העביר.? לך .+ ב-?Paybox/,
     // Generic fallback: "קיבלת X מ-<name>"
     /קיבלת .+ מ-?(.+?)$/,
+    // Fallback: "מחכים לך מ-<name>"
+    /מחכים לך מ(.+?)$/,
   ];
 
   for (const pattern of patterns) {
