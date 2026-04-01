@@ -385,8 +385,8 @@ async function buildBotMessage(base44, trigger, fullRequest, contactName) {
     const privacySettings = await base44.asServiceRole.entities.BotContent.filter({ key: 'privacy_message' });
     if (privacySettings.length > 0) msg += '\n\n' + privacySettings[0].content;
 
-    const emailSettings = await base44.asServiceRole.entities.SystemSetting.filter({ key: 'legal_email' });
-    const legalEmail = emailSettings.length > 0 ? emailSettings[0].value : 'office@drliatedry.co.il';
+    const emailContent = await base44.asServiceRole.entities.ServiceContent.filter({ service_type: 'legal', content_type: 'external_link', sub_type: 'legal_email' });
+    const legalEmail = emailContent.length > 0 ? emailContent[0].url : 'office@drliatedry.co.il';
 
     const docSettings = await base44.asServiceRole.entities.BotContent.filter({ key: 'legal_documents_request' });
     const docText = docSettings.length > 0 ? docSettings[0].content : 'אילו חומרים נדרשים?\n• תיאור המקרה הרפואי\n• תוצאות בדיקות ותיקים רפואיים\n• דוחות רלוונטיים\n• כל מידע נוסף רלוונטי';

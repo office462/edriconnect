@@ -9,12 +9,10 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
-import { Plus, Pencil, Save, Link as LinkIcon, Settings, Palette, GitBranch } from 'lucide-react';
+import { Plus, Pencil, Save, Palette, GitBranch } from 'lucide-react';
 import { toast } from 'sonner';
 
 const categoryConfig = {
-  content: { label: 'תוכן', icon: Settings, color: 'bg-purple-100 text-purple-700' },
-  links: { label: 'קישורים', icon: LinkIcon, color: 'bg-emerald-100 text-emerald-700' },
   ui: { label: 'עיצוב ותצוגה', icon: Palette, color: 'bg-amber-100 text-amber-700' },
   flow: { label: 'הגדרות Flow', icon: GitBranch, color: 'bg-red-100 text-red-700' },
 };
@@ -28,10 +26,10 @@ const valueTypes = [
   { value: 'json', label: 'JSON' },
 ];
 
-const emptyForm = { category: 'content', key: '', label: '', value: '', value_type: 'text' };
+const emptyForm = { category: 'ui', key: '', label: '', value: '', value_type: 'text' };
 
 export default function SystemSettings() {
-  const [activeTab, setActiveTab] = useState('content');
+  const [activeTab, setActiveTab] = useState('ui');
   const [showDialog, setShowDialog] = useState(false);
   const [form, setForm] = useState(emptyForm);
   const [editId, setEditId] = useState(null);
