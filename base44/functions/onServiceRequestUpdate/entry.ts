@@ -359,7 +359,7 @@ async function buildBotMessage(base44, trigger, fullRequest, contactName) {
     });
     const whatsappUrl = whatsappLinkContent[0]?.url || '';
     const clinicUrl = clinicLinkContent[0]?.url || '';
-    return `היי ${contactName}, קיבלתי את התשלום והשאלון ואעבור עליו בהקדם!\n\nחשוב מאוד! יש לזמן 2 תורים:\n\n1. תור לזמינות בווצאפ (קוד קופ״ח) - 10 דקות:\n${whatsappUrl}\n\n2. תור לייעוץ מלא - שעה וחצי:\n${clinicUrl}\n\nלאחר קביעת התורים, אנא רשום/י "קבעתי תור".`;
+    return `היי ${contactName}, קיבלתי את התשלום והשאלון ואעבור עליו בהקדם!\n\nחשוב מאוד! יש לזמן 2 תורים:\n\n1. תור לזמינות בווצאפ (קוד קופ״ח) - 10 דקות:\n${whatsappUrl}\n\n2. תור לייעוץ מלא - שעה וחצי:\n${clinicUrl}\n\nלאחר קביעת שני התורים, כתוב/י "קבעתי" ✓`;
   }
 
   if (trigger === 'paid_consultation') {
@@ -419,32 +419,28 @@ async function buildBotMessage(base44, trigger, fullRequest, contactName) {
   }
 
   if (trigger === 'scheduled_consultation') {
-    const locationSettings = await base44.asServiceRole.entities.BotContent.filter({ key: 'location_directions' });
-    return locationSettings.length > 0
-      ? locationSettings[0].content
-      : 'הגעה ל-MedWork\n• מרכז מסחרי רננים, מודיעין מכבים רעות';
+    const timeStr = fullRequest.last_appointment_time_str || '';
+    return `✅ נקבע תור לייעוץ!\nיום ושעה: ${timeStr}\n\nנשמח לראותך! 😊\n\nלהמשך, כתוב/י "המשך".`;
   }
 
   if (trigger === 'scheduled_legal') {
     const timeStr = fullRequest.last_appointment_time_str || '';
-    return `✅ נקבע תור לשיחה עם ד"ר אדרי!\nיום ושעה: ${timeStr}\n\nנשמח לדבר אז! 😊`;
+    return `✅ נקבע תור לשיחה עם ד"ר אדרי!\nיום ושעה: ${timeStr}\n\nנשמח לדבר אז! 😊\n\nלהמשך, כתוב/י "המשך".`;
   }
 
   if (trigger === 'scheduled_lectures') {
     const timeStr = fullRequest.last_appointment_time_str || '';
-    return `✅ נקבע תור להרצאה!\nיום ושעה: ${timeStr}\n\nנשמח לראותך! 😊`;
+    return `✅ נקבע תור להרצאה!\nיום ושעה: ${timeStr}\n\nנשמח לראותך! 😊\n\nלהמשך, כתוב/י "המשך".`;
   }
 
   if (trigger === 'scheduled_clinic') {
     const timeStr = fullRequest.last_appointment_time_str || '';
-    const locationSettings = await base44.asServiceRole.entities.BotContent.filter({ key: 'location_directions' });
-    const location = locationSettings.length > 0 ? locationSettings[0].content : 'הגעה ל-MedWork\nמרכז מסחרי רננים, מודיעין מכבים רעות';
-    return `✅ נקבע תור לקליניקה!\nיום ושעה: ${timeStr}\n\n📍 ${location}`;
+    return `✅ נקבע תור לקליניקה!\nיום ושעה: ${timeStr}\n\nלהמשך, כתוב/י "המשך".`;
   }
 
   if (trigger === 'scheduled_post_lecture') {
     const timeStr = fullRequest.last_appointment_time_str || '';
-    return `✅ נקבע תור!\nיום ושעה: ${timeStr}\n\nתודה ונשמח לראותך! 😊`;
+    return `✅ נקבע תור!\nיום ושעה: ${timeStr}\n\nתודה ונשמח לראותך! 😊\n\nלהמשך, כתוב/י "המשך".`;
   }
 
   if (trigger === 'questionnaire_completed') {
@@ -456,14 +452,12 @@ async function buildBotMessage(base44, trigger, fullRequest, contactName) {
 
   if (trigger === 'whatsapp_appointment_scheduled') {
     const timeStr = fullRequest.last_appointment_time_str || '';
-    return `✅ נקבע תור לזמינות בווצאפ!\nיום ושעה: ${timeStr}\nנשמח לדבר אז! 😊`;
+    return `✅ נקבע תור לזמינות בווצאפ!\nיום ושעה: ${timeStr}\n\nנשמח לדבר אז! 😊\n\nלהמשך, כתוב/י "המשך".`;
   }
 
   if (trigger === 'clinic_appointment_scheduled') {
     const timeStr = fullRequest.last_appointment_time_str || '';
-    const locationSettings = await base44.asServiceRole.entities.BotContent.filter({ key: 'location_directions' });
-    const location = locationSettings.length > 0 ? locationSettings[0].content : 'הגעה ל-MedWork\nמרכז מסחרי רננים, מודיעין מכבים רעות\nקומה 2 (מעל הפיצה, מול Remax וחב"ד)';
-    return `✅ נקבע תור לייעוץ מלא!\nיום ושעה: ${timeStr}\n\n📍 ${location}`;
+    return `✅ נקבע תור לייעוץ מלא!\nיום ושעה: ${timeStr}\n\nלהמשך, כתוב/י "המשך".`;
   }
 
   if (trigger === 'both_appointments_scheduled') {
@@ -473,9 +467,7 @@ async function buildBotMessage(base44, trigger, fullRequest, contactName) {
     const clinicTime = fullRequest.scheduled_date_clinic
       ? new Date(fullRequest.scheduled_date_clinic).toLocaleString('he-IL', { timeZone: 'Asia/Jerusalem', weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' })
       : '';
-    const locationSettings = await base44.asServiceRole.entities.BotContent.filter({ key: 'location_directions' });
-    const location = locationSettings.length > 0 ? locationSettings[0].content : 'הגעה ל-MedWork\nמרכז מסחרי רננים, מודיעין מכבים רעות\nקומה 2 (מעל הפיצה, מול Remax וחב"ד)';
-    return `🎉 מעולה! שני התורים נקבעו:\n1. זמינות בווצאפ — ${whatsappTime}\n2. ייעוץ מלא — ${clinicTime}\n\n📍 ${location}\n\nשמחתי, נתראה! 😊`;
+    return `🎉 מעולה! שני התורים נקבעו:\n1. זמינות בווצאפ — ${whatsappTime}\n2. ייעוץ מלא — ${clinicTime}\n\nנשמח לראותך! 😊\n\nלהמשך, כתוב/י "המשך".`;
   }
 
   return '';
