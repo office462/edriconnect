@@ -20,7 +20,6 @@ import RequestCard from '@/components/service-requests/RequestCard';
 import { Link } from 'react-router-dom';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
-import { handleBotMessage } from '@/lib/sendBotMessage';
 
 const statusOptions = [
   { value: 'new_lead', label: 'ליד חדש' },
@@ -90,22 +89,11 @@ export default function ServiceRequests() {
       }
       return { id, statusChanged: data.status && data.status !== oldStatus };
     },
-    onSuccess: async (result) => {
+    onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['service-requests'] });
       setShowEdit(false);
       setEditingReq(null);
       toast.success('עודכן');
-      if (result?.statusChanged) {
-        try {
-          const sent = await handleBotMessage(result.id);
-          if (sent) {
-            toast.success(`הודעת ${sent.trigger} נשלחה`);
-            queryClient.invalidateQueries({ queryKey: ['service-requests'] });
-          }
-        } catch (err) {
-          console.warn('Bot message failed:', err.message);
-        }
-      }
     },
   });
 

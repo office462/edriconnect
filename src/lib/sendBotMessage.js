@@ -2,12 +2,23 @@ import { base44 } from '@/api/base44Client';
 import { findAndSaveConversationId } from '@/lib/findConversationId';
 
 /**
- * After a status change in the frontend, directly calls the backend function
- * to get the bot message and sends it via WhatsApp.
- * No longer depends on the entity automation's timing.
- * 
- * Waits briefly for entity automation to finish DB updates before reading.
+ * Checks if a message with the same trigger was already sent in the last 5 minutes.
+ * Prevents duplicate bot messages.
  */
+async function wasTriggerRecentlySent(requestId, trigger) {
+  const timeline = await base44.entities.ServiceRequestTimeline.filter(
+    { service_request_id: requestId, event_type: 'message_sent' },
+    '-created_date',
+    10
+  );
+  const fiveMinutesAgo = Date.now() - 5 * 60 * 1000;
+  return timeline.some(t => {
+    if (!t.description || !t.description.includes(trigger)) return false;
+    const createdAt = new Date(t.created_date).getTime();
+    return createdAt > fiveMinutesAgo;
+  });
+}
+
 export async function handleBotMessage(requestId) {
   // Wait for entity automation to finish writing its updates to DB
   await new Promise(resolve => setTimeout(resolve, 2000));
@@ -31,6 +42,15 @@ export async function handleBotMessage(requestId) {
   const trigger = req.pending_bot_message;
   if (trigger) {
     console.log('handleBotMessage: found existing trigger', trigger);
+
+    // Dedupe: check if this trigger was already sent recently
+    const alreadySent = await wasTriggerRecentlySent(requestId, trigger);
+    if (alreadySent) {
+      console.log('handleBotMessage: SKIPPING — trigger', trigger, 'was already sent in last 5 minutes');
+      await base44.entities.ServiceRequest.update(requestId, { pending_bot_message: '' });
+      return null;
+    }
+
     await base44.entities.ServiceRequest.update(requestId, { pending_bot_message: '' });
 
     // Get the message from backend
@@ -57,6 +77,12 @@ export async function handleBotMessage(requestId) {
 
   const botTrigger = botResult?.data?.botTrigger;
   if (botTrigger) {
+    // Dedupe: check if this trigger was already sent recently
+    const alreadySent = await wasTriggerRecentlySent(requestId, botTrigger);
+    if (alreadySent) {
+      console.log('handleBotMessage: SKIPPING — trigger', botTrigger, 'was already sent in last 5 minutes');
+      return null;
+    }
     return await sendMessage(botResult?.data, requestId, botTrigger, conversationId);
   }
 
