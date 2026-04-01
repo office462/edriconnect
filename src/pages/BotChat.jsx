@@ -93,8 +93,13 @@ export default function BotChat() {
   const handleSend = async (text) => {
     if (!activeConv) return;
     setIsSending(true);
-    await base44.agents.addMessage(activeConv, { role: 'user', content: text });
-    setIsSending(false);
+    try {
+      await base44.agents.addMessage(activeConv, { role: 'user', content: text });
+    } catch (err) {
+      console.warn('Message send error (may still be processing):', err.message);
+    } finally {
+      setIsSending(false);
+    }
   };
 
   return (
