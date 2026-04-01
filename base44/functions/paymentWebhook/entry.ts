@@ -71,9 +71,19 @@ Deno.serve(async (req) => {
 
     // 4. Update status to paid (entity automation handles the rest)
     const oldStatus = matchingReq.status;
+    const paymentTriggerMap = {
+      consultation: 'paid_consultation',
+      legal: 'paid_legal',
+      lectures: 'paid_lectures',
+      clinic: 'paid_clinic',
+      post_lecture: 'paid_post_lecture',
+    };
+    const paymentBotTrigger = paymentTriggerMap[matchingReq.service_type] || '';
+
     await base44.asServiceRole.entities.ServiceRequest.update(matchingReq.id, {
       status: 'paid',
       payment_confirmed: true,
+      ...(paymentBotTrigger ? { pending_bot_message: paymentBotTrigger } : {}),
     });
 
     // 5. Log to timeline

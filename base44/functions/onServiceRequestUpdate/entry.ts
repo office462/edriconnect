@@ -241,10 +241,6 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Save pending_bot_message to DB so frontend can pick it up
-    if (botTrigger) {
-      updates.pending_bot_message = botTrigger;
-    }
 
     // Apply updates
     if (Object.keys(updates).length > 0) {
