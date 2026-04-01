@@ -1,6 +1,9 @@
 import { base44 } from '@/api/base44Client';
 import { findAndSaveConversationId } from '@/lib/findConversationId';
 
+// In-memory lock to prevent parallel sends for same request
+const _sendingLock = new Set();
+
 /**
  * Checks if a message with the same trigger was already sent in the last 5 minutes.
  * Prevents duplicate bot messages.
@@ -20,6 +23,22 @@ async function wasTriggerRecentlySent(requestId, trigger) {
 }
 
 export async function handleBotMessage(requestId) {
+  // Prevent parallel sends for same request (from onSuccess + Hook running simultaneously)
+  if (_sendingLock.has(requestId)) {
+    console.log('handleBotMessage: SKIPPING — already processing', requestId);
+    return null;
+  }
+  _sendingLock.add(requestId);
+
+  try {
+    return await _handleBotMessageInternal(requestId);
+  } finally {
+    // Release lock after a delay so the second caller also gets blocked
+    setTimeout(() => _sendingLock.delete(requestId), 10000);
+  }
+}
+
+async function _handleBotMessageInternal(requestId) {
   // Wait for entity automation to finish writing its updates to DB
   await new Promise(resolve => setTimeout(resolve, 2000));
 
