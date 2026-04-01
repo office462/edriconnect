@@ -22,7 +22,7 @@ async function wasTriggerRecentlySent(requestId, trigger) {
   });
 }
 
-export async function handleBotMessage(requestId) {
+export async function handleBotMessage(requestId, { skipIfNoTrigger = false } = {}) {
   // Prevent parallel sends for same request (from onSuccess + Hook running simultaneously)
   if (_sendingLock.has(requestId)) {
     console.log('handleBotMessage: SKIPPING — already processing', requestId);
@@ -31,14 +31,14 @@ export async function handleBotMessage(requestId) {
   _sendingLock.add(requestId);
 
   try {
-    return await _handleBotMessageInternal(requestId);
+    return await _handleBotMessageInternal(requestId, skipIfNoTrigger);
   } finally {
     // Release lock after a delay so the second caller also gets blocked
     setTimeout(() => _sendingLock.delete(requestId), 10000);
   }
 }
 
-async function _handleBotMessageInternal(requestId) {
+async function _handleBotMessageInternal(requestId, skipIfNoTrigger = false) {
   // Wait for entity automation to finish writing its updates to DB
   await new Promise(resolve => setTimeout(resolve, 2000));
 
@@ -86,6 +86,11 @@ async function _handleBotMessageInternal(requestId) {
   // Call the backend directly with old_data.status='previous' and data.status=current status
   // The backend already supports this pattern for frontend-initiated triggers.
   const currentStatus = req.status;
+  if (skipIfNoTrigger) {
+    console.log('handleBotMessage: no trigger found and skipIfNoTrigger=true, aborting');
+    return null;
+  }
+
   console.log('handleBotMessage: no trigger yet, calling backend with status', currentStatus, 'for', requestId);
   
   const botResult = await base44.functions.invoke('onServiceRequestUpdate', {
