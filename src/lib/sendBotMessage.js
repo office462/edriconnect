@@ -1,8 +1,9 @@
 import { base44 } from '@/api/base44Client';
 import { findAndSaveConversationId } from '@/lib/findConversationId';
 
-// In-memory lock to prevent parallel sends for same request
-// Maps requestId -> timestamp of when lock was acquired
+// Permanent set of triggers already sent (requestId:trigger) — never retry
+const _sentTriggers = new Set();
+// In-memory lock per requestId
 const _sendingLock = new Map();
 
 /**
@@ -24,9 +25,8 @@ async function wasTriggerRecentlySent(requestId, trigger) {
 }
 
 export async function handleBotMessage(requestId, { skipIfNoTrigger = false } = {}) {
-  // Prevent parallel sends for same request (from onSuccess + Hook running simultaneously)
-  const lockTime = _sendingLock.get(requestId);
-  if (lockTime && Date.now() - lockTime < 60000) {
+  // Hard lock: only one call per requestId at a time
+  if (_sendingLock.has(requestId)) {
     console.log('handleBotMessage: SKIPPING — locked for', requestId);
     return null;
   }
@@ -35,8 +35,8 @@ export async function handleBotMessage(requestId, { skipIfNoTrigger = false } = 
   try {
     return await _handleBotMessageInternal(requestId, skipIfNoTrigger);
   } finally {
-    // Keep lock for 60s to prevent rapid re-processing after completion
-    setTimeout(() => _sendingLock.delete(requestId), 60000);
+    // Keep lock for 120s
+    setTimeout(() => _sendingLock.delete(requestId), 120000);
   }
 }
 
@@ -62,17 +62,29 @@ async function _handleBotMessageInternal(requestId, skipIfNoTrigger = false) {
   // Check if automation already set pending_bot_message
   const trigger = req.pending_bot_message;
   if (trigger) {
+    const triggerKey = `${requestId}:${trigger}`;
+
+    // Permanent dedupe: never send same trigger twice
+    if (_sentTriggers.has(triggerKey)) {
+      console.log('handleBotMessage: SKIPPING — already sent', triggerKey);
+      // Still clear the flag
+      await base44.entities.ServiceRequest.update(requestId, { pending_bot_message: '' }).catch(() => {});
+      return null;
+    }
+
     console.log('handleBotMessage: found existing trigger', trigger);
 
     // Dedupe: check if this trigger was already sent recently
     const alreadySent = await wasTriggerRecentlySent(requestId, trigger);
     if (alreadySent) {
       console.log('handleBotMessage: SKIPPING — trigger', trigger, 'was already sent in last 5 minutes');
-      await base44.entities.ServiceRequest.update(requestId, { pending_bot_message: '' });
+      _sentTriggers.add(triggerKey);
+      await base44.entities.ServiceRequest.update(requestId, { pending_bot_message: '' }).catch(() => {});
       return null;
     }
 
-    await base44.entities.ServiceRequest.update(requestId, { pending_bot_message: '' });
+    // Clear flag BEFORE processing to prevent re-triggers
+    await base44.entities.ServiceRequest.update(requestId, { pending_bot_message: '' }).catch(() => {});
 
     // Get the message from backend
     const botResult = await base44.functions.invoke('onServiceRequestUpdate', {
@@ -81,7 +93,9 @@ async function _handleBotMessageInternal(requestId, skipIfNoTrigger = false) {
       old_data: { ...req, status: 'previous' },
     });
 
-    return await sendMessage(botResult?.data, requestId, trigger, conversationId);
+    const result = await sendMessage(botResult?.data, requestId, trigger, conversationId);
+    if (result) _sentTriggers.add(triggerKey);
+    return result;
   }
 
   // No trigger set yet — the entity automation hasn't run.
@@ -109,7 +123,9 @@ async function _handleBotMessageInternal(requestId, skipIfNoTrigger = false) {
       console.log('handleBotMessage: SKIPPING — trigger', botTrigger, 'was already sent in last 5 minutes');
       return null;
     }
-    return await sendMessage(botResult?.data, requestId, botTrigger, conversationId);
+    const result2 = await sendMessage(botResult?.data, requestId, botTrigger, conversationId);
+    if (result2) _sentTriggers.add(`${requestId}:${botTrigger}`);
+    return result2;
   }
 
   console.log('handleBotMessage: no message needed for status', currentStatus);
@@ -139,15 +155,7 @@ async function sendMessage(resultData, requestId, trigger, conversationId) {
     description: `הודעת ${trigger} נשלחה אוטומטית`,
   });
 
-  // Clear pending flag after successful send — use a slight delay so the
-  // subscription doesn't immediately re-trigger on this update
-  setTimeout(async () => {
-    try {
-      await base44.entities.ServiceRequest.update(requestId, { pending_bot_message: '' });
-    } catch (e) {
-      console.warn('sendMessage: failed to clear pending flag', e.message);
-    }
-  }, 3000);
+  // Flag already cleared before processing — no need to clear again
 
   console.log('sendMessage: completed', trigger, 'to', effectiveConvId);
   return { trigger, conversationId: effectiveConvId };
