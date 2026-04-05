@@ -75,10 +75,10 @@ export default function SystemSettings() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold">הגדרות מערכת</h1>
-        <Button onClick={() => { setForm({ ...emptyForm, category: activeTab }); setEditId(null); setShowDialog(true); }} className="gap-2">
-          <Plus className="w-4 h-4" /> הוסף הגדרה
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <h1 className="text-xl md:text-2xl font-bold">הגדרות מערכת</h1>
+        <Button onClick={() => { setForm({ ...emptyForm, category: activeTab }); setEditId(null); setShowDialog(true); }} className="gap-2" size="sm">
+          <Plus className="w-4 h-4" /> <span className="hidden sm:inline">הוסף הגדרה</span><span className="sm:hidden">הוסף</span>
         </Button>
       </div>
 

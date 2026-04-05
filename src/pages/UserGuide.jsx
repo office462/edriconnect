@@ -420,15 +420,15 @@ const sections = [
 
 export default function UserGuide() {
   return (
-    <div className="space-y-6 max-w-4xl mx-auto">
+    <div className="space-y-4 md:space-y-6 max-w-4xl mx-auto">
       {/* Welcome banner */}
-      <div className="bg-primary/10 border border-primary/20 rounded-2xl p-6 flex items-start gap-4">
-        <div className="p-2.5 rounded-xl bg-primary/15 mt-0.5">
-          <BookOpenCheck className="w-6 h-6 text-primary" />
+      <div className="bg-primary/10 border border-primary/20 rounded-xl md:rounded-2xl p-4 md:p-6 flex items-start gap-3 md:gap-4">
+        <div className="p-2 md:p-2.5 rounded-xl bg-primary/15 mt-0.5 flex-shrink-0">
+          <BookOpenCheck className="w-5 h-5 md:w-6 md:h-6 text-primary" />
         </div>
         <div>
-          <h1 className="text-xl font-bold text-foreground mb-1">ברוכה הבאה למדריך למשתמשת</h1>
-          <p className="text-sm text-muted-foreground leading-relaxed">
+          <h1 className="text-lg md:text-xl font-bold text-foreground mb-1">ברוכה הבאה למדריך למשתמשת</h1>
+          <p className="text-xs md:text-sm text-muted-foreground leading-relaxed">
             כאן תמצאי הסברים מפורטים על כל חלקי המערכת — מה עושה כל דף, איך הכל מתחבר לבוט הוואטסאפ, ואיך לשנות תוכן בלי לגעת בקוד. לחצי על כל שאלה כדי לפתוח את התשובה.
           </p>
         </div>

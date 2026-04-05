@@ -45,8 +45,8 @@ export default function ServiceBreakdown({ requests }) {
     <Card style={{ borderRadius: '12px' }}>
       <CardHeader><CardTitle className="text-lg">פילוח לפי סוג שירות</CardTitle></CardHeader>
       <CardContent>
-        <div className="flex items-center gap-6">
-          <div className="w-48 h-48">
+        <div className="flex flex-col sm:flex-row items-center gap-4 md:gap-6">
+          <div className="w-36 h-36 md:w-48 md:h-48">
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
                 <Pie data={data} dataKey="value" cx="50%" cy="50%" outerRadius={70} innerRadius={40}>

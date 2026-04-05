@@ -29,13 +29,16 @@ const navItems = [
   { path: '/UserGuide', label: 'מדריך למשתמשת', icon: BookOpenCheck },
 ];
 
-export default function Sidebar({ collapsed, onToggle }) {
+export default function Sidebar({ collapsed, onToggle, mobileOpen, onMobileClose }) {
   const location = useLocation();
 
   return (
     <aside className={cn(
-      "fixed top-0 right-0 h-screen bg-card border-l border-border flex flex-col z-40 transition-all duration-300",
-      collapsed ? "w-16" : "w-60"
+      "fixed top-0 right-0 h-screen bg-card border-l border-border flex flex-col z-50 transition-all duration-300",
+      collapsed ? "w-16" : "w-60",
+      // Mobile: hidden by default, slide in when open
+      mobileOpen ? "translate-x-0" : "translate-x-full md:translate-x-0",
+      "md:z-40"
     )}>
       {/* Logo */}
       <div className="p-4 border-b border-border flex items-center gap-3">
@@ -58,6 +61,7 @@ export default function Sidebar({ collapsed, onToggle }) {
             <Link
               key={item.path}
               to={item.path}
+              onClick={onMobileClose}
               className={cn(
                 "flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-200 group",
                 isActive 

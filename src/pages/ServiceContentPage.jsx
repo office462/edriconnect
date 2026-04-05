@@ -86,11 +86,11 @@ export default function ServiceContentPage() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold">ניהול תוכן שירות</h1>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <h1 className="text-xl md:text-2xl font-bold">ניהול תוכן שירות</h1>
         <div className="flex items-center gap-2">
           <ViewToggle view={view} onChange={setView} />
-          <Button onClick={() => { setForm(emptyForm); setEditId(null); setShowDialog(true); }} className="gap-2"><Plus className="w-4 h-4" /> הוסף תוכן</Button>
+          <Button onClick={() => { setForm(emptyForm); setEditId(null); setShowDialog(true); }} className="gap-2" size="sm"><Plus className="w-4 h-4" /> <span className="hidden sm:inline">הוסף תוכן</span><span className="sm:hidden">הוסף</span></Button>
         </div>
       </div>
 
@@ -98,11 +98,11 @@ export default function ServiceContentPage() {
 
       <div className="flex gap-3 flex-wrap">
         <Select value={filterService} onValueChange={setFilterService}>
-          <SelectTrigger className="w-40"><SelectValue placeholder="סוג שירות" /></SelectTrigger>
+          <SelectTrigger className="w-full sm:w-40"><SelectValue placeholder="סוג שירות" /></SelectTrigger>
           <SelectContent><SelectItem value="all">כל השירותים</SelectItem>{serviceTypes.map(s => <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}</SelectContent>
         </Select>
         <Select value={filterType} onValueChange={setFilterType}>
-          <SelectTrigger className="w-40"><SelectValue placeholder="סוג תוכן" /></SelectTrigger>
+          <SelectTrigger className="w-full sm:w-40"><SelectValue placeholder="סוג תוכן" /></SelectTrigger>
           <SelectContent><SelectItem value="all">כל הסוגים</SelectItem>{contentTypes.map(t => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}</SelectContent>
         </Select>
       </div>
@@ -142,8 +142,8 @@ export default function ServiceContentPage() {
         </div>
       ) : (
         <Card>
-          <CardContent className="p-0">
-            <Table>
+          <CardContent className="p-0 overflow-x-auto">
+            <Table className="min-w-[600px]">
               <TableHeader>
                 <TableRow>
                   <TableHead className="w-10"><Checkbox checked={selected.length === filtered.length && filtered.length > 0} onCheckedChange={toggleAll} /></TableHead>

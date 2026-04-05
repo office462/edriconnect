@@ -147,12 +147,12 @@ export default function ServiceRequests() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold">פניות שירות</h1>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <h1 className="text-xl md:text-2xl font-bold">פניות שירות</h1>
         <div className="flex items-center gap-2">
           <ViewToggle view={view} onChange={setView} />
-          <Button onClick={() => setShowCreate(true)} className="gap-2">
-            <Plus className="w-4 h-4" /> פנייה חדשה
+          <Button onClick={() => setShowCreate(true)} className="gap-2" size="sm">
+            <Plus className="w-4 h-4" /> <span className="hidden sm:inline">פנייה חדשה</span><span className="sm:hidden">חדש</span>
           </Button>
         </div>
       </div>
@@ -161,20 +161,20 @@ export default function ServiceRequests() {
 
       <Card>
         <CardHeader className="pb-3">
-          <div className="flex flex-wrap gap-3 items-center">
-            <div className="relative flex-1 min-w-[200px] max-w-sm">
+          <div className="flex flex-col sm:flex-row flex-wrap gap-3 items-stretch sm:items-center">
+            <div className="relative flex-1 min-w-0 sm:min-w-[200px] sm:max-w-sm">
               <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
               <Input placeholder="חיפוש..." value={search} onChange={(e) => setSearch(e.target.value)} className="pr-10" />
             </div>
             <Select value={statusFilter} onValueChange={setStatusFilter}>
-              <SelectTrigger className="w-40"><Filter className="w-4 h-4 ml-2" /><SelectValue placeholder="סטטוס" /></SelectTrigger>
+              <SelectTrigger className="w-full sm:w-40"><Filter className="w-4 h-4 ml-2" /><SelectValue placeholder="סטטוס" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">כל הסטטוסים</SelectItem>
                 {statusOptions.map(s => <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}
               </SelectContent>
             </Select>
             <Select value={typeFilter} onValueChange={setTypeFilter}>
-              <SelectTrigger className="w-44"><SelectValue placeholder="סוג שירות" /></SelectTrigger>
+              <SelectTrigger className="w-full sm:w-44"><SelectValue placeholder="סוג שירות" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">כל סוגי השירות</SelectItem>
                 {serviceTypeOptions.map(s => <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}
@@ -184,8 +184,8 @@ export default function ServiceRequests() {
         </CardHeader>
 
         {view === 'table' ? (
-          <CardContent className="p-0">
-            <Table>
+          <CardContent className="p-0 overflow-x-auto">
+            <Table className="min-w-[800px]">
               <TableHeader>
                 <TableRow>
                   <TableHead className="w-10"><Checkbox checked={selected.length === filtered.length && filtered.length > 0} onCheckedChange={toggleAll} /></TableHead>

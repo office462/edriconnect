@@ -103,7 +103,7 @@ export default function BotChat() {
   };
 
   return (
-    <div className="h-[calc(100vh-2rem)] flex rounded-xl overflow-hidden border border-border bg-background">
+    <div className="h-[calc(100vh-5rem)] md:h-[calc(100vh-2rem)] flex rounded-xl overflow-hidden border border-border bg-background">
       {/* Conversations list - right side (RTL) */}
       <div className="w-64 flex-shrink-0 hidden md:block">
         <ConversationsList

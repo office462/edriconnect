@@ -103,7 +103,7 @@ export default function ServiceRequestDetail() {
       {/* Contact info */}
       {contact && (
         <Card>
-          <CardContent className="p-4 flex items-center gap-6 flex-wrap">
+          <CardContent className="p-3 md:p-4 flex items-center gap-3 md:gap-6 flex-wrap">
             <div className="p-2 rounded-full bg-primary/10">
               <User className="w-5 h-5 text-primary" />
             </div>
@@ -124,8 +124,8 @@ export default function ServiceRequestDetail() {
         </Card>
       )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2 space-y-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 md:gap-6">
+        <div className="lg:col-span-2 space-y-4 md:space-y-6">
           <RequestInfo request={request} />
 
           {/* Files */}
@@ -142,7 +142,7 @@ export default function ServiceRequestDetail() {
           </Card>
         </div>
 
-        <div className="space-y-4">
+        <div className="space-y-4 order-first lg:order-none">
           <StatusActions 
             request={request} 
             onUpdate={(updates, oldStatus) => updateMutation.mutate({ updates, oldStatus })}

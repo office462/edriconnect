@@ -73,12 +73,12 @@ export default function Lectures() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold">קטלוג הרצאות</h1>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <h1 className="text-xl md:text-2xl font-bold">קטלוג הרצאות</h1>
         <div className="flex items-center gap-2">
           <ViewToggle view={view} onChange={setView} />
-          <Button onClick={() => { setForm(emptyForm); setEditId(null); setShowDialog(true); }} className="gap-2">
-            <Plus className="w-4 h-4" /> הוסף הרצאה
+          <Button onClick={() => { setForm(emptyForm); setEditId(null); setShowDialog(true); }} className="gap-2" size="sm">
+            <Plus className="w-4 h-4" /> <span className="hidden sm:inline">הוסף הרצאה</span><span className="sm:hidden">הוסף</span>
           </Button>
         </div>
       </div>
@@ -131,8 +131,8 @@ export default function Lectures() {
         </div>
       ) : (
         <Card>
-          <CardContent className="p-0">
-            <Table>
+          <CardContent className="p-0 overflow-x-auto">
+            <Table className="min-w-[650px]">
               <TableHeader>
                 <TableRow>
                   <TableHead className="w-10"><Checkbox checked={selected.length === filtered.length && filtered.length > 0} onCheckedChange={toggleAll} /></TableHead>
