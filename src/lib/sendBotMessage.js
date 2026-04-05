@@ -2,7 +2,8 @@ import { base44 } from '@/api/base44Client';
 import { findAndSaveConversationId } from '@/lib/findConversationId';
 
 // In-memory lock to prevent parallel sends for same request
-const _sendingLock = new Set();
+// Maps requestId -> timestamp of when lock was acquired
+const _sendingLock = new Map();
 
 /**
  * Checks if a message with the same trigger was already sent in the last 5 minutes.
@@ -24,17 +25,18 @@ async function wasTriggerRecentlySent(requestId, trigger) {
 
 export async function handleBotMessage(requestId, { skipIfNoTrigger = false } = {}) {
   // Prevent parallel sends for same request (from onSuccess + Hook running simultaneously)
-  if (_sendingLock.has(requestId)) {
-    console.log('handleBotMessage: SKIPPING — already processing', requestId);
+  const lockTime = _sendingLock.get(requestId);
+  if (lockTime && Date.now() - lockTime < 60000) {
+    console.log('handleBotMessage: SKIPPING — locked for', requestId);
     return null;
   }
-  _sendingLock.add(requestId);
+  _sendingLock.set(requestId, Date.now());
 
   try {
     return await _handleBotMessageInternal(requestId, skipIfNoTrigger);
   } finally {
-    // Release lock after a delay so the second caller also gets blocked
-    setTimeout(() => _sendingLock.delete(requestId), 10000);
+    // Keep lock for 60s to prevent rapid re-processing after completion
+    setTimeout(() => _sendingLock.delete(requestId), 60000);
   }
 }
 
@@ -137,8 +139,15 @@ async function sendMessage(resultData, requestId, trigger, conversationId) {
     description: `הודעת ${trigger} נשלחה אוטומטית`,
   });
 
-  // Clear pending flag after successful send
-  await base44.entities.ServiceRequest.update(requestId, { pending_bot_message: '' });
+  // Clear pending flag after successful send — use a slight delay so the
+  // subscription doesn't immediately re-trigger on this update
+  setTimeout(async () => {
+    try {
+      await base44.entities.ServiceRequest.update(requestId, { pending_bot_message: '' });
+    } catch (e) {
+      console.warn('sendMessage: failed to clear pending flag', e.message);
+    }
+  }, 3000);
 
   console.log('sendMessage: completed', trigger, 'to', effectiveConvId);
   return { trigger, conversationId: effectiveConvId };

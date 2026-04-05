@@ -9,24 +9,38 @@ import { useQueryClient } from '@tanstack/react-query';
  */
 export function usePendingBotMessages() {
   const processingRef = useRef(new Set());
+  // Track triggers we've already seen to prevent re-processing
+  const seenTriggersRef = useRef(new Map());
   const queryClient = useQueryClient();
 
   useEffect(() => {
     console.log('usePendingBotMessages: subscription started');
     const unsubscribe = base44.entities.ServiceRequest.subscribe((event) => {
-      console.log('usePendingBotMessages: event received', event.type, event.id, event.data?.pending_bot_message || '(none)');
       if (event.type !== 'update') return;
       
       const data = event.data;
-      if (!data?.pending_bot_message) return;
+      const trigger = data?.pending_bot_message;
+      if (!trigger) return;
       
       const requestId = event.id;
+      const triggerKey = `${requestId}:${trigger}`;
+      
+      // Dedupe: skip if we already saw this exact trigger for this request recently
+      const lastSeen = seenTriggersRef.current.get(triggerKey);
+      if (lastSeen && Date.now() - lastSeen < 60000) {
+        console.log('usePendingBotMessages: SKIP duplicate trigger', triggerKey);
+        return;
+      }
+      seenTriggersRef.current.set(triggerKey, Date.now());
       
       // Avoid processing the same request twice simultaneously
-      if (processingRef.current.has(requestId)) return;
+      if (processingRef.current.has(requestId)) {
+        console.log('usePendingBotMessages: SKIP already processing', requestId);
+        return;
+      }
       processingRef.current.add(requestId);
 
-      console.log('usePendingBotMessages: detected pending message', data.pending_bot_message, 'for', requestId);
+      console.log('usePendingBotMessages: detected pending message', trigger, 'for', requestId);
       
       // Small delay to let DB settle
       setTimeout(async () => {
@@ -39,9 +53,10 @@ export function usePendingBotMessages() {
         } catch (err) {
           console.warn('usePendingBotMessages: error', err.message);
         } finally {
-          processingRef.current.delete(requestId);
+          // Keep the lock for 30s to prevent rapid re-processing
+          setTimeout(() => processingRef.current.delete(requestId), 30000);
         }
-      }, 1000);
+      }, 1500);
     });
 
     return unsubscribe;
