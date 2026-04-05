@@ -35,7 +35,7 @@ export function usePendingBotMessages() {
 
         console.log('usePendingBotMessages: processing', trigger, 'for', requestId);
         try {
-          const sent = await handleBotMessage(requestId, { skipIfNoTrigger: true });
+          const sent = await handleBotMessage(requestId, { skipIfNoTrigger: true, trigger });
           if (sent) {
             console.log('usePendingBotMessages: sent', sent.trigger);
             queryClient.invalidateQueries({ queryKey: ['service-requests'] });

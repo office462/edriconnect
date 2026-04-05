@@ -24,19 +24,21 @@ async function wasTriggerRecentlySent(requestId, trigger) {
   });
 }
 
-export async function handleBotMessage(requestId, { skipIfNoTrigger = false } = {}) {
-  // Hard lock: only one call per requestId at a time
-  if (_sendingLock.has(requestId)) {
-    console.log('handleBotMessage: SKIPPING — locked for', requestId);
+export async function handleBotMessage(requestId, { skipIfNoTrigger = false, trigger = null } = {}) {
+  // Lock per requestId:trigger — prevents duplicate sends for same trigger,
+  // but allows different triggers for the same request (e.g. paid then questionnaire)
+  const lockKey = trigger ? `${requestId}:${trigger}` : requestId;
+  if (_sendingLock.has(lockKey)) {
+    console.log('handleBotMessage: SKIPPING — locked for', lockKey);
     return null;
   }
-  _sendingLock.set(requestId, Date.now());
+  _sendingLock.set(lockKey, Date.now());
 
   try {
     return await _handleBotMessageInternal(requestId, skipIfNoTrigger);
   } finally {
-    // Keep lock for 120s
-    setTimeout(() => _sendingLock.delete(requestId), 120000);
+    // Keep lock for 30s (enough to prevent rapid duplicates, short enough for next steps)
+    setTimeout(() => _sendingLock.delete(lockKey), 30000);
   }
 }
 
