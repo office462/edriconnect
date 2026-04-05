@@ -242,6 +242,11 @@ Deno.serve(async (req) => {
     }
 
 
+    // Write pending_bot_message so the frontend hook can pick it up
+    if (botTrigger) {
+      updates.pending_bot_message = botTrigger;
+    }
+
     // Apply updates
     if (Object.keys(updates).length > 0) {
       await base44.asServiceRole.entities.ServiceRequest.update(requestId, updates);
