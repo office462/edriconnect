@@ -12,7 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Badge } from '@/components/ui/badge';
-import { Plus, Pencil, Trash2, BookOpen, Clock, Video, FileText } from 'lucide-react';
+import { Plus, Pencil, Trash2, BookOpen, Clock, Video, FileText, Search } from 'lucide-react';
 import ViewToggle from '@/components/shared/ViewToggle';
 import BulkActions from '@/components/shared/BulkActions';
 import { toast } from 'sonner';
@@ -30,6 +30,7 @@ export default function Lectures() {
   const [form, setForm] = useState(emptyForm);
   const [editId, setEditId] = useState(null);
   const [filterType, setFilterType] = useState('all');
+  const [searchQuery, setSearchQuery] = useState('');
   const [view, setView] = useState('cards');
   const [selected, setSelected] = useState([]);
   const [deleteTarget, setDeleteTarget] = useState(null);
@@ -61,7 +62,11 @@ export default function Lectures() {
     setShowDialog(true);
   };
 
-  const filtered = filterType === 'all' ? lectures : lectures.filter(l => l.lecture_type === filterType);
+  const filtered = (filterType === 'all' ? lectures : lectures.filter(l => l.lecture_type === filterType)).filter(l => {
+    if (!searchQuery.trim()) return true;
+    const q = searchQuery.trim().toLowerCase();
+    return (l.title || '').toLowerCase().includes(q) || (l.description || '').toLowerCase().includes(q) || (l.series_name || '').toLowerCase().includes(q);
+  });
   const toggleSelect = (id) => setSelected(prev => prev.includes(id) ? prev.filter(s => s !== id) : [...prev, id]);
   const toggleAll = () => setSelected(selected.length === filtered.length ? [] : filtered.map(l => l.id));
 
@@ -84,6 +89,11 @@ export default function Lectures() {
       </div>
 
       <BulkActions selectedCount={selected.length} onDelete={() => bulkDeleteMutation.mutate(selected)} onClear={() => setSelected([])} />
+
+      <div className="relative">
+        <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+        <Input placeholder="חיפוש לפי כותרת, תיאור או שם סדרה..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="pr-9" />
+      </div>
 
       <div className="flex gap-2 flex-wrap">
         <Button variant={filterType === 'all' ? 'default' : 'outline'} size="sm" onClick={() => setFilterType('all')}>הכל ({lectures.length})</Button>

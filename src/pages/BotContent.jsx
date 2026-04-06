@@ -12,7 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Badge } from '@/components/ui/badge';
-import { Plus, Pencil, Trash2, MessageSquare, Video, FileText as FileIcon, Link as LinkIcon } from 'lucide-react';
+import { Plus, Pencil, Trash2, MessageSquare, Search } from 'lucide-react';
 import ViewToggle from '@/components/shared/ViewToggle';
 import BulkActions from '@/components/shared/BulkActions';
 import { toast } from 'sonner';
@@ -35,15 +35,7 @@ const serviceFlows = [
   { value: 'general', label: 'כללי' },
 ];
 
-const mediaTypes = [
-  { value: 'none', label: 'ללא' },
-  { value: 'video', label: 'סרטון' },
-  { value: 'pdf', label: 'PDF' },
-  { value: 'image', label: 'תמונה' },
-  { value: 'link', label: 'קישור' },
-];
-
-const emptyContent = { key: '', title: '', content: '', category: 'general', media_url: '', media_type: 'none', is_active: true, service_type_flow: '', step_label: '' };
+const emptyContent = { key: '', title: '', content: '', category: 'general', is_active: true, service_type_flow: '', step_label: '' };
 
 export default function BotContent() {
   const [showDialog, setShowDialog] = useState(false);
@@ -51,6 +43,7 @@ export default function BotContent() {
   const [editId, setEditId] = useState(null);
   const [filterCat, setFilterCat] = useState('all');
   const [filterFlow, setFilterFlow] = useState('all');
+  const [searchQuery, setSearchQuery] = useState('');
   const [view, setView] = useState('cards');
   const [selected, setSelected] = useState([]);
   const [deleteTarget, setDeleteTarget] = useState(null);
@@ -79,12 +72,17 @@ export default function BotContent() {
   const filtered = contents
     .filter(c => filterCat === 'all' || c.category === filterCat)
     .filter(c => filterFlow === 'all' || c.service_type_flow === filterFlow)
+    .filter(c => {
+      if (!searchQuery.trim()) return true;
+      const q = searchQuery.trim().toLowerCase();
+      return (c.title || '').toLowerCase().includes(q) || (c.key || '').toLowerCase().includes(q) || (c.content || '').toLowerCase().includes(q);
+    })
     .sort((a, b) => (a.step_label || '').localeCompare(b.step_label || ''));
   const toggleSelect = (id) => setSelected(prev => prev.includes(id) ? prev.filter(s => s !== id) : [...prev, id]);
   const toggleAll = () => setSelected(selected.length === filtered.length ? [] : filtered.map(c => c.id));
 
   const handleEdit = (item) => {
-    setForm({ key: item.key || '', title: item.title || '', content: item.content || '', category: item.category || 'general', media_url: item.media_url || '', media_type: item.media_type || 'none', is_active: item.is_active !== false, service_type_flow: item.service_type_flow || '', step_label: item.step_label || '' });
+    setForm({ key: item.key || '', title: item.title || '', content: item.content || '', category: item.category || 'general', is_active: item.is_active !== false, service_type_flow: item.service_type_flow || '', step_label: item.step_label || '' });
     setEditId(item.id);
     setShowDialog(true);
   };
@@ -94,12 +92,7 @@ export default function BotContent() {
     saveMutation.mutate(form);
   };
 
-  const mediaIcon = (type) => {
-    if (type === 'video') return <Video className="w-3.5 h-3.5" />;
-    if (type === 'pdf') return <FileIcon className="w-3.5 h-3.5" />;
-    if (type === 'link') return <LinkIcon className="w-3.5 h-3.5" />;
-    return null;
-  };
+
 
   return (
     <div className="space-y-4">
@@ -114,6 +107,11 @@ export default function BotContent() {
       </div>
 
       <BulkActions selectedCount={selected.length} onDelete={() => bulkDeleteMutation.mutate(selected)} onClear={() => setSelected([])} />
+
+      <div className="relative">
+        <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+        <Input placeholder="חיפוש לפי כותרת, מפתח או תוכן..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="pr-9" />
+      </div>
 
       <div className="space-y-2">
         <div className="flex gap-2 flex-wrap">
@@ -150,7 +148,7 @@ export default function BotContent() {
                         <Badge variant="secondary" className="text-xs">{categories.find(c => c.value === item.category)?.label || item.category}</Badge>
                         {item.service_type_flow && <Badge className="text-xs bg-blue-100 text-blue-700">{serviceFlows.find(f => f.value === item.service_type_flow)?.label || item.service_type_flow}</Badge>}
                         {item.step_label && <Badge variant="outline" className="text-xs bg-amber-50 text-amber-700 border-amber-200">{item.step_label}</Badge>}
-                        {item.media_type && item.media_type !== 'none' && <Badge variant="outline" className="text-xs flex items-center gap-1">{mediaIcon(item.media_type)}{mediaTypes.find(m => m.value === item.media_type)?.label}</Badge>}
+
                         {!item.is_active && <Badge variant="destructive" className="text-xs">לא פעיל</Badge>}
                       </div>
                     </div>
@@ -172,7 +170,6 @@ export default function BotContent() {
                   <TableHead className="text-right">קטגוריה</TableHead>
                   <TableHead className="text-right">מסלול</TableHead>
                   <TableHead className="text-right">שלב</TableHead>
-                  <TableHead className="text-right">מדיה</TableHead>
                   <TableHead className="text-right">סטטוס</TableHead>
                   <TableHead className="text-right w-20">פעולות</TableHead>
                 </TableRow>
@@ -187,7 +184,6 @@ export default function BotContent() {
                       <TableCell><Badge variant="secondary" className="text-xs">{categories.find(c => c.value === item.category)?.label}</Badge></TableCell>
                       <TableCell>{item.service_type_flow ? <Badge className="text-xs bg-blue-100 text-blue-700">{serviceFlows.find(f => f.value === item.service_type_flow)?.label || item.service_type_flow}</Badge> : '-'}</TableCell>
                       <TableCell className="text-sm text-muted-foreground">{item.step_label || '-'}</TableCell>
-                      <TableCell className="text-sm">{item.media_type !== 'none' ? mediaTypes.find(m => m.value === item.media_type)?.label : '-'}</TableCell>
                       <TableCell>{item.is_active ? <Badge className="text-xs bg-emerald-100 text-emerald-700">פעיל</Badge> : <Badge variant="destructive" className="text-xs">לא פעיל</Badge>}</TableCell>
                       <TableCell>
                         <div className="flex items-center gap-1">
@@ -219,10 +215,7 @@ export default function BotContent() {
             </div>
             <div><Label>כותרת *</Label><Input value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} /></div>
             <div><Label>תוכן ההודעה *</Label><Textarea value={form.content} onChange={(e) => setForm({ ...form, content: e.target.value })} rows={5} /></div>
-            <div className="grid grid-cols-2 gap-3">
-              <div><Label>סוג מדיה</Label><Select value={form.media_type} onValueChange={(v) => setForm({ ...form, media_type: v })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{mediaTypes.map(m => <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>)}</SelectContent></Select></div>
-              <div><Label>קישור מדיה</Label><Input value={form.media_url} onChange={(e) => setForm({ ...form, media_url: e.target.value })} placeholder="https://..." /></div>
-            </div>
+
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowDialog(false)}>ביטול</Button>

@@ -12,7 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Badge } from '@/components/ui/badge';
-import { Plus, Pencil, Trash2, Video, FileText, Link as LinkIcon, CreditCard, ClipboardList, FileCheck } from 'lucide-react';
+import { Plus, Pencil, Trash2, Video, FileText, Link as LinkIcon, CreditCard, ClipboardList, FileCheck, Search } from 'lucide-react';
 import ViewToggle from '@/components/shared/ViewToggle';
 import BulkActions from '@/components/shared/BulkActions';
 import { toast } from 'sonner';
@@ -43,6 +43,7 @@ export default function ServiceContentPage() {
   const [editId, setEditId] = useState(null);
   const [filterService, setFilterService] = useState('all');
   const [filterType, setFilterType] = useState('all');
+  const [searchQuery, setSearchQuery] = useState('');
   const [view, setView] = useState('cards');
   const [selected, setSelected] = useState([]);
   const [deleteTarget, setDeleteTarget] = useState(null);
@@ -77,7 +78,10 @@ export default function ServiceContentPage() {
   const filtered = contents.filter(c => {
     const matchService = filterService === 'all' || c.service_type === filterService;
     const matchType = filterType === 'all' || c.content_type === filterType;
-    return matchService && matchType;
+    if (!matchService || !matchType) return false;
+    if (!searchQuery.trim()) return true;
+    const q = searchQuery.trim().toLowerCase();
+    return (c.title || '').toLowerCase().includes(q) || (c.url || '').toLowerCase().includes(q) || (c.description || '').toLowerCase().includes(q) || (c.sub_type || '').toLowerCase().includes(q);
   });
 
   const toggleSelect = (id) => setSelected(prev => prev.includes(id) ? prev.filter(s => s !== id) : [...prev, id]);
@@ -95,6 +99,11 @@ export default function ServiceContentPage() {
       </div>
 
       <BulkActions selectedCount={selected.length} onDelete={() => bulkDeleteMutation.mutate(selected)} onClear={() => setSelected([])} />
+
+      <div className="relative">
+        <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+        <Input placeholder="חיפוש לפי כותרת, URL, תיאור או תת-סוג..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="pr-9" />
+      </div>
 
       <div className="flex gap-3 flex-wrap">
         <Select value={filterService} onValueChange={setFilterService}>
