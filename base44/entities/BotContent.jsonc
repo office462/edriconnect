@@ -26,22 +26,6 @@
       ],
       "description": "\u05e7\u05d8\u05d2\u05d5\u05e8\u05d9\u05d9\u05ea \u05d4\u05d4\u05d5\u05d3\u05e2\u05d4"
     },
-    "media_url": {
-      "type": "string",
-      "description": "\u05e7\u05d9\u05e9\u05d5\u05e8 \u05dc\u05de\u05d3\u05d9\u05d4 \u05de\u05e6\u05d5\u05e8\u05e4\u05ea (\u05e1\u05e8\u05d8\u05d5\u05df/PDF)"
-    },
-    "media_type": {
-      "type": "string",
-      "enum": [
-        "video",
-        "pdf",
-        "image",
-        "link",
-        "none"
-      ],
-      "default": "none",
-      "description": "\u05e1\u05d5\u05d2 \u05de\u05d3\u05d9\u05d4"
-    },
     "is_active": {
       "type": "boolean",
       "default": true,
