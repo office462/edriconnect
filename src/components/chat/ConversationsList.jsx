@@ -5,7 +5,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { cn } from '@/lib/utils';
 import moment from 'moment';
 
-export default function ConversationsList({ conversations, activeId, onSelect, onCreate, onHide, onRestoreAll, hasHidden, isLoading }) {
+export default function ConversationsList({ conversations, activeId, onSelect, onCreate, onHide, onHideBulk, onRestoreAll, hasHidden, isLoading }) {
   const [selectMode, setSelectMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState([]);
 
@@ -14,8 +14,7 @@ export default function ConversationsList({ conversations, activeId, onSelect, o
   };
 
   const handleBulkHide = () => {
-    const toHide = conversations.filter(c => selectedIds.includes(c.id));
-    toHide.forEach(c => onHide(c, true));
+    if (onHideBulk) onHideBulk(selectedIds);
     setSelectedIds([]);
     setSelectMode(false);
   };
@@ -54,7 +53,7 @@ export default function ConversationsList({ conversations, activeId, onSelect, o
             variant="ghost"
             size="sm"
             className="w-full gap-1 text-xs h-7 text-muted-foreground"
-            onClick={() => { conversations.forEach(c => onHide(c, true)); }}
+            onClick={() => { if (onHideBulk) onHideBulk(conversations.map(c => c.id)); }}
           >
             <EyeOff className="w-3.5 h-3.5" />
             הסתר הכל

@@ -93,6 +93,16 @@ export default function BotChat() {
     }
   };
 
+  const handleHideBulk = async (ids) => {
+    const newHidden = [...hiddenIds, ...ids];
+    setHiddenIds(newHidden);
+    await base44.auth.updateMe({ hidden_conversations: newHidden });
+    setConversations(prev => prev.filter(c => !ids.includes(c.id)));
+    if (ids.includes(activeConvId)) {
+      setActiveConvId(null);
+    }
+  };
+
   const handleRestoreAll = async () => {
     setHiddenIds([]);
     await base44.auth.updateMe({ hidden_conversations: [] });
@@ -121,6 +131,7 @@ export default function BotChat() {
           onSelect={setActiveConvId}
           onCreate={handleCreateConversation}
           onHide={handleHideConversation}
+          onHideBulk={handleHideBulk}
           onRestoreAll={handleRestoreAll}
           hasHidden={hiddenIds.length > 0}
           isLoading={isLoadingList}
