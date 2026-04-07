@@ -6,6 +6,7 @@ import StatsCards from '@/components/dashboard/StatsCards';
 import AlertCards from '@/components/dashboard/AlertCards';
 import RecentRequests from '@/components/dashboard/RecentRequests';
 import ServiceBreakdown from '@/components/dashboard/ServiceBreakdown';
+import PostLectureQR from '@/components/dashboard/PostLectureQR';
 
 export default function Dashboard() {
   const { data: contacts = [] } = useQuery({
@@ -44,7 +45,10 @@ export default function Dashboard() {
         <div className="lg:col-span-2">
           <RecentRequests requests={requests} />
         </div>
-        <ServiceBreakdown requests={requests} />
+        <div className="space-y-4 md:space-y-6">
+          <ServiceBreakdown requests={requests} />
+          <PostLectureQR />
+        </div>
       </div>
     </div>
   );
