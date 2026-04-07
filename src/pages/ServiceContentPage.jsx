@@ -209,8 +209,8 @@ export default function ServiceContentPage() {
         </DialogContent>
       </Dialog>
 
-      {/* QR / WhatsApp Link */}
-      <PostLectureQR />
+      {/* QR / WhatsApp Link — visible only for post_lecture */}
+      {filterService === 'post_lecture' && <PostLectureQR />}
 
       {/* Delete dialog */}
       <AlertDialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)}>
