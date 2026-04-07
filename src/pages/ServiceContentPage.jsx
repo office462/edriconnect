@@ -13,6 +13,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Badge } from '@/components/ui/badge';
 import { Plus, Pencil, Trash2, Video, FileText, Link as LinkIcon, CreditCard, ClipboardList, FileCheck, Search } from 'lucide-react';
+import PostLectureQR from '@/components/dashboard/PostLectureQR';
 import ViewToggle from '@/components/shared/ViewToggle';
 import BulkActions from '@/components/shared/BulkActions';
 import { toast } from 'sonner';
@@ -207,6 +208,9 @@ export default function ServiceContentPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* QR / WhatsApp Link */}
+      <PostLectureQR />
 
       {/* Delete dialog */}
       <AlertDialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)}>
