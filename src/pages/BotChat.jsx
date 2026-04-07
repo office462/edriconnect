@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { base44 } from '@/api/base44Client';
 import { Bot } from 'lucide-react';
 import MessageBubble from '@/components/chat/MessageBubble';
@@ -10,10 +10,8 @@ const AGENT_NAME = 'dr_adri_bot';
 export default function BotChat() {
   const [conversations, setConversations] = useState([]);
   const [allConversations, setAllConversations] = useState([]);
-  const [hiddenIds, setHiddenIds] = useState(() => {
-    const saved = localStorage.getItem('hidden_conversations');
-    return saved ? JSON.parse(saved) : [];
-  });
+  const [hiddenIds, setHiddenIds] = useState([]);
+  const [hiddenLoaded, setHiddenLoaded] = useState(false);
   const [activeConvId, setActiveConvId] = useState(null);
   const [activeConv, setActiveConv] = useState(null);
   const [messages, setMessages] = useState([]);
@@ -21,19 +19,30 @@ export default function BotChat() {
   const [isLoadingList, setIsLoadingList] = useState(true);
   const messagesEndRef = useRef(null);
 
-  // Load conversations list
+  // Load hidden IDs from user profile
   useEffect(() => {
-    loadConversations();
+    const loadHidden = async () => {
+      const user = await base44.auth.me();
+      const saved = user?.hidden_conversations || [];
+      setHiddenIds(saved);
+      setHiddenLoaded(true);
+    };
+    loadHidden();
   }, []);
 
-  const loadConversations = async () => {
+  // Load conversations list once hidden IDs are loaded
+  useEffect(() => {
+    if (hiddenLoaded) loadConversations();
+  }, [hiddenLoaded]);
+
+  const loadConversations = useCallback(async () => {
     setIsLoadingList(true);
     const list = await base44.agents.listConversations({ agent_name: AGENT_NAME });
     const all = list || [];
     setAllConversations(all);
     setConversations(all.filter(c => !hiddenIds.includes(c.id)));
     setIsLoadingList(false);
-  };
+  }, [hiddenIds]);
 
   // Load active conversation and subscribe
   useEffect(() => {
@@ -73,20 +82,20 @@ export default function BotChat() {
     setActiveConvId(conv.id);
   };
 
-  const handleHideConversation = (conv, skipConfirm = false) => {
+  const handleHideConversation = async (conv, skipConfirm = false) => {
     if (!skipConfirm && !window.confirm('להסתיר את השיחה? (ניתן לשחזר בהמשך)')) return;
     const newHidden = [...hiddenIds, conv.id];
     setHiddenIds(newHidden);
-    localStorage.setItem('hidden_conversations', JSON.stringify(newHidden));
+    await base44.auth.updateMe({ hidden_conversations: newHidden });
     setConversations(prev => prev.filter(c => c.id !== conv.id));
     if (activeConvId === conv.id) {
       setActiveConvId(null);
     }
   };
 
-  const handleRestoreAll = () => {
+  const handleRestoreAll = async () => {
     setHiddenIds([]);
-    localStorage.removeItem('hidden_conversations');
+    await base44.auth.updateMe({ hidden_conversations: [] });
     setConversations(allConversations);
   };
 
