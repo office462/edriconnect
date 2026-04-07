@@ -55,7 +55,15 @@ export default function ServiceRequests() {
   const [editingReq, setEditingReq] = useState(null);
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [newReq, setNewReq] = useState({ contact_id: '', service_type: 'consultation', notes: '' });
+  const [hideTests, setHideTests] = useState(() => localStorage.getItem('hide_tests') !== 'false');
   const queryClient = useQueryClient();
+
+  const toggleHideTests = () => {
+    setHideTests(prev => {
+      localStorage.setItem('hide_tests', !prev ? 'true' : 'false');
+      return !prev;
+    });
+  };
 
   const { data: requests = [], isLoading } = useQuery({
     queryKey: ['service-requests'],
@@ -120,6 +128,7 @@ export default function ServiceRequests() {
   });
 
   const filtered = requests.filter(r => {
+    if (hideTests && r.is_test) return false;
     const matchSearch = !search || (r.contact_name || '').includes(search) || (r.contact_phone || '').includes(search);
     const matchStatus = statusFilter === 'all' || r.status === statusFilter;
     const matchType = typeFilter === 'all' || r.service_type === typeFilter;
@@ -134,6 +143,7 @@ export default function ServiceRequests() {
       id: req.id, status: req.status || 'new_lead', service_type: req.service_type || 'consultation',
       current_step: req.current_step || '', notes: req.notes || '', contact_name: req.contact_name,
       payment_confirmed: req.payment_confirmed || false, documents_received: req.documents_received || false,
+      is_test: req.is_test || false,
       _oldStatus: req.status,
     });
     setShowEdit(true);
@@ -148,7 +158,13 @@ export default function ServiceRequests() {
   return (
     <div className="space-y-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <h1 className="text-xl md:text-2xl font-bold">פניות שירות</h1>
+        <div className="flex items-center gap-4">
+          <h1 className="text-xl md:text-2xl font-bold">פניות שירות</h1>
+          <label className="flex items-center gap-2 text-sm text-muted-foreground cursor-pointer select-none">
+            <input type="checkbox" checked={hideTests} onChange={toggleHideTests} className="rounded border-border" />
+            הסתר בדיקות
+          </label>
+        </div>
         <div className="flex items-center gap-2">
           <ViewToggle view={view} onChange={setView} />
           <Button onClick={() => setShowCreate(true)} className="gap-2" size="sm">
@@ -312,7 +328,7 @@ export default function ServiceRequests() {
                 <Label>הערות</Label>
                 <Textarea value={editingReq.notes} onChange={(e) => setEditingReq({ ...editingReq, notes: e.target.value })} rows={3} />
               </div>
-              <div className="flex items-center gap-4">
+              <div className="flex flex-wrap items-center gap-4">
                 <label className="flex items-center gap-2 text-sm">
                   <Checkbox checked={editingReq.payment_confirmed} onCheckedChange={(v) => setEditingReq({ ...editingReq, payment_confirmed: v })} />
                   תשלום אושר
@@ -320,6 +336,10 @@ export default function ServiceRequests() {
                 <label className="flex items-center gap-2 text-sm">
                   <Checkbox checked={editingReq.documents_received} onCheckedChange={(v) => setEditingReq({ ...editingReq, documents_received: v })} />
                   מסמכים התקבלו
+                </label>
+                <label className="flex items-center gap-2 text-sm text-amber-600">
+                  <Checkbox checked={editingReq.is_test || false} onCheckedChange={(v) => setEditingReq({ ...editingReq, is_test: v })} />
+                  🧪 בדיקת בוט
                 </label>
               </div>
             </div>
