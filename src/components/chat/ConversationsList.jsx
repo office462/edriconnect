@@ -49,6 +49,17 @@ export default function ConversationsList({ conversations, activeId, onSelect, o
             </Button>
           )}
         </div>
+        {!selectMode && conversations.length > 0 && (
+          <Button
+            variant="ghost"
+            size="sm"
+            className="w-full gap-1 text-xs h-7 text-muted-foreground"
+            onClick={() => { conversations.forEach(c => onHide(c, true)); }}
+          >
+            <EyeOff className="w-3.5 h-3.5" />
+            הסתר הכל
+          </Button>
+        )}
       </div>
       <div className="flex-1 overflow-y-auto">
         {isLoading ? (
