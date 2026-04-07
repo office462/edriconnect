@@ -1,17 +1,54 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Button } from '@/components/ui/button';
-import { Plus, MessageCircle, Loader2, Trash2, RotateCcw } from 'lucide-react';
+import { Plus, MessageCircle, Loader2, EyeOff, RotateCcw, CheckSquare } from 'lucide-react';
+import { Checkbox } from '@/components/ui/checkbox';
 import { cn } from '@/lib/utils';
 import moment from 'moment';
 
 export default function ConversationsList({ conversations, activeId, onSelect, onCreate, onHide, onRestoreAll, hasHidden, isLoading }) {
+  const [selectMode, setSelectMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState([]);
+
+  const toggleSelect = (id) => {
+    setSelectedIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
+  };
+
+  const handleBulkHide = () => {
+    const toHide = conversations.filter(c => selectedIds.includes(c.id));
+    toHide.forEach(c => onHide(c, true));
+    setSelectedIds([]);
+    setSelectMode(false);
+  };
+
   return (
     <div className="w-full h-full flex flex-col border-l border-border bg-card">
-      <div className="p-3 border-b border-border">
+      <div className="p-3 border-b border-border space-y-2">
         <Button onClick={onCreate} className="w-full gap-2" size="sm">
           <Plus className="w-4 h-4" />
           שיחה חדשה
         </Button>
+        <div className="flex items-center gap-1">
+          <Button
+            variant={selectMode ? "secondary" : "ghost"}
+            size="sm"
+            className="flex-1 gap-1 text-xs h-7"
+            onClick={() => { setSelectMode(!selectMode); setSelectedIds([]); }}
+          >
+            <CheckSquare className="w-3.5 h-3.5" />
+            {selectMode ? 'בטל בחירה' : 'בחר להסתרה'}
+          </Button>
+          {selectMode && selectedIds.length > 0 && (
+            <Button
+              variant="destructive"
+              size="sm"
+              className="gap-1 text-xs h-7"
+              onClick={handleBulkHide}
+            >
+              <EyeOff className="w-3.5 h-3.5" />
+              הסתר ({selectedIds.length})
+            </Button>
+          )}
+        </div>
       </div>
       <div className="flex-1 overflow-y-auto">
         {isLoading ? (
@@ -29,11 +66,18 @@ export default function ConversationsList({ conversations, activeId, onSelect, o
                 activeId === conv.id ? "bg-muted" : "hover:bg-muted/50"
               )}
             >
+              {selectMode && (
+                <Checkbox
+                  checked={selectedIds.includes(conv.id)}
+                  onCheckedChange={() => toggleSelect(conv.id)}
+                  className="flex-shrink-0"
+                />
+              )}
               <button
-                onClick={() => onSelect(conv.id)}
+                onClick={() => selectMode ? toggleSelect(conv.id) : onSelect(conv.id)}
                 className="flex items-center gap-3 flex-1 overflow-hidden"
               >
-                <MessageCircle className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+                {!selectMode && <MessageCircle className="w-4 h-4 text-muted-foreground flex-shrink-0" />}
                 <div className="flex-1 overflow-hidden text-right">
                   <p className="text-sm font-medium truncate">{conv.metadata?.name || 'שיחה'}</p>
                   <p className="text-xs text-muted-foreground">{(() => {
@@ -43,13 +87,15 @@ export default function ConversationsList({ conversations, activeId, onSelect, o
                   })()}</p>
                 </div>
               </button>
-              <button
-                onClick={(e) => { e.stopPropagation(); onHide(conv); }}
-                className="opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded hover:bg-destructive/10"
-                title="הסתר שיחה"
-              >
-                <Trash2 className="w-3.5 h-3.5 text-destructive" />
-              </button>
+              {!selectMode && (
+                <button
+                  onClick={(e) => { e.stopPropagation(); onHide(conv); }}
+                  className="opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded hover:bg-destructive/10"
+                  title="הסתר שיחה"
+                >
+                  <EyeOff className="w-3.5 h-3.5 text-muted-foreground" />
+                </button>
+              )}
             </div>
           ))
         )}

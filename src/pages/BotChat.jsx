@@ -73,8 +73,8 @@ export default function BotChat() {
     setActiveConvId(conv.id);
   };
 
-  const handleHideConversation = (conv) => {
-    if (!window.confirm('להסתיר את השיחה? (ניתן לשחזר בהמשך)')) return;
+  const handleHideConversation = (conv, skipConfirm = false) => {
+    if (!skipConfirm && !window.confirm('להסתיר את השיחה? (ניתן לשחזר בהמשך)')) return;
     const newHidden = [...hiddenIds, conv.id];
     setHiddenIds(newHidden);
     localStorage.setItem('hidden_conversations', JSON.stringify(newHidden));
