@@ -421,27 +421,27 @@ async function buildBotMessage(base44, trigger, fullRequest, contactName) {
 
   if (trigger === 'scheduled_consultation') {
     const timeStr = fullRequest.last_appointment_time_str || '';
-    return `✅ נקבע תור לייעוץ!\nיום ושעה: ${timeStr}\n\nנשמח לראותך! 😊\n\nלהמשך, כתוב/י "המשך".`;
+    return await getAppointmentMessage(base44, timeStr);
   }
 
   if (trigger === 'scheduled_legal') {
     const timeStr = fullRequest.last_appointment_time_str || '';
-    return `✅ נקבע תור לשיחה עם ד"ר אדרי!\nיום ושעה: ${timeStr}\n\nנשמח לדבר אז! 😊\n\nלהמשך, כתוב/י "המשך".`;
+    return await getAppointmentMessage(base44, timeStr);
   }
 
   if (trigger === 'scheduled_lectures') {
     const timeStr = fullRequest.last_appointment_time_str || '';
-    return `✅ נקבע תור להרצאה!\nיום ושעה: ${timeStr}\n\nנשמח לראותך! 😊\n\nלהמשך, כתוב/י "המשך".`;
+    return await getAppointmentMessage(base44, timeStr);
   }
 
   if (trigger === 'scheduled_clinic') {
     const timeStr = fullRequest.last_appointment_time_str || '';
-    return `✅ נקבע תור לקליניקה!\nיום ושעה: ${timeStr}\n\nלהמשך, כתוב/י "המשך".`;
+    return await getAppointmentMessage(base44, timeStr);
   }
 
   if (trigger === 'scheduled_post_lecture') {
     const timeStr = fullRequest.last_appointment_time_str || '';
-    return `✅ נקבע תור!\nיום ושעה: ${timeStr}\n\nתודה ונשמח לראותך! 😊\n\nלהמשך, כתוב/י "המשך".`;
+    return await getAppointmentMessage(base44, timeStr);
   }
 
   if (trigger === 'questionnaire_completed') {
@@ -472,4 +472,14 @@ async function buildBotMessage(base44, trigger, fullRequest, contactName) {
   }
 
   return '';
+}
+
+// --- Helper: fetch appointment message from BotContent ---
+async function getAppointmentMessage(base44, timeStr) {
+  const records = await base44.asServiceRole.entities.BotContent.filter({ key: 'appointment_scheduled' });
+  if (records.length > 0 && records[0].content) {
+    return records[0].content.replace('{time}', timeStr);
+  }
+  // Fallback in case BotContent record is missing
+  return `✅ נקבע מועד לפגישה!\nיום ושעה: ${timeStr}\n\nנשמח לראותך! 😊\n\nלהמשך, כתוב/י "המשך".`;
 }
