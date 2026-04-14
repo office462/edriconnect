@@ -453,12 +453,12 @@ async function buildBotMessage(base44, trigger, fullRequest, contactName) {
 
   if (trigger === 'whatsapp_appointment_scheduled') {
     const timeStr = fullRequest.last_appointment_time_str || '';
-    return `✅ נקבע תור לזמינות בווצאפ!\nיום ושעה: ${timeStr}\n\nנשמח לדבר אז! 😊\n\nלהמשך, כתוב/י "המשך".`;
+    return `✅ נקבע תור לזמינות בווצאפ!\nיום ושעה: ${timeStr}\n\nנשמח לדבר אז! 😊\nרוצה לקבל הנחיות הגעה למשרד? 🗺️`;
   }
 
   if (trigger === 'clinic_appointment_scheduled') {
     const timeStr = fullRequest.last_appointment_time_str || '';
-    return `✅ נקבע תור לייעוץ מלא!\nיום ושעה: ${timeStr}\n\nלהמשך, כתוב/י "המשך".`;
+    return `✅ נקבע תור לייעוץ מלא!\nיום ושעה: ${timeStr}\n\nרוצה לקבל הנחיות הגעה למשרד? 🗺️`;
   }
 
   if (trigger === 'both_appointments_scheduled') {
@@ -468,7 +468,7 @@ async function buildBotMessage(base44, trigger, fullRequest, contactName) {
     const clinicTime = fullRequest.scheduled_date_clinic
       ? new Date(fullRequest.scheduled_date_clinic).toLocaleString('he-IL', { timeZone: 'Asia/Jerusalem', weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' })
       : '';
-    return `🎉 מעולה! שני התורים נקבעו:\n1. זמינות בווצאפ — ${whatsappTime}\n2. ייעוץ מלא — ${clinicTime}\n\nנשמח לראותך! 😊\n\nלהמשך, כתוב/י "המשך".`;
+    return `🎉 מעולה! שני התורים נקבעו:\n1. זמינות בווצאפ — ${whatsappTime}\n2. ייעוץ מלא — ${clinicTime}\n\nנשמח לראותך! 😊\nרוצה לקבל הנחיות הגעה למשרד? 🗺️`;
   }
 
   return '';
@@ -481,5 +481,5 @@ async function getAppointmentMessage(base44, timeStr) {
     return records[0].content.replace('{time}', timeStr);
   }
   // Fallback in case BotContent record is missing
-  return `✅ נקבע מועד לפגישה!\nיום ושעה: ${timeStr}\n\nנשמח לראותך! 😊\n\nלהמשך, כתוב/י "המשך".`;
+  return `✅ נקבע מועד לפגישה! 🎉\nיום ושעה: ${timeStr}\n\nנשמח לראותך! 😊\nרוצה לקבל הנחיות הגעה למשרד? 🗺️`;
 }
