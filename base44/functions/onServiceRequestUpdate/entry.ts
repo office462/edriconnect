@@ -74,6 +74,7 @@ Deno.serve(async (req) => {
             conversationId: effectiveConversationId,
             message: botMessage,
             contactName,
+            contactPhone,
             botTrigger: effectiveTrigger,
           }
         });
@@ -300,6 +301,7 @@ Deno.serve(async (req) => {
             conversationId: effectiveConversationId,
             message: botMessage,
             contactName,
+            contactPhone,
             botTrigger,
           }
         });

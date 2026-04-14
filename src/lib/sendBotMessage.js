@@ -151,6 +151,20 @@ async function sendMessage(resultData, requestId, trigger, conversationId) {
   await base44.agents.addMessage(conv, { role: 'assistant', content: pending.message });
   console.log('sendMessage: message sent successfully!');
 
+  // Also send via WhatsApp if contact has phone
+  const contactPhone = pending.contactPhone;
+  if (contactPhone) {
+    try {
+      await base44.functions.invoke('sendWhatsAppMessage', {
+        phone: contactPhone,
+        message: pending.message,
+      });
+      console.log('sendMessage: WhatsApp copy also sent');
+    } catch (waErr) {
+      console.warn('sendMessage: Failed to send WhatsApp copy:', waErr.message);
+    }
+  }
+
   await base44.entities.ServiceRequestTimeline.create({
     service_request_id: requestId,
     event_type: 'message_sent',

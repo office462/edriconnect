@@ -92,6 +92,26 @@ Deno.serve(async (req) => {
         content: personalizedMessage,
       });
 
+      // Also send via WhatsApp
+      if (request.contact_phone) {
+        try {
+          const waInstanceId = Deno.env.get('GREEN_API_INSTANCE_ID');
+          const waToken = Deno.env.get('GREEN_API_TOKEN');
+          if (waInstanceId && waToken) {
+            let cleanPhone = request.contact_phone.replace(/[\s\-\+]/g, '');
+            if (cleanPhone.startsWith('0')) cleanPhone = '972' + cleanPhone.substring(1);
+            await fetch(`https://api.green-api.com/waInstance${waInstanceId}/sendMessage/${waToken}`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ chatId: `${cleanPhone}@c.us`, message: personalizedMessage }),
+            });
+            console.log('24h reminder also sent via WhatsApp to', cleanPhone);
+          }
+        } catch (waErr) {
+          console.warn('Failed to send WhatsApp reminder:', waErr.message);
+        }
+      }
+
       // Log in timeline
       await base44.asServiceRole.entities.ServiceRequestTimeline.create({
         service_request_id: request.id,

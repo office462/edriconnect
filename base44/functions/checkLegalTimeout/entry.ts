@@ -68,6 +68,26 @@ Deno.serve(async (req) => {
               content: timeoutMessage,
             });
             console.log('30-day message sent to:', contactName);
+
+            // Also send via WhatsApp
+            if (request.contact_phone) {
+              try {
+                const waInstanceId = Deno.env.get('GREEN_API_INSTANCE_ID');
+                const waToken = Deno.env.get('GREEN_API_TOKEN');
+                if (waInstanceId && waToken) {
+                  let cleanPhone = request.contact_phone.replace(/[\s\-\+]/g, '');
+                  if (cleanPhone.startsWith('0')) cleanPhone = '972' + cleanPhone.substring(1);
+                  await fetch(`https://api.green-api.com/waInstance${waInstanceId}/sendMessage/${waToken}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ chatId: `${cleanPhone}@c.us`, message: timeoutMessage }),
+                  });
+                  console.log('30-day message also sent via WhatsApp to', cleanPhone);
+                }
+              } catch (waErr) {
+                console.warn('Failed to send WhatsApp timeout message:', waErr.message);
+              }
+            }
           } else {
             console.log('No conversation found for:', contactName);
           }

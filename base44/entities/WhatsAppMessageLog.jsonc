@@ -1,0 +1,52 @@
+{
+  "name": "WhatsAppMessageLog",
+  "type": "object",
+  "properties": {
+    "id_message": {
+      "type": "string",
+      "description": "\u05de\u05d6\u05d4\u05d4 \u05d9\u05d9\u05d7\u05d5\u05d3\u05d9 \u05e9\u05dc \u05d4\u05d4\u05d5\u05d3\u05e2\u05d4 \u05de-Green API"
+    },
+    "phone": {
+      "type": "string",
+      "description": "\u05de\u05e1\u05e4\u05e8 \u05d8\u05dc\u05e4\u05d5\u05df"
+    },
+    "direction": {
+      "type": "string",
+      "enum": [
+        "incoming",
+        "outgoing"
+      ],
+      "description": "\u05db\u05d9\u05d5\u05d5\u05df \u05d4\u05d4\u05d5\u05d3\u05e2\u05d4"
+    },
+    "text": {
+      "type": "string",
+      "description": "\u05ea\u05d5\u05db\u05df \u05d4\u05d4\u05d5\u05d3\u05e2\u05d4"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "pending_reply",
+        "replied",
+        "skipped",
+        "error",
+        "timeout"
+      ],
+      "description": "\u05e1\u05d8\u05d8\u05d5\u05e1 \u05e2\u05d9\u05d1\u05d5\u05d3"
+    },
+    "conversation_id": {
+      "type": "string",
+      "description": "\u05de\u05d6\u05d4\u05d4 \u05e9\u05d9\u05d7\u05ea \u05d4\u05d1\u05d5\u05d8"
+    },
+    "chat_id": {
+      "type": "string",
+      "description": "Green API chat ID"
+    },
+    "message_count_at_send": {
+      "type": "number",
+      "description": "\u05de\u05e1\u05e4\u05e8 \u05d4\u05d4\u05d5\u05d3\u05e2\u05d5\u05ea \u05d1\u05e9\u05d9\u05d7\u05d4 \u05d1\u05e8\u05d2\u05e2 \u05e9\u05e9\u05dc\u05d7\u05e0\u05d5 \u05dc\u05d1\u05d5\u05d8"
+    }
+  },
+  "required": [
+    "id_message"
+  ]
+}
