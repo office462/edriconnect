@@ -131,8 +131,10 @@ Deno.serve(async (req) => {
       content: text,
     });
 
-    // ===== LOG & RETURN IMMEDIATELY =====
-    await base44.asServiceRole.entities.WhatsAppMessageLog.create({
+    const expectedIndex = msgCountBefore + 1; // user message is at msgCountBefore, bot reply expected after
+
+    // ===== LOG MESSAGE =====
+    const logRecord = await base44.asServiceRole.entities.WhatsAppMessageLog.create({
       id_message: idMessage || `wa_${Date.now()}`,
       phone,
       direction: 'incoming',
@@ -140,10 +142,52 @@ Deno.serve(async (req) => {
       status: 'pending_reply',
       conversation_id: conversationId,
       chat_id: chatId,
-      message_count_at_send: msgCountBefore + 1,
+      message_count_at_send: expectedIndex,
     });
 
-    console.log(`Message logged as pending_reply. processWhatsAppReplies will send the bot response.`);
+    // ===== POLL FOR BOT REPLY (max 15 seconds) =====
+    const instanceId = Deno.env.get('GREEN_API_INSTANCE_ID');
+    const token = Deno.env.get('GREEN_API_TOKEN');
+    let botReply = '';
+    const pollStart = Date.now();
+
+    while (Date.now() - pollStart < 15000) {
+      await new Promise(r => setTimeout(r, 2000)); // wait 2s between checks
+
+      const freshConv = await base44.asServiceRole.agents.getConversation(conversationId);
+      const msgs = freshConv.messages || [];
+
+      if (msgs.length > expectedIndex) {
+        for (let i = msgs.length - 1; i >= expectedIndex; i--) {
+          if (msgs[i].role === 'assistant' && msgs[i].content) {
+            botReply = msgs[i].content;
+            break;
+          }
+        }
+        if (botReply) break;
+      }
+    }
+
+    if (botReply) {
+      // Send reply immediately via Green API
+      const sendUrl = `https://api.green-api.com/waInstance${instanceId}/sendMessage/${token}`;
+      const sendResp = await fetch(sendUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ chatId, message: botReply }),
+      });
+
+      if (sendResp.ok) {
+        await base44.asServiceRole.entities.WhatsAppMessageLog.update(logRecord.id, { status: 'replied' });
+        console.log(`Bot reply sent immediately to ${chatId} (${Math.round((Date.now() - pollStart) / 1000)}s)`);
+        return Response.json({ ok: true, replied: true });
+      } else {
+        console.error('Failed to send immediate reply:', await sendResp.text());
+      }
+    }
+
+    // If we got here, bot didn't reply in time — processWhatsAppReplies will handle it
+    console.log(`No bot reply within 15s for ${idMessage}. processWhatsAppReplies will handle.`);
     return Response.json({ ok: true, queued: true });
   } catch (error) {
     console.error('greenApiWebhook error:', error);
