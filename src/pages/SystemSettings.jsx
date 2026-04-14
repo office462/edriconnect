@@ -9,10 +9,12 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
-import { Plus, Pencil, Save, Palette, GitBranch } from 'lucide-react';
+import { Switch } from '@/components/ui/switch';
+import { Plus, Pencil, Save, Palette, GitBranch, MessageSquare } from 'lucide-react';
 import { toast } from 'sonner';
 
 const categoryConfig = {
+  whatsapp: { label: 'וואטסאפ', icon: MessageSquare, color: 'bg-green-100 text-green-700' },
   ui: { label: 'עיצוב ותצוגה', icon: Palette, color: 'bg-amber-100 text-amber-700' },
   flow: { label: 'הגדרות Flow', icon: GitBranch, color: 'bg-red-100 text-red-700' },
 };
@@ -29,7 +31,7 @@ const valueTypes = [
 const emptyForm = { category: 'ui', key: '', label: '', value: '', value_type: 'text' };
 
 export default function SystemSettings() {
-  const [activeTab, setActiveTab] = useState('ui');
+  const [activeTab, setActiveTab] = useState('whatsapp');
   const [showDialog, setShowDialog] = useState(false);
   const [form, setForm] = useState(emptyForm);
   const [editId, setEditId] = useState(null);
@@ -130,7 +132,19 @@ export default function SystemSettings() {
                     </Button>
                   </div>
                   <div className="mt-2">
-                    {setting.value_type === 'text' || setting.value_type === 'html' ? (
+                    {setting.value_type === 'boolean' ? (
+                      <div className="flex items-center gap-3">
+                        <Switch
+                          checked={setting.value === 'true'}
+                          onCheckedChange={(checked) => {
+                            updateInlineMutation.mutate({ id: setting.id, value: checked ? 'true' : 'false' });
+                          }}
+                        />
+                        <span className={`text-sm font-medium ${setting.value === 'true' ? 'text-green-600' : 'text-muted-foreground'}`}>
+                          {setting.value === 'true' ? 'פעיל' : 'כבוי (מצב דמו)'}
+                        </span>
+                      </div>
+                    ) : setting.value_type === 'text' || setting.value_type === 'html' ? (
                       <div className="flex gap-2 items-start">
                         <Textarea
                           value={inlineEdits[setting.id] !== undefined ? inlineEdits[setting.id] : setting.value}

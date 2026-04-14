@@ -50,6 +50,14 @@ Deno.serve(async (req) => {
 
     const base44 = createClientFromRequest(req);
 
+    // ===== CHECK IF WHATSAPP BOT IS ENABLED =====
+    const botEnabledSettings = await base44.asServiceRole.entities.SystemSetting.filter({ key: 'whatsapp_bot_enabled' });
+    const botEnabled = botEnabledSettings.length > 0 && botEnabledSettings[0].value === 'true';
+    if (!botEnabled) {
+      console.log('WhatsApp bot is disabled (demo mode). Skipping.');
+      return Response.json({ ok: true, skipped: true, reason: 'bot_disabled' });
+    }
+
     // ===== IDEMPOTENCY =====
     if (idMessage) {
       const existing = await base44.asServiceRole.entities.WhatsAppMessageLog.filter({ id_message: idMessage });
