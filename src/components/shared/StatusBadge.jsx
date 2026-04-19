@@ -12,6 +12,7 @@ const statusConfig = {
   questionnaire_completed: { label: 'מילא שאלון', bg: '#D5E8E8', text: '#2A6B6B', border: '#A5C9C9' },
   paid: { label: 'שולם', bg: '#D5E8D5', text: '#3A6B3A', border: '#A5C9A5' },
   scheduled: { label: 'נקבע תור', bg: '#D5DDE8', text: '#3A4F6B', border: '#A5B5C9' },
+  pending_human: { label: 'פניה לאדמין', bg: '#FDDCB5', text: '#8B4513', border: '#E8A862' },
   completed: { label: 'הושלם', bg: '#E8E0D5', text: '#6B5C4F', border: '#C9B9A5' },
 };
 
