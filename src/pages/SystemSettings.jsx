@@ -10,10 +10,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
-import { Plus, Pencil, Save, Palette, GitBranch, MessageSquare } from 'lucide-react';
+import { Plus, Pencil, Save, Palette, GitBranch, MessageSquare, UserCircle } from 'lucide-react';
 import { toast } from 'sonner';
 
 const categoryConfig = {
+  details: { label: 'פרטים', icon: UserCircle, color: 'bg-purple-100 text-purple-700' },
   whatsapp: { label: 'וואטסאפ', icon: MessageSquare, color: 'bg-green-100 text-green-700' },
   ui: { label: 'עיצוב ותצוגה', icon: Palette, color: 'bg-amber-100 text-amber-700' },
   flow: { label: 'הגדרות Flow', icon: GitBranch, color: 'bg-red-100 text-red-700' },
@@ -31,7 +32,7 @@ const valueTypes = [
 const emptyForm = { category: 'ui', key: '', label: '', value: '', value_type: 'text' };
 
 export default function SystemSettings() {
-  const [activeTab, setActiveTab] = useState('whatsapp');
+  const [activeTab, setActiveTab] = useState('details');
   const [showDialog, setShowDialog] = useState(false);
   const [form, setForm] = useState(emptyForm);
   const [editId, setEditId] = useState(null);
