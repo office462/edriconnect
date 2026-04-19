@@ -6,7 +6,7 @@ const typeConfig = {
   consultation: { label: 'ייעוץ', color: 'bg-violet-50 text-violet-700 border-violet-200' },
   legal: { label: 'חוות דעת משפטית', color: 'bg-stone-50 text-stone-700 border-stone-200' },
   lectures: { label: 'הרצאות', color: 'bg-yellow-50 text-yellow-700 border-yellow-200' },
-  clinic: { label: 'השכרת קליניקה', color: 'bg-teal-50 text-teal-700 border-teal-200' },
+  clinic: { label: 'קליניקה', color: 'bg-teal-50 text-teal-700 border-teal-200' },
   post_lecture: { label: 'פוסט הרצאה', color: 'bg-orange-50 text-orange-700 border-orange-200' },
 };
 
