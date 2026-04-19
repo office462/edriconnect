@@ -362,7 +362,7 @@ async function buildBotMessage(base44, trigger, fullRequest, contactName) {
     });
     const whatsappUrl = whatsappLinkContent[0]?.url || '';
     const clinicUrl = clinicLinkContent[0]?.url || '';
-    return `היי ${contactName}, קיבלתי את התשלום והשאלון ואעבור עליו בהקדם!\n\nחשוב מאוד! יש לזמן 2 תורים:\n\n1. תור לזמינות בווצאפ (קוד קופ״ח) - 10 דקות:\n${whatsappUrl}\n\n2. תור לייעוץ מלא - שעה וחצי:\n${clinicUrl}\n\nלאחר קביעת שני התורים, כתוב/י "קבעתי" ✓`;
+    return `היי ${contactName}, קיבלתי את התשלום והשאלון ואעבור עליו בהקדם!\n\nחשוב מאוד! יש לזמן 2 תורים:\n\n1. תור לזמינות בווצאפ (קוד קופ״ח) - 10 דקות:\n${whatsappUrl}\n\n2. תור לייעוץ מותאם אישית - שעה וחצי:\n${clinicUrl}\n\nלאחר קביעת שני התורים, כתוב/י "קבעתי" ✓`;
   }
 
   if (trigger === 'paid_consultation') {
@@ -410,7 +410,7 @@ async function buildBotMessage(base44, trigger, fullRequest, contactName) {
   if (trigger === 'paid_clinic') {
     const linkContent = await base44.asServiceRole.entities.ServiceContent.filter({ service_type: 'clinic', content_type: 'external_link' });
     const linkUrl = linkContent.length > 0 ? linkContent[0].url : '';
-    return `היי ${contactName}, קיבלנו את התשלום — תודה רבה! 🙏\n\nהנה קישור לתיאום השכרת הקליניקה:\n${linkUrl}\n\nלאחר קביעת מועד נשלח אישור.`;
+    return `היי ${contactName}, קיבלנו את התשלום — תודה רבה! 🙏\n\nהנה קישור לתיאום קליניקה:\n${linkUrl}\n\nלאחר קביעת מועד נשלח אישור.`;
   }
 
   if (trigger === 'paid_post_lecture') {
@@ -455,12 +455,12 @@ async function buildBotMessage(base44, trigger, fullRequest, contactName) {
 
   if (trigger === 'whatsapp_appointment_scheduled') {
     const timeStr = fullRequest.last_appointment_time_str || '';
-    return `✅ נקבע תור לזמינות בווצאפ!\nיום ושעה: ${timeStr}\n\nנשמח לדבר אז! 😊\nרוצה לקבל הנחיות הגעה למשרד? 🗺️`;
+    return `✅ נקבע תור לזמינות בווצאפ!\nיום ושעה: ${timeStr}\n\nנשמח לדבר אז! 😊`;
   }
 
   if (trigger === 'clinic_appointment_scheduled') {
     const timeStr = fullRequest.last_appointment_time_str || '';
-    return `✅ נקבע תור לייעוץ מלא!\nיום ושעה: ${timeStr}\n\nרוצה לקבל הנחיות הגעה למשרד? 🗺️`;
+    return `✅ נקבע תור לייעוץ מותאם אישית!\nיום ושעה: ${timeStr}`;
   }
 
   if (trigger === 'both_appointments_scheduled') {
@@ -470,7 +470,7 @@ async function buildBotMessage(base44, trigger, fullRequest, contactName) {
     const clinicTime = fullRequest.scheduled_date_clinic
       ? new Date(fullRequest.scheduled_date_clinic).toLocaleString('he-IL', { timeZone: 'Asia/Jerusalem', weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' })
       : '';
-    return `🎉 מעולה! שני התורים נקבעו:\n1. זמינות בווצאפ — ${whatsappTime}\n2. ייעוץ מלא — ${clinicTime}\n\nנשמח לראותך! 😊\nרוצה לקבל הנחיות הגעה למשרד? 🗺️`;
+    return `🎉 מעולה! שני התורים נקבעו:\n1. זמינות בווצאפ — ${whatsappTime}\n2. ייעוץ מותאם אישית — ${clinicTime}\n\nנשמח לראותך! 😊`;
   }
 
   return '';
