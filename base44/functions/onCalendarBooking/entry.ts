@@ -10,6 +10,10 @@ Deno.serve(async (req) => {
       return Response.json({ status: 'ignored', event: body.triggerEvent });
     }
 
+    // Check if WhatsApp bot is enabled — if not, still save booking but don't trigger bot messages
+    const botEnabledSettings = await base44.asServiceRole.entities.SystemSetting.filter({ key: 'whatsapp_bot_enabled' });
+    const botEnabled = botEnabledSettings.length > 0 && botEnabledSettings[0].value === 'true';
+
     const payload = body.payload;
     const attendee = payload.attendees?.[0];
     if (!attendee) return Response.json({ status: 'no_attendee' });
@@ -90,22 +94,26 @@ Deno.serve(async (req) => {
 
       if (updatedWhatsapp && updatedClinic) {
         updateData.status = 'scheduled';
-        updateData.pending_bot_message = 'both_appointments_scheduled';
+        if (botEnabled) updateData.pending_bot_message = 'both_appointments_scheduled';
       } else {
-        updateData.pending_bot_message = isWhatsapp
-          ? 'whatsapp_appointment_scheduled'
-          : 'clinic_appointment_scheduled';
+        if (botEnabled) {
+          updateData.pending_bot_message = isWhatsapp
+            ? 'whatsapp_appointment_scheduled'
+            : 'clinic_appointment_scheduled';
+        }
       }
     } else {
       // All other service types — single appointment is enough
       updateData.status = 'scheduled';
-      const triggerMap = {
-        legal: 'scheduled_legal',
-        lectures: 'scheduled_lectures',
-        clinic: 'scheduled_clinic',
-        post_lecture: 'scheduled_post_lecture',
-      };
-      updateData.pending_bot_message = triggerMap[serviceType] || 'scheduled_consultation';
+      if (botEnabled) {
+        const triggerMap = {
+          legal: 'scheduled_legal',
+          lectures: 'scheduled_lectures',
+          clinic: 'scheduled_clinic',
+          post_lecture: 'scheduled_post_lecture',
+        };
+        updateData.pending_bot_message = triggerMap[serviceType] || 'scheduled_consultation';
+      }
     }
 
     await base44.asServiceRole.entities.ServiceRequest.update(matchingReq.id, updateData);

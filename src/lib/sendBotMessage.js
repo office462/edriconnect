@@ -146,6 +146,13 @@ async function isWhatsAppBotEnabled() {
 }
 
 async function sendMessage(resultData, requestId, trigger, conversationId) {
+  // Check if WhatsApp bot is enabled FIRST — before any sending
+  const botEnabled = await isWhatsAppBotEnabled();
+  if (!botEnabled) {
+    console.log('sendMessage: SKIPPING ALL — WhatsApp bot is disabled (demo mode)');
+    return null;
+  }
+
   const pending = resultData?.pendingBotMessage;
   const effectiveConvId = pending?.conversationId || conversationId;
 
@@ -153,13 +160,6 @@ async function sendMessage(resultData, requestId, trigger, conversationId) {
 
   if (!effectiveConvId || !pending?.message) {
     console.log('sendMessage: ABORT - no conversation or message');
-    return null;
-  }
-
-  // Check if WhatsApp bot is enabled before sending
-  const botEnabled = await isWhatsAppBotEnabled();
-  if (!botEnabled) {
-    console.log('sendMessage: SKIPPING — WhatsApp bot is disabled (demo mode)');
     return null;
   }
 
@@ -188,8 +188,6 @@ async function sendMessage(resultData, requestId, trigger, conversationId) {
     event_type: 'message_sent',
     description: `הודעת ${trigger} נשלחה אוטומטית`,
   });
-
-  // Flag already cleared before processing — no need to clear again
 
   console.log('sendMessage: completed', trigger, 'to', effectiveConvId);
   return { trigger, conversationId: effectiveConvId };

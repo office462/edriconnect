@@ -10,6 +10,10 @@ Deno.serve(async (req) => {
       return Response.json({ error: 'service_request_id and reason are required' }, { status: 400 });
     }
 
+    // Check if WhatsApp bot is enabled — if not, skip WhatsApp send but still update status
+    const botEnabledSettings = await base44.asServiceRole.entities.SystemSetting.filter({ key: 'whatsapp_bot_enabled' });
+    const botEnabled = botEnabledSettings.length > 0 && botEnabledSettings[0].value === 'true';
+
     // 1. שלוף פרטי הפנייה
     const sr = await base44.asServiceRole.entities.ServiceRequest.get(service_request_id);
     if (!sr) {
@@ -44,9 +48,9 @@ Deno.serve(async (req) => {
       contextLine,
     ].filter(Boolean).join('\n');
 
-    // 5. שלח ווצאפ לליאת דרך Green API
+    // 5. שלח ווצאפ לליאת דרך Green API (רק אם הבוט מופעל)
     let whatsappSent = false;
-    if (adminPhone && instanceId && token) {
+    if (botEnabled && adminPhone && instanceId && token) {
       const chatId = `${adminPhone}@c.us`;
       const apiUrl = `https://api.green-api.com/waInstance${instanceId}/sendMessage/${token}`;
       const waResponse = await fetch(apiUrl, {

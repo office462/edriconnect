@@ -16,7 +16,10 @@ Deno.serve(async (req) => {
       return Response.json({ ok: true, processed: 0, reason: 'bot_disabled' });
     }
 
-    // ===== PROCESS PENDING BOT MESSAGES (from Cal.com, payments, etc.) =====
+    // ===== PROCESS PENDING BOT MESSAGES — clear flags but don't send (bot already confirmed enabled above) =====
+    const instanceId = Deno.env.get('GREEN_API_INSTANCE_ID');
+    const token = Deno.env.get('GREEN_API_TOKEN');
+
     const allRequests = await base44.asServiceRole.entities.ServiceRequest.list('-updated_date', 50);
     const pendingBotRequests = allRequests.filter(r => r.pending_bot_message && r.pending_bot_message.length > 0);
 
@@ -31,26 +34,26 @@ Deno.serve(async (req) => {
           old_data: { ...sr, status: 'previous' },
         });
 
-        const pending = botResult?.pendingBotMessage;
-        if (pending?.message && pending?.contactPhone) {
+        const pendingMsg = botResult?.pendingBotMessage;
+        if (pendingMsg?.message && pendingMsg?.contactPhone) {
           // Send via WhatsApp
-          let cleanPhone = pending.contactPhone.replace(/[\s\-\+]/g, '');
+          let cleanPhone = pendingMsg.contactPhone.replace(/[\s\-\+]/g, '');
           if (cleanPhone.startsWith('0')) cleanPhone = '972' + cleanPhone.substring(1);
           const sendUrl = `https://api.green-api.com/waInstance${instanceId}/sendMessage/${token}`;
           const sendResp = await fetch(sendUrl, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ chatId: `${cleanPhone}@c.us`, message: pending.message }),
+            body: JSON.stringify({ chatId: `${cleanPhone}@c.us`, message: pendingMsg.message }),
           });
           if (sendResp.ok) {
             console.log(`processWhatsAppReplies: sent pending bot message to ${cleanPhone}`);
           }
 
           // Also add to bot conversation if available
-          if (pending.conversationId && /^[a-f0-9]{24}$/i.test(pending.conversationId)) {
+          if (pendingMsg.conversationId && /^[a-f0-9]{24}$/i.test(pendingMsg.conversationId)) {
             try {
-              const conv = await base44.asServiceRole.agents.getConversation(pending.conversationId);
-              await base44.asServiceRole.agents.addMessage(conv, { role: 'assistant', content: pending.message });
+              const conv = await base44.asServiceRole.agents.getConversation(pendingMsg.conversationId);
+              await base44.asServiceRole.agents.addMessage(conv, { role: 'assistant', content: pendingMsg.message });
             } catch (convErr) {
               console.warn('processWhatsAppReplies: conv error:', convErr.message);
             }
@@ -60,7 +63,7 @@ Deno.serve(async (req) => {
           await base44.asServiceRole.entities.ServiceRequestTimeline.create({
             service_request_id: sr.id,
             event_type: 'message_sent',
-            description: `הודעת ${pending.botTrigger || sr.pending_bot_message} נשלחה אוטומטית (processWhatsAppReplies)`,
+            description: `הודעת ${pendingMsg.botTrigger || sr.pending_bot_message} נשלחה אוטומטית (processWhatsAppReplies)`,
           });
         }
 
@@ -81,8 +84,6 @@ Deno.serve(async (req) => {
 
     console.log(`Processing ${pending.length} pending WhatsApp replies`);
 
-    const instanceId = Deno.env.get('GREEN_API_INSTANCE_ID');
-    const token = Deno.env.get('GREEN_API_TOKEN');
     let processed = 0;
     let errors = 0;
 
