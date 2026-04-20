@@ -9,6 +9,14 @@ Deno.serve(async (req) => {
       return Response.json({ error: 'Forbidden: Admin access required' }, { status: 403 });
     }
 
+    // Check if WhatsApp bot is enabled
+    const botSettings = await base44.asServiceRole.entities.SystemSetting.filter({ key: 'whatsapp_bot_enabled' });
+    const botEnabled = botSettings.length > 0 && botSettings[0].value === 'true';
+    if (!botEnabled) {
+      console.log('24h Reminder: bot disabled, skipping');
+      return Response.json({ ok: true, sent: 0, skipped: 0, reason: 'bot_disabled' });
+    }
+
     const now = new Date();
     const twentyFourHoursAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
 

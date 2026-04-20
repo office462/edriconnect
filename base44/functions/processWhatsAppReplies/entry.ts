@@ -8,6 +8,70 @@ Deno.serve(async (req) => {
       return Response.json({ error: 'Forbidden: Admin access required' }, { status: 403 });
     }
 
+    // Check if WhatsApp bot is enabled
+    const botSettings = await base44.asServiceRole.entities.SystemSetting.filter({ key: 'whatsapp_bot_enabled' });
+    const botEnabled = botSettings.length > 0 && botSettings[0].value === 'true';
+    if (!botEnabled) {
+      console.log('processWhatsAppReplies: bot disabled, skipping');
+      return Response.json({ ok: true, processed: 0, reason: 'bot_disabled' });
+    }
+
+    // ===== PROCESS PENDING BOT MESSAGES (from Cal.com, payments, etc.) =====
+    const allRequests = await base44.asServiceRole.entities.ServiceRequest.list('-updated_date', 50);
+    const pendingBotRequests = allRequests.filter(r => r.pending_bot_message && r.pending_bot_message.length > 0);
+
+    for (const sr of pendingBotRequests) {
+      try {
+        console.log(`processWhatsAppReplies: found pending_bot_message=${sr.pending_bot_message} for ${sr.id}`);
+
+        // Call onServiceRequestUpdate to generate the message
+        const botResult = await base44.asServiceRole.functions.invoke('onServiceRequestUpdate', {
+          event: { type: 'update', entity_name: 'ServiceRequest', entity_id: sr.id },
+          data: { ...sr, status: sr.pending_bot_message, conversation_id: sr.conversation_id },
+          old_data: { ...sr, status: 'previous' },
+        });
+
+        const pending = botResult?.pendingBotMessage;
+        if (pending?.message && pending?.contactPhone) {
+          // Send via WhatsApp
+          let cleanPhone = pending.contactPhone.replace(/[\s\-\+]/g, '');
+          if (cleanPhone.startsWith('0')) cleanPhone = '972' + cleanPhone.substring(1);
+          const sendUrl = `https://api.green-api.com/waInstance${instanceId}/sendMessage/${token}`;
+          const sendResp = await fetch(sendUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ chatId: `${cleanPhone}@c.us`, message: pending.message }),
+          });
+          if (sendResp.ok) {
+            console.log(`processWhatsAppReplies: sent pending bot message to ${cleanPhone}`);
+          }
+
+          // Also add to bot conversation if available
+          if (pending.conversationId && /^[a-f0-9]{24}$/i.test(pending.conversationId)) {
+            try {
+              const conv = await base44.asServiceRole.agents.getConversation(pending.conversationId);
+              await base44.asServiceRole.agents.addMessage(conv, { role: 'assistant', content: pending.message });
+            } catch (convErr) {
+              console.warn('processWhatsAppReplies: conv error:', convErr.message);
+            }
+          }
+
+          // Log in timeline
+          await base44.asServiceRole.entities.ServiceRequestTimeline.create({
+            service_request_id: sr.id,
+            event_type: 'message_sent',
+            description: `הודעת ${pending.botTrigger || sr.pending_bot_message} נשלחה אוטומטית (processWhatsAppReplies)`,
+          });
+        }
+
+        // Clear the flag
+        await base44.asServiceRole.entities.ServiceRequest.update(sr.id, { pending_bot_message: '' });
+      } catch (pendErr) {
+        console.warn('processWhatsAppReplies: pending bot error:', pendErr.message);
+      }
+    }
+
+    // ===== PROCESS PENDING WHATSAPP REPLIES =====
     // Find all pending messages
     const pending = await base44.asServiceRole.entities.WhatsAppMessageLog.filter({ status: 'pending_reply' });
 

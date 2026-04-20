@@ -8,9 +8,18 @@ Deno.serve(async (req) => {
       return Response.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const { phone, message } = await req.json();
+    const body = await req.json();
+    const { phone, message } = body;
     if (!phone || !message) {
       return Response.json({ error: 'phone and message are required' }, { status: 400 });
+    }
+
+    // Check if WhatsApp bot is enabled
+    const botSettings = await base44.asServiceRole.entities.SystemSetting.filter({ key: 'whatsapp_bot_enabled' });
+    const botEnabled = botSettings.length > 0 && botSettings[0].value === 'true';
+    if (!botEnabled) {
+      console.log('sendWhatsAppMessage: bot disabled, skipping');
+      return Response.json({ ok: true, skipped: true, reason: 'bot_disabled' });
     }
 
     const result = await sendViaGreenApi(phone, message);
