@@ -109,9 +109,17 @@ Deno.serve(async (req) => {
       const serviceType = data.service_type;
 
       if (serviceType === 'consultation') {
-        // Always send questionnaire after payment in consultation flow
-        updates.current_step = 'paid_consultation';
-        botTrigger = 'paid_consultation';
+        // Check if questionnaire was already completed before payment
+        const latestReqPaid = await base44.asServiceRole.entities.ServiceRequest.get(requestId);
+        if (latestReqPaid.questionnaire_completed) {
+          // Questionnaire done, payment done → ready to schedule
+          updates.current_step = 'ready_to_schedule';
+          botTrigger = 'ready_to_schedule';
+        } else {
+          // Payment done, now send questionnaire request
+          updates.current_step = 'paid_consultation';
+          botTrigger = 'paid_consultation';
+        }
       } else if (serviceType === 'legal') {
         updates.current_step = 'send_privacy_message';
         botTrigger = 'paid_legal';
@@ -366,21 +374,41 @@ async function buildBotMessage(base44, trigger, fullRequest, contactName) {
   }
 
   if (trigger === 'paid_consultation') {
+    // Payment confirmed → send questionnaire request only
+    const botContentRecords = await base44.asServiceRole.entities.BotContent.filter({ key: 'consultation_questionnaire_request' });
     const questionnaireContent = await base44.asServiceRole.entities.ServiceContent.filter({ service_type: 'consultation', content_type: 'questionnaire' });
     const questionnaireUrl = questionnaireContent.length > 0 ? questionnaireContent[0].url : '';
-    return `היי ${contactName}, קיבלנו את התשלום — תודה רבה! 🙏\n\nכדי להתקדם, בבקשה למלא את השאלון הבא:\n${questionnaireUrl ? questionnaireUrl : ''}\n\nלאחר שתמלא/י, אנא רשום/י "מילאתי".`;
+    if (botContentRecords.length > 0) {
+      return botContentRecords[0].content
+        .replace('{שם}', contactName)
+        .replace('{קישור_שאלון}', questionnaireUrl);
+    }
+    return `היי ${contactName}, קיבלנו את התשלום — תודה רבה! 🙏\n\nכדי להתקדם, בבקשה למלא את השאלון הבא:\n${questionnaireUrl}\n\nלאחר שתמלא/י, תשלח הודעה ממני שהשאלון התקבל. המתן/י להודעה שלי 🌸`;
   }
 
   if (trigger === 'payment_confirmed_awaiting_questionnaire') {
+    // Same as paid_consultation — send questionnaire request
+    const botContentRecords = await base44.asServiceRole.entities.BotContent.filter({ key: 'consultation_questionnaire_request' });
     const questionnaireContent = await base44.asServiceRole.entities.ServiceContent.filter({ service_type: 'consultation', content_type: 'questionnaire' });
     const questionnaireUrl = questionnaireContent.length > 0 ? questionnaireContent[0].url : '';
-    return `היי ${contactName}, ראינו שהעברת את התשלום, תודה רבה! 🙏\n\nכדי שנוכל להתקדם לזימון תורים, יש למלא את השאלון הבא:\n${questionnaireUrl ? questionnaireUrl : ''}\n\nלאחר שתמלא/י את השאלון, אנא רשום/י "מילאתי".`;
+    if (botContentRecords.length > 0) {
+      return botContentRecords[0].content
+        .replace('{שם}', contactName)
+        .replace('{קישור_שאלון}', questionnaireUrl);
+    }
+    return `היי ${contactName}, קיבלנו את התשלום — תודה רבה! 🙏\n\nכדי להתקדם, בבקשה למלא את השאלון הבא:\n${questionnaireUrl}\n\nלאחר שתמלא/י, תשלח הודעה ממני שהשאלון התקבל. המתן/י להודעה שלי 🌸`;
   }
 
   if (trigger === 'questionnaire_completed_awaiting_payment') {
+    // Questionnaire done → send payment request only
+    const botContentRecords = await base44.asServiceRole.entities.BotContent.filter({ key: 'consultation_payment_only_request' });
     const paymentContent = await base44.asServiceRole.entities.ServiceContent.filter({ service_type: 'consultation', content_type: 'payment_link' });
     const paymentUrl = paymentContent.length > 0 ? paymentContent[0].url : '';
-    return `היי ${contactName}, ראינו שמילאת את השאלון, תודה רבה! 🙏\n\nכדי שנוכל להתקדם לזימון תורים, יש לבצע תשלום כאן:\n${paymentUrl ? paymentUrl : ''}\n\nלאחר ביצוע התשלום, אנא רשום/י "ביצעתי". התשלום ייבדק על ידי הצוות ויאושר בהקדם, ואז נמשיך בתהליך.`;
+    if (botContentRecords.length > 0) {
+      return botContentRecords[0].content
+        .replace('{קישור_תשלום}', paymentUrl);
+    }
+    return `מעולה! עכשיו נמשיך לשלב התשלום 💳\n\nהנה קישור לתשלום:\n${paymentUrl}\n\nלאחר ביצוע התשלום, תשלח הודעה ממני שהתשלום התקבל. המתן/י להודעה שלי 🌸`;
   }
 
   if (trigger === 'paid_legal') {
