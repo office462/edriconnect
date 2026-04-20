@@ -134,6 +134,17 @@ async function _handleBotMessageInternal(requestId, skipIfNoTrigger = false) {
   return null;
 }
 
+async function isWhatsAppBotEnabled() {
+  try {
+    const settings = await base44.entities.SystemSetting.filter({ key: 'whatsapp_bot_enabled' });
+    const setting = settings[0];
+    if (!setting) return false;
+    return setting.value === 'true' || setting.value === true;
+  } catch {
+    return false;
+  }
+}
+
 async function sendMessage(resultData, requestId, trigger, conversationId) {
   const pending = resultData?.pendingBotMessage;
   const effectiveConvId = pending?.conversationId || conversationId;
@@ -142,6 +153,13 @@ async function sendMessage(resultData, requestId, trigger, conversationId) {
 
   if (!effectiveConvId || !pending?.message) {
     console.log('sendMessage: ABORT - no conversation or message');
+    return null;
+  }
+
+  // Check if WhatsApp bot is enabled before sending
+  const botEnabled = await isWhatsAppBotEnabled();
+  if (!botEnabled) {
+    console.log('sendMessage: SKIPPING — WhatsApp bot is disabled (demo mode)');
     return null;
   }
 
