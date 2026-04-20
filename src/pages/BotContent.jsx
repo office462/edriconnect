@@ -13,6 +13,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Badge } from '@/components/ui/badge';
 import { Plus, Pencil, Trash2, MessageSquare, Search } from 'lucide-react';
+import EmojiPicker from '@/components/shared/EmojiPicker';
 import ViewToggle from '@/components/shared/ViewToggle';
 import BulkActions from '@/components/shared/BulkActions';
 import { toast } from 'sonner';
@@ -214,7 +215,13 @@ export default function BotContent() {
               <div><Label>שלב</Label><Input value={form.step_label} onChange={(e) => setForm({ ...form, step_label: e.target.value })} placeholder="שלב 3 — אישור תשלום" /></div>
             </div>
             <div><Label>כותרת *</Label><Input value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} /></div>
-            <div><Label>תוכן ההודעה *</Label><Textarea value={form.content} onChange={(e) => setForm({ ...form, content: e.target.value })} rows={5} /></div>
+            <div>
+              <div className="flex items-center justify-between mb-1">
+                <Label>תוכן ההודעה *</Label>
+                <EmojiPicker onSelect={(emoji) => setForm({ ...form, content: form.content + emoji })} />
+              </div>
+              <Textarea value={form.content} onChange={(e) => setForm({ ...form, content: e.target.value })} rows={5} />
+            </div>
 
           </div>
           <DialogFooter>
