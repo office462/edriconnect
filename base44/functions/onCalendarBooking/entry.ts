@@ -1,5 +1,12 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.23';
 
+function nextFridayAtLeast9DaysOut(fromDate) {
+  const target = new Date(fromDate);
+  target.setDate(target.getDate() + 9);
+  while (target.getDay() !== 5) target.setDate(target.getDate() + 1);
+  return target.toISOString().split('T')[0]; // YYYY-MM-DD
+}
+
 Deno.serve(async (req) => {
   try {
     const body = await req.json();
@@ -88,19 +95,16 @@ Deno.serve(async (req) => {
     const serviceType = matchingReq.service_type;
 
     if (serviceType === 'consultation') {
-      // Consultation requires two appointments (whatsapp + clinic)
-      const updatedWhatsapp = isWhatsapp ? startTimeRaw : matchingReq.scheduled_date_whatsapp;
-      const updatedClinic = isWhatsapp ? matchingReq.scheduled_date_clinic : startTimeRaw;
-
-      if (updatedWhatsapp && updatedClinic) {
+      if (isWhatsapp) {
+        // First booking: WhatsApp appointment — send full consultation link next
+        const targetFriday = nextFridayAtLeast9DaysOut(startDate);
+        updateData.status = 'scheduled_whatsapp';
+        updateData.target_friday = targetFriday;
+        if (botEnabled) updateData.pending_bot_message = 'send_full_consultation_link';
+      } else {
+        // Second booking: Full consultation — both appointments done
         updateData.status = 'scheduled';
         if (botEnabled) updateData.pending_bot_message = 'both_appointments_scheduled';
-      } else {
-        if (botEnabled) {
-          updateData.pending_bot_message = isWhatsapp
-            ? 'whatsapp_appointment_scheduled'
-            : 'clinic_appointment_scheduled';
-        }
       }
     } else {
       // All other service types — single appointment is enough

@@ -22,15 +22,15 @@ Deno.serve(async (req) => {
       'ready_to_schedule', 'paid_consultation', 'paid_legal', 'paid_lectures', 'paid_clinic', 'paid_post_lecture',
       'payment_confirmed_awaiting_questionnaire', 'questionnaire_completed_awaiting_payment',
       'waiting_for_admin_approval',
-      'whatsapp_appointment_scheduled', 'clinic_appointment_scheduled', 'both_appointments_scheduled',
+      'send_full_consultation_link', 'both_appointments_scheduled',
       'scheduled_consultation', 'scheduled_legal', 'scheduled_lectures', 'scheduled_clinic', 'scheduled_post_lecture',
       // Also support raw entity statuses so the frontend can trigger directly
-      'paid', 'questionnaire_completed', 'scheduled', 'whatsapp_message_to_check', 'in_review'
+      'paid', 'questionnaire_completed', 'scheduled', 'scheduled_whatsapp', 'whatsapp_message_to_check', 'in_review'
     ];
 
     // Raw entity statuses (paid, questionnaire_completed, etc.) need to be
     // processed through the normal automation logic first to determine the actual trigger
-    const rawStatuses = ['paid', 'questionnaire_completed', 'scheduled', 'whatsapp_message_to_check', 'in_review'];
+    const rawStatuses = ['paid', 'questionnaire_completed', 'scheduled', 'scheduled_whatsapp', 'whatsapp_message_to_check', 'in_review'];
     const isRawStatus = rawStatuses.includes(newStatus);
 
     if (oldStatus === 'previous' && knownTriggers.includes(newStatus)) {
@@ -228,8 +228,20 @@ Deno.serve(async (req) => {
       }
     }
 
+    // Handle status -> scheduled_whatsapp (consultation first booking)
+    if (newStatus === 'scheduled_whatsapp' && oldStatus !== 'scheduled_whatsapp') {
+      timelineEntries.push({
+        service_request_id: requestId,
+        event_type: 'status_change',
+        description: 'תור ווצאפ נקבע — ממתינים לקביעת ייעוץ מלא',
+        old_value: oldStatus,
+        new_value: 'scheduled_whatsapp',
+      });
+      botTrigger = 'send_full_consultation_link';
+    }
+
     // Handle appointment triggers
-    const appointmentTriggers = ['whatsapp_appointment_scheduled', 'clinic_appointment_scheduled', 'both_appointments_scheduled'];
+    const appointmentTriggers = ['send_full_consultation_link', 'both_appointments_scheduled'];
     if (!botTrigger) {
       if (appointmentTriggers.includes(newStatus)) {
         botTrigger = newStatus;
@@ -338,6 +350,9 @@ function computeTriggerForStatus(status, req) {
     if (req.payment_confirmed) return 'ready_to_schedule';
     return 'questionnaire_completed_awaiting_payment';
   }
+  if (status === 'scheduled_whatsapp') {
+    return 'send_full_consultation_link';
+  }
   if (status === 'scheduled') {
     const serviceType = req.service_type;
     if (req.pending_bot_message === 'both_appointments_scheduled') return 'both_appointments_scheduled';
@@ -362,15 +377,22 @@ async function buildBotMessage(base44, trigger, fullRequest, contactName) {
   }
 
   if (trigger === 'ready_to_schedule') {
-    const whatsappLinkContent = await base44.asServiceRole.entities.ServiceContent.filter({
-      service_type: 'consultation', content_type: 'external_link', sub_type: 'whatsapp_appointment'
-    });
-    const clinicLinkContent = await base44.asServiceRole.entities.ServiceContent.filter({
-      service_type: 'consultation', content_type: 'external_link', sub_type: 'clinic_appointment'
-    });
-    const whatsappUrl = whatsappLinkContent[0]?.url || '';
-    const clinicUrl = clinicLinkContent[0]?.url || '';
-    return `היי ${contactName}, קיבלתי את התשלום והשאלון ואעבור עליו בהקדם!\n\nחשוב מאוד! יש לזמן 2 תורים:\n\n1. תור לזמינות בווצאפ (קוד קופ״ח) - 10 דקות:\n${whatsappUrl}\n\n2. תור לייעוץ מותאם אישית - שעה וחצי:\n${clinicUrl}\n\nלאחר קביעת שני התורים, כתוב/י "קבעתי" ✓`;
+    // Send info message + WhatsApp link ONLY (full consultation link sent after WhatsApp booking)
+    const infoRecords = await base44.asServiceRole.entities.BotContent.filter({ key: 'consultation_info_two_meetings' });
+    if (!infoRecords.length) {
+      console.error('MISSING BotContent: consultation_info_two_meetings');
+      return '';
+    }
+    const infoText = infoRecords[0].content;
+
+    const whatsappLinkSettings = await base44.asServiceRole.entities.SystemSetting.filter({ key: 'consultation_whatsapp_link' });
+    if (!whatsappLinkSettings.length) {
+      console.error('MISSING SystemSetting: consultation_whatsapp_link');
+      return '';
+    }
+    const whatsappUrl = whatsappLinkSettings[0].value;
+
+    return `${infoText.replace('{שם}', contactName)}\n\nקישור לקביעת פגישת ווצאפ:\n${whatsappUrl}\n\nלאחר קביעת התור, כתוב/י "קבעתי" ✓`;
   }
 
   if (trigger === 'paid_consultation') {
@@ -481,24 +503,45 @@ async function buildBotMessage(base44, trigger, fullRequest, contactName) {
       : `היי ${contactName}, ראינו שמילאת את השאלון! תודה רבה, אעבור עליו בהקדם.`;
   }
 
-  if (trigger === 'whatsapp_appointment_scheduled') {
-    const timeStr = fullRequest.last_appointment_time_str || '';
-    return `✅ נקבע תור לזמינות בווצאפ!\nיום ושעה: ${timeStr}\n\nנשמח לדבר אז! 😊`;
-  }
+  if (trigger === 'send_full_consultation_link') {
+    // WhatsApp appointment booked → send link for full consultation with target Friday
+    const introRecords = await base44.asServiceRole.entities.BotContent.filter({ key: 'whatsapp_booked_second_link_intro' });
+    if (!introRecords.length) {
+      console.error('MISSING BotContent: whatsapp_booked_second_link_intro');
+      return '';
+    }
+    const introText = introRecords[0].content;
 
-  if (trigger === 'clinic_appointment_scheduled') {
-    const timeStr = fullRequest.last_appointment_time_str || '';
-    return `✅ נקבע תור לייעוץ מותאם אישית!\nיום ושעה: ${timeStr}`;
+    const linkSettings = await base44.asServiceRole.entities.SystemSetting.filter({ key: 'consultation_full_link' });
+    if (!linkSettings.length) {
+      console.error('MISSING SystemSetting: consultation_full_link');
+      return '';
+    }
+    const fullLink = linkSettings[0].value;
+
+    const targetFriday = fullRequest.target_friday || '';
+    const linkWithDate = targetFriday ? `${fullLink}?date=${targetFriday}` : fullLink;
+
+    const whatsappTimeStr = fullRequest.scheduled_date_whatsapp
+      ? new Date(fullRequest.scheduled_date_whatsapp).toLocaleString('he-IL', { timeZone: 'Asia/Jerusalem', weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' })
+      : '';
+
+    return `✅ נקבע תור לזמינות בווצאפ!\nמועד: ${whatsappTimeStr}\n\n${introText}\n${linkWithDate}\n\nלאחר קביעת התור, כתוב/י "קבעתי" ✓`;
   }
 
   if (trigger === 'both_appointments_scheduled') {
+    const confirmRecords = await base44.asServiceRole.entities.BotContent.filter({ key: 'both_appointments_booked_confirmation' });
     const whatsappTime = fullRequest.scheduled_date_whatsapp
       ? new Date(fullRequest.scheduled_date_whatsapp).toLocaleString('he-IL', { timeZone: 'Asia/Jerusalem', weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' })
       : '';
     const clinicTime = fullRequest.scheduled_date_clinic
       ? new Date(fullRequest.scheduled_date_clinic).toLocaleString('he-IL', { timeZone: 'Asia/Jerusalem', weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' })
       : '';
-    return `🎉 מעולה! שני התורים נקבעו:\n1. זמינות בווצאפ — ${whatsappTime}\n2. ייעוץ מותאם אישית — ${clinicTime}\n\nנשמח לראותך! 😊`;
+
+    if (confirmRecords.length > 0) {
+      return confirmRecords[0].content;
+    }
+    return `מצוין! שתי הפגישות נקבעו בהצלחה 🌷\n1. זמינות בווצאפ — ${whatsappTime}\n2. ייעוץ מלא — ${clinicTime}\n\nנתראה אז. בהצלחה!`;
   }
 
   return '';
