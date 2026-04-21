@@ -12,6 +12,10 @@ Deno.serve(async (req) => {
 
     console.log('Payment webhook received:', notificationText);
 
+    // 0. Check if WhatsApp bot is enabled
+    const botEnabledSettings = await base44.asServiceRole.entities.SystemSetting.filter({ key: 'whatsapp_bot_enabled' });
+    const botEnabled = botEnabledSettings.length > 0 && botEnabledSettings[0].value === 'true';
+
     // 1. Validate webhook secret (try env var first, then DB)
     const secretHeader = req.headers.get('X-Webhook-Secret') || '';
     let expectedSecret = Deno.env.get('PAYMENT_WEBHOOK_SECRET') || null;
@@ -83,8 +87,12 @@ Deno.serve(async (req) => {
     await base44.asServiceRole.entities.ServiceRequest.update(matchingReq.id, {
       status: 'paid',
       payment_confirmed: true,
-      ...(paymentBotTrigger ? { pending_bot_message: paymentBotTrigger } : {}),
+      ...(botEnabled && paymentBotTrigger ? { pending_bot_message: paymentBotTrigger } : {}),
     });
+
+    if (!botEnabled) {
+      console.log('Bot disabled — payment recorded but no bot message will be sent');
+    }
 
     // 5. Log to timeline
     await base44.asServiceRole.entities.ServiceRequestTimeline.create({
