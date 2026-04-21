@@ -55,15 +55,7 @@ export default function ServiceRequests() {
   const [editingReq, setEditingReq] = useState(null);
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [newReq, setNewReq] = useState({ contact_id: '', service_type: 'consultation', notes: '' });
-  const [hideTests, setHideTests] = useState(() => localStorage.getItem('hide_tests') !== 'false');
   const queryClient = useQueryClient();
-
-  const toggleHideTests = () => {
-    setHideTests(prev => {
-      localStorage.setItem('hide_tests', !prev ? 'true' : 'false');
-      return !prev;
-    });
-  };
 
   const { data: requests = [], isLoading } = useQuery({
     queryKey: ['service-requests'],
@@ -128,7 +120,6 @@ export default function ServiceRequests() {
   });
 
   const filtered = requests.filter(r => {
-    if (hideTests && r.is_test) return false;
     const matchSearch = !search || (r.contact_name || '').includes(search) || (r.contact_phone || '').includes(search);
     const matchStatus = statusFilter === 'all' || r.status === statusFilter;
     const matchType = typeFilter === 'all' || r.service_type === typeFilter;
@@ -158,13 +149,7 @@ export default function ServiceRequests() {
   return (
     <div className="space-y-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex items-center gap-4">
-          <h1 className="text-xl md:text-2xl font-bold">פניות שירות</h1>
-          <label className="flex items-center gap-2 text-sm text-muted-foreground cursor-pointer select-none">
-            <input type="checkbox" checked={hideTests} onChange={toggleHideTests} className="rounded border-border" />
-            הסתר בדיקות
-          </label>
-        </div>
+        <h1 className="text-xl md:text-2xl font-bold">פניות שירות</h1>
         <div className="flex items-center gap-2">
           <ViewToggle view={view} onChange={setView} />
           <Button onClick={() => setShowCreate(true)} className="gap-2" size="sm">

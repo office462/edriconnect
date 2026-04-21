@@ -27,15 +27,7 @@ export default function Contacts() {
   const [form, setForm] = useState(emptyContact);
   const [editId, setEditId] = useState(null);
   const [deleteTarget, setDeleteTarget] = useState(null);
-  const [hideTests, setHideTests] = useState(() => localStorage.getItem('hide_tests') !== 'false');
   const queryClient = useQueryClient();
-
-  const toggleHideTests = () => {
-    setHideTests(prev => {
-      localStorage.setItem('hide_tests', !prev ? 'true' : 'false');
-      return !prev;
-    });
-  };
 
   const { data: contacts = [], isLoading } = useQuery({
     queryKey: ['contacts'],
@@ -63,7 +55,6 @@ export default function Contacts() {
   });
 
   const filtered = contacts.filter(c => {
-    if (hideTests && c.is_test) return false;
     return (c.full_name || '').includes(search) || (c.phone || '').includes(search) || (c.email || '').includes(search);
   });
 
@@ -84,13 +75,7 @@ export default function Contacts() {
   return (
     <div className="space-y-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex items-center gap-4">
-          <h1 className="text-xl md:text-2xl font-bold">אנשי קשר</h1>
-          <label className="flex items-center gap-2 text-sm text-muted-foreground cursor-pointer select-none">
-            <input type="checkbox" checked={hideTests} onChange={toggleHideTests} className="rounded border-border" />
-            הסתר בדיקות
-          </label>
-        </div>
+        <h1 className="text-xl md:text-2xl font-bold">אנשי קשר</h1>
         <div className="flex items-center gap-2">
           <ViewToggle view={view} onChange={setView} />
           <Button onClick={() => { setForm(emptyContact); setEditId(null); setShowDialog(true); }} className="gap-2" size="sm">
