@@ -29,6 +29,7 @@ const statusOptions = [
   { value: 'in_review', label: 'בטיפול' },
   { value: 'questionnaire_completed', label: 'מילא שאלון' },
   { value: 'paid', label: 'שולם' },
+  { value: 'scheduled_whatsapp', label: 'תואם תור ווצאפ' },
   { value: 'scheduled', label: 'נקבע תור' },
   { value: 'completed', label: 'הושלם' },
 ];

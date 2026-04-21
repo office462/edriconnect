@@ -42,12 +42,13 @@
         "in_review",
         "questionnaire_completed",
         "paid",
+        "scheduled_whatsapp",
         "scheduled",
         "pending_human",
         "completed"
       ],
       "default": "new_lead",
-      "description": "\u05e1\u05d8\u05d8\u05d5\u05e1 \u05d4\u05e4\u05e0\u05d9\u05d9\u05d4 (pending_human = \u05e4\u05e0\u05d9\u05d4 \u05dc\u05d0\u05d3\u05de\u05d9\u05df)"
+      "description": "\u05e1\u05d8\u05d8\u05d5\u05e1 \u05d4\u05e4\u05e0\u05d9\u05d9\u05d4 (scheduled_whatsapp = \u05ea\u05d5\u05d0\u05dd \u05ea\u05d5\u05e8 \u05d5\u05d5\u05e6\u05d0\u05e4, pending_human = \u05e4\u05e0\u05d9\u05d4 \u05dc\u05d0\u05d3\u05de\u05d9\u05df)"
     },
     "current_step": {
       "type": "string",
@@ -55,17 +56,27 @@
     },
     "conversation_id": {
       "type": "string",
-      "description": "\u05de\u05d6\u05d4\u05d4 \u05e9\u05d9\u05d7\u05ea \u05d4\u05d1\u05d5\u05d8 \u05d1\u05d5\u05d5\u05d0\u05e6\u05d0\u05e4"
+      "description": "\u05de\u05d6\u05d4\u05d4 \u05e9\u05d9\u05d7\u05ea \u05d4\u05d1\u05d5\u05d8 \u05d1\u05d5\u05d5\u05e6\u05d0\u05e4"
     },
     "scheduled_date_whatsapp": {
       "type": "string",
       "format": "date-time",
-      "description": "\u05ea\u05d0\u05e8\u05d9\u05da \u05ea\u05d5\u05e8 \u05d5\u05d5\u05d0\u05e6\u05d0\u05e4 (\u05e9\u05e2\u05d5\u05df \u05d9\u05e9\u05e8\u05d0\u05dc)"
+      "description": "\u05ea\u05d0\u05e8\u05d9\u05da \u05ea\u05d5\u05e8 \u05d5\u05d5\u05e6\u05d0\u05e4 (\u05e9\u05e2\u05d5\u05df \u05d9\u05e9\u05e8\u05d0\u05dc)"
     },
     "scheduled_date_clinic": {
       "type": "string",
       "format": "date-time",
       "description": "\u05ea\u05d0\u05e8\u05d9\u05da \u05ea\u05d5\u05e8 \u05e7\u05dc\u05d9\u05e0\u05d9\u05e7\u05d4 (\u05e9\u05e2\u05d5\u05df \u05d9\u05e9\u05e8\u05d0\u05dc)"
+    },
+    "target_friday": {
+      "type": "string",
+      "format": "date",
+      "description": "\u05ea\u05d0\u05e8\u05d9\u05da \u05d9\u05e2\u05d3 \u05e9\u05d9\u05e9\u05d9 \u05dc\u05d9\u05d9\u05e2\u05d5\u05e5 \u05de\u05dc\u05d0 (YYYY-MM-DD, \u05de\u05d7\u05d5\u05e9\u05d1 \u05d0\u05d5\u05d8\u05d5\u05de\u05d8\u05d9\u05ea \u2014 \u05de\u05d9\u05e0\u05d9\u05de\u05d5\u05dd 9 \u05d9\u05de\u05d9\u05dd \u05d0\u05d7\u05e8\u05d9 \u05e4\u05d2\u05d9\u05e9\u05ea \u05d5\u05d5\u05e6\u05d0\u05e4)"
+    },
+    "followup_target_date": {
+      "type": "string",
+      "format": "date-time",
+      "description": "\u05ea\u05d0\u05e8\u05d9\u05da \u05d9\u05e2\u05d3 \u05dc\u05e4\u05d2\u05d9\u05e9\u05ea \u05d9\u05d9\u05e2\u05d5\u05e5 \u05de\u05dc\u05d0\u05d4 (\u05e9\u05d9\u05e9\u05d9, \u05de\u05d9\u05e0\u05d9\u05de\u05d5\u05dd 9 \u05d9\u05de\u05d9\u05dd \u05d0\u05d7\u05e8\u05d9 \u05e4\u05d2\u05d9\u05e9\u05ea \u05d5\u05d5\u05e6\u05d0\u05e4)"
     },
     "processing_start_date": {
       "type": "string",
@@ -101,7 +112,7 @@
     },
     "pending_bot_message": {
       "type": "string",
-      "description": "\u05d4\u05d5\u05d3\u05e2\u05ea \u05d1\u05d5\u05d8 \u05de\u05de\u05ea\u05d9\u05e0\u05d4 \u05dc\u05e9\u05dc\u05d9\u05d7\u05d4 \u05de\u05d4\u05e4\u05e8\u05d5\u05e0\u05d8\u05e0\u05d3 (\u05dc\u05d3\u05d5\u05d2\u05de\u05d4: questionnaire_completed, whatsapp_appointment_scheduled)"
+      "description": "\u05d4\u05d5\u05d3\u05e2\u05ea \u05d1\u05d5\u05d8 \u05de\u05de\u05ea\u05d9\u05e0\u05d4 \u05dc\u05e9\u05dc\u05d9\u05d7\u05d4 \u05de\u05d4\u05e4\u05e8\u05d5\u05e0\u05d8\u05e0\u05d3 (\u05dc\u05d3\u05d5\u05d2\u05de\u05d4: send_full_consultation_link, both_appointments_scheduled)"
     },
     "last_appointment_time_str": {
       "type": "string",
