@@ -39,13 +39,58 @@ Deno.serve(async (req) => {
           // Send via WhatsApp
           let cleanPhone = pendingMsg.contactPhone.replace(/[\s\-\+]/g, '');
           if (cleanPhone.startsWith('0')) cleanPhone = '972' + cleanPhone.substring(1);
-          const sendUrl = `https://api.green-api.com/waInstance${instanceId}/sendMessage/${token}`;
-          const sendResp = await fetch(sendUrl, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ chatId: `${cleanPhone}@c.us`, message: pendingMsg.message }),
-          });
-          if (sendResp.ok) {
+          const chatId = `${cleanPhone}@c.us`;
+          
+          // Extract file URLs from pending message
+          const pendingFileRegex = /https?:\/\/[^\s\n]+\.(pdf|png|jpg|jpeg|gif|webp)(\?[^\s\n]*)?/gi;
+          const pendingDriveRegex = /https?:\/\/drive\.google\.com\/(?:uc\?[^\s\n]*|file\/d\/[^\s\n]*)/gi;
+          const pendingFiles = [];
+          let pendingText = pendingMsg.message;
+          
+          const pendingDirectMatches = pendingMsg.message.match(pendingFileRegex) || [];
+          for (const url of pendingDirectMatches) {
+            const ext = url.split('?')[0].split('.').pop().toLowerCase();
+            const isPdf = ext === 'pdf';
+            pendingFiles.push({ url, fileName: isPdf ? 'document.pdf' : `image.${ext}`, type: isPdf ? 'file' : 'image' });
+            pendingText = pendingText.replace(url, '').trim();
+          }
+          const pendingDriveMatches = pendingMsg.message.match(pendingDriveRegex) || [];
+          for (const url of pendingDriveMatches) {
+            if (pendingDirectMatches.includes(url)) continue;
+            const isPdf = pendingMsg.message.toLowerCase().includes('pdf');
+            pendingFiles.push({ url, fileName: isPdf ? 'document.pdf' : 'image.jpg', type: isPdf ? 'file' : 'image' });
+            pendingText = pendingText.replace(url, '').trim();
+          }
+          pendingText = pendingText.replace(/\n{3,}/g, '\n\n').trim();
+          
+          // Send text
+          let pendingSendOk = true;
+          if (pendingText) {
+            const sendUrl = `https://api.green-api.com/waInstance${instanceId}/sendMessage/${token}`;
+            const sendResp = await fetch(sendUrl, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ chatId, message: pendingText }),
+            });
+            if (!sendResp.ok) pendingSendOk = false;
+          }
+          
+          // Send files
+          for (const pf of pendingFiles) {
+            try {
+              const pfUrl = `https://api.green-api.com/waInstance${instanceId}/sendFileByUrl/${token}`;
+              await fetch(pfUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ chatId, urlFile: pf.url, fileName: pf.fileName }),
+              });
+              console.log(`Pending file sent: ${pf.fileName}`);
+            } catch (pfErr) {
+              console.error(`Pending file error: ${pfErr.message}`);
+            }
+          }
+          
+          if (pendingSendOk) {
             // Log outgoing for daily count
             await base44.asServiceRole.entities.WhatsAppMessageLog.create({
               id_message: `out_${Date.now()}_pb`,
@@ -134,15 +179,76 @@ Deno.serve(async (req) => {
           continue;
         }
 
-        // Send reply via Green API
-        const sendUrl = `https://api.green-api.com/waInstance${instanceId}/sendMessage/${token}`;
-        const sendResponse = await fetch(sendUrl, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ chatId: msg.chat_id, message: botReply }),
-        });
+        // Extract file URLs from bot reply (PDFs, Drive files, images)
+        const fileUrlRegex = /https?:\/\/[^\s\n]+\.(pdf|png|jpg|jpeg|gif|webp)(\?[^\s\n]*)?/gi;
+        const driveFileRegex = /https?:\/\/drive\.google\.com\/(?:uc\?[^\s\n]*|file\/d\/[^\s\n]*)/gi;
+        
+        const fileUrls = [];
+        let textMessage = botReply;
+        
+        // Find PDF/image direct URLs
+        const directMatches = botReply.match(fileUrlRegex) || [];
+        for (const url of directMatches) {
+          const ext = url.split('?')[0].split('.').pop().toLowerCase();
+          const isPdf = ext === 'pdf';
+          fileUrls.push({ url, fileName: isPdf ? 'document.pdf' : `image.${ext}`, type: isPdf ? 'file' : 'image' });
+          textMessage = textMessage.replace(url, '').trim();
+        }
+        
+        // Find Google Drive URLs
+        const driveMatches = botReply.match(driveFileRegex) || [];
+        for (const url of driveMatches) {
+          if (directMatches.includes(url)) continue; // skip if already matched
+          // Check if it's a PDF or image based on context
+          const isPdf = botReply.toLowerCase().includes('pdf') && botReply.indexOf('pdf') < botReply.indexOf(url) + 50;
+          fileUrls.push({ url, fileName: isPdf ? 'document.pdf' : 'image.jpg', type: isPdf ? 'file' : 'image' });
+          textMessage = textMessage.replace(url, '').trim();
+        }
+        
+        // Clean up empty lines from removed URLs
+        textMessage = textMessage.replace(/\n{3,}/g, '\n\n').trim();
+        
+        // Send text message (without file URLs)
+        let sendSuccess = true;
+        if (textMessage) {
+          const sendUrl = `https://api.green-api.com/waInstance${instanceId}/sendMessage/${token}`;
+          const sendResponse = await fetch(sendUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ chatId: msg.chat_id, message: textMessage }),
+          });
+          if (!sendResponse.ok) {
+            const err = await sendResponse.json();
+            console.error(`Failed to send text to ${msg.chat_id}:`, err);
+            sendSuccess = false;
+          }
+        }
+        
+        // Send files as separate messages via sendFileByUrl
+        for (const file of fileUrls) {
+          try {
+            const fileApiUrl = `https://api.green-api.com/waInstance${instanceId}/sendFileByUrl/${token}`;
+            const fileResp = await fetch(fileApiUrl, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                chatId: msg.chat_id,
+                urlFile: file.url,
+                fileName: file.fileName,
+              }),
+            });
+            if (fileResp.ok) {
+              console.log(`File sent to ${msg.chat_id}: ${file.fileName}`);
+            } else {
+              const fileErr = await fileResp.json();
+              console.error(`Failed to send file ${file.fileName}:`, fileErr);
+            }
+          } catch (fileError) {
+            console.error(`Error sending file ${file.fileName}:`, fileError.message);
+          }
+        }
 
-        if (sendResponse.ok) {
+        if (sendSuccess) {
           await base44.asServiceRole.entities.WhatsAppMessageLog.update(msg.id, { status: 'replied' });
           // Log outgoing for daily count
           await base44.asServiceRole.entities.WhatsAppMessageLog.create({
@@ -153,11 +259,9 @@ Deno.serve(async (req) => {
             status: 'replied',
             chat_id: msg.chat_id,
           });
-          console.log(`Reply sent to ${msg.chat_id} for message ${msg.id_message}`);
+          console.log(`Reply sent to ${msg.chat_id} for message ${msg.id_message} (${fileUrls.length} files)`);
           processed++;
         } else {
-          const err = await sendResponse.json();
-          console.error(`Failed to send to ${msg.chat_id}:`, err);
           await base44.asServiceRole.entities.WhatsAppMessageLog.update(msg.id, { status: 'error' });
           errors++;
         }
