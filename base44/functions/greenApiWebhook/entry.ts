@@ -187,6 +187,16 @@ Deno.serve(async (req) => {
 
       if (sendResp.ok) {
         await base44.asServiceRole.entities.WhatsAppMessageLog.update(logRecord.id, { status: 'replied' });
+        // Log outgoing message for daily count (monitoring only, not blocking real-time replies)
+        await base44.asServiceRole.entities.WhatsAppMessageLog.create({
+          id_message: `out_${Date.now()}`,
+          phone,
+          direction: 'outgoing',
+          text: botReply.substring(0, 500),
+          status: 'replied',
+          chat_id: chatId,
+          conversation_id: conversationId,
+        });
         console.log(`Bot reply sent immediately to ${chatId} (${Math.round((Date.now() - pollStart) / 1000)}s)`);
         return Response.json({ ok: true, replied: true });
       } else {

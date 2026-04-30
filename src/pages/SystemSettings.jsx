@@ -12,6 +12,7 @@ import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
 import { Plus, Pencil, Save, Palette, GitBranch, MessageSquare, UserCircle } from 'lucide-react';
 import { toast } from 'sonner';
+import WhatsAppTestSender from '@/components/settings/WhatsAppTestSender';
 
 const categoryConfig = {
   details: { label: 'פרטים', icon: UserCircle, color: 'bg-purple-100 text-purple-700' },
@@ -112,6 +113,11 @@ export default function SystemSettings() {
           </CardTitle>
         </CardHeader>
         <CardContent>
+          {activeTab === 'whatsapp' && (
+            <div className="mb-6">
+              <WhatsAppTestSender />
+            </div>
+          )}
           {isLoading ? (
             <p className="text-center py-8 text-muted-foreground">טוען...</p>
           ) : filteredSettings.length === 0 ? (

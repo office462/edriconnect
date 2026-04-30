@@ -46,6 +46,15 @@ Deno.serve(async (req) => {
             body: JSON.stringify({ chatId: `${cleanPhone}@c.us`, message: pendingMsg.message }),
           });
           if (sendResp.ok) {
+            // Log outgoing for daily count
+            await base44.asServiceRole.entities.WhatsAppMessageLog.create({
+              id_message: `out_${Date.now()}_pb`,
+              phone: cleanPhone,
+              direction: 'outgoing',
+              text: (pendingMsg.message || '').substring(0, 500),
+              status: 'replied',
+              chat_id: `${cleanPhone}@c.us`,
+            });
             console.log(`processWhatsAppReplies: sent pending bot message to ${cleanPhone}`);
           }
 
@@ -135,6 +144,15 @@ Deno.serve(async (req) => {
 
         if (sendResponse.ok) {
           await base44.asServiceRole.entities.WhatsAppMessageLog.update(msg.id, { status: 'replied' });
+          // Log outgoing for daily count
+          await base44.asServiceRole.entities.WhatsAppMessageLog.create({
+            id_message: `out_${Date.now()}_pr`,
+            phone: msg.phone || msg.chat_id?.replace('@c.us', '') || '',
+            direction: 'outgoing',
+            text: botReply.substring(0, 500),
+            status: 'replied',
+            chat_id: msg.chat_id,
+          });
           console.log(`Reply sent to ${msg.chat_id} for message ${msg.id_message}`);
           processed++;
         } else {

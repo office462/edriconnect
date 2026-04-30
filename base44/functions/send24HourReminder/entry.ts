@@ -100,20 +100,22 @@ Deno.serve(async (req) => {
         content: personalizedMessage,
       });
 
-      // Also send via WhatsApp
+      // Send via WhatsApp with protection (delay + daily limit)
       if (request.contact_phone) {
         try {
-          const waInstanceId = Deno.env.get('GREEN_API_INSTANCE_ID');
-          const waToken = Deno.env.get('GREEN_API_TOKEN');
-          if (waInstanceId && waToken) {
-            let cleanPhone = request.contact_phone.replace(/[\s\-\+]/g, '');
-            if (cleanPhone.startsWith('0')) cleanPhone = '972' + cleanPhone.substring(1);
-            await fetch(`https://api.green-api.com/waInstance${waInstanceId}/sendMessage/${waToken}`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ chatId: `${cleanPhone}@c.us`, message: personalizedMessage }),
-            });
-            console.log('24h reminder also sent via WhatsApp to', cleanPhone);
+          const protResult = await base44.asServiceRole.functions.invoke('sendWithProtection', {
+            phone: request.contact_phone,
+            message: personalizedMessage,
+          });
+          if (protResult.sent) {
+            console.log(`24h reminder sent via WhatsApp to ${request.contact_phone} (${protResult.count}/${protResult.limit})`);
+          } else {
+            console.log(`24h reminder skipped for ${request.contact_name}: ${protResult.reason}`);
+            if (protResult.reason === 'daily_limit_reached') {
+              skippedCount++;
+              results.push({ requestId: request.id, contactName: request.contact_name, status: 'daily_limit_reached' });
+              continue;
+            }
           }
         } catch (waErr) {
           console.warn('Failed to send WhatsApp reminder:', waErr.message);
