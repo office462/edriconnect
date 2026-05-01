@@ -27,14 +27,11 @@ Deno.serve(async (req) => {
     const lectureMissing = [];
     for (const l of lectures) {
       const issues = [];
-      if (isDemo(l.video_url)) issues.push(`סרטון: ${l.video_url}`);
-      if (isDemo(l.price)) issues.push(`מחיר: ${l.price}`);
-      if (isDemo(l.image_url)) issues.push(`תמונה: ${l.image_url}`);
-      if (!l.video_url && l.lecture_type !== 'series') issues.push('סרטון: חסר לגמרי');
+      if (isDemo(l.video_url) || (!l.video_url && l.lecture_type !== 'series')) issues.push('חסר סרטון');
+      if (isDemo(l.image_url)) issues.push('חסר תמונה (תמונה קיימת אבל דמו)');
       const hasValidImage = l.image_url && !isDemo(l.image_url);
       if (!hasValidImage) {
-        if (isDemo(l.pdf_url)) issues.push(`PDF: ${l.pdf_url}`);
-        else if (!l.pdf_url) issues.push('PDF: חסר לגמרי');
+        if (isDemo(l.pdf_url) || !l.pdf_url) issues.push('חסר PDF (או תמונה)');
       }
       if (issues.length > 0) {
         lectureMissing.push({ title: l.title, type: l.lecture_type, issues });
@@ -45,8 +42,8 @@ Deno.serve(async (req) => {
     const scMissing = [];
     for (const sc of serviceContents) {
       const issues = [];
-      if (isDemo(sc.url)) issues.push(`קישור: ${sc.url}`);
-      if (!sc.url && sc.content_type !== 'agreement') issues.push('קישור: חסר לגמרי');
+      if (isDemo(sc.url)) issues.push('חסר קישור אמיתי');
+      else if (!sc.url && sc.content_type !== 'agreement') issues.push('חסר קישור');
       if (issues.length > 0) {
         scMissing.push({ title: sc.title, service_type: sc.service_type, content_type: sc.content_type, sub_type: sc.sub_type || '', issues });
       }
@@ -137,7 +134,7 @@ Deno.serve(async (req) => {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        name: `תוכן חסר — דר׳ ליאת אדרי — ${now}`,
+        name: `תוכן חסר — גרסה סופית — ${now}`,
         mimeType: 'application/vnd.google-apps.document',
       }),
     });
