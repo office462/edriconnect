@@ -28,12 +28,14 @@ Deno.serve(async (req) => {
     for (const l of lectures) {
       const issues = [];
       if (isDemo(l.video_url)) issues.push(`סרטון: ${l.video_url}`);
-      if (isDemo(l.pdf_url)) issues.push(`PDF: ${l.pdf_url}`);
       if (isDemo(l.price)) issues.push(`מחיר: ${l.price}`);
       if (isDemo(l.image_url)) issues.push(`תמונה: ${l.image_url}`);
       if (!l.video_url && l.lecture_type !== 'series') issues.push('סרטון: חסר לגמרי');
       const hasValidImage = l.image_url && !isDemo(l.image_url);
-      if (!l.pdf_url && !hasValidImage) issues.push('PDF: חסר לגמרי');
+      if (!hasValidImage) {
+        if (isDemo(l.pdf_url)) issues.push(`PDF: ${l.pdf_url}`);
+        else if (!l.pdf_url) issues.push('PDF: חסר לגמרי');
+      }
       if (issues.length > 0) {
         lectureMissing.push({ title: l.title, type: l.lecture_type, issues });
       }
