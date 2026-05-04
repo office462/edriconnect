@@ -198,6 +198,7 @@ export default function ServiceContentPage() {
               <div><Label>סוג תוכן *</Label><Select value={form.content_type} onValueChange={(v) => setForm({ ...form, content_type: v })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{contentTypes.map(t => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}</SelectContent></Select></div>
               <div><Label>שיוך שירות *</Label><Select value={form.service_type} onValueChange={(v) => setForm({ ...form, service_type: v })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{serviceTypes.map(s => <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}</SelectContent></Select></div>
             </div>
+            <div><Label>תת-סוג (sub_type)</Label><Input value={form.sub_type || ''} onChange={(e) => setForm({ ...form, sub_type: e.target.value })} placeholder="לדוגמה: legal_calendar, series_calendar, אוטיזם" /></div>
             <div><Label>קישור / URL</Label><Input value={form.url} onChange={(e) => setForm({ ...form, url: e.target.value })} placeholder="https://..." dir="ltr" /></div>
             <div><Label>תיאור</Label><Textarea value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} rows={3} /></div>
             <div className="grid grid-cols-2 gap-3"><div><Label>סדר הצגה</Label><Input type="number" value={form.sort_order} onChange={(e) => setForm({ ...form, sort_order: Number(e.target.value) })} /></div></div>
