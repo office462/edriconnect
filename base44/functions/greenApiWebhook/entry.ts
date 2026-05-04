@@ -177,17 +177,64 @@ Deno.serve(async (req) => {
     }
 
     if (botReply) {
-      // Send reply immediately via Green API
-      const sendUrl = `https://api.green-api.com/waInstance${instanceId}/sendMessage/${token}`;
-      const sendResp = await fetch(sendUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ chatId, message: botReply }),
-      });
+      // Extract file URLs from bot reply (PDFs, images)
+      const fileUrlRegex = /https?:\/\/[^\s\n]+\.(pdf|png|jpg|jpeg|gif|webp)(\?[^\s\n]*)?/gi;
+      const driveFileRegex = /https?:\/\/drive\.google\.com\/(?:uc\?[^\s\n]*|file\/d\/[^\s\n]*)/gi;
+      const fileUrls = [];
+      let textMessage = botReply;
 
-      if (sendResp.ok) {
+      const directMatches = botReply.match(fileUrlRegex) || [];
+      for (const url of directMatches) {
+        const ext = url.split('?')[0].split('.').pop().toLowerCase();
+        const isPdf = ext === 'pdf';
+        fileUrls.push({ url, fileName: isPdf ? 'document.pdf' : `image.${ext}`, type: isPdf ? 'file' : 'image' });
+        textMessage = textMessage.replace(url, '').trim();
+      }
+      const driveMatches = botReply.match(driveFileRegex) || [];
+      for (const url of driveMatches) {
+        if (directMatches.includes(url)) continue;
+        const isPdf = botReply.toLowerCase().includes('pdf');
+        fileUrls.push({ url, fileName: isPdf ? 'document.pdf' : 'image.jpg', type: isPdf ? 'file' : 'image' });
+        textMessage = textMessage.replace(url, '').trim();
+      }
+      textMessage = textMessage.replace(/\n{3,}/g, '\n\n').trim();
+
+      // Send text message (without file URLs)
+      let sendOk = true;
+      if (textMessage) {
+        const sendUrl = `https://api.green-api.com/waInstance${instanceId}/sendMessage/${token}`;
+        const sendResp = await fetch(sendUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ chatId, message: textMessage }),
+        });
+        if (!sendResp.ok) {
+          console.error('Failed to send immediate text reply:', await sendResp.text());
+          sendOk = false;
+        }
+      }
+
+      // Send files as separate messages via sendFileByUrl
+      for (const file of fileUrls) {
+        try {
+          const fileApiUrl = `https://api.green-api.com/waInstance${instanceId}/sendFileByUrl/${token}`;
+          const fileResp = await fetch(fileApiUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ chatId, urlFile: file.url, fileName: file.fileName }),
+          });
+          if (fileResp.ok) {
+            console.log(`File sent immediately: ${file.fileName}`);
+          } else {
+            console.error(`Failed to send file ${file.fileName}:`, await fileResp.text());
+          }
+        } catch (fileErr) {
+          console.error(`Error sending file ${file.fileName}:`, fileErr.message);
+        }
+      }
+
+      if (sendOk) {
         await base44.asServiceRole.entities.WhatsAppMessageLog.update(logRecord.id, { status: 'replied' });
-        // Log outgoing message for daily count (monitoring only, not blocking real-time replies)
         await base44.asServiceRole.entities.WhatsAppMessageLog.create({
           id_message: `out_${Date.now()}`,
           phone,
@@ -197,10 +244,10 @@ Deno.serve(async (req) => {
           chat_id: chatId,
           conversation_id: conversationId,
         });
-        console.log(`Bot reply sent immediately to ${chatId} (${Math.round((Date.now() - pollStart) / 1000)}s)`);
-        return Response.json({ ok: true, replied: true });
+        console.log(`Bot reply sent immediately to ${chatId} (${Math.round((Date.now() - pollStart) / 1000)}s, ${fileUrls.length} files)`);
+        return Response.json({ ok: true, replied: true, files: fileUrls.length });
       } else {
-        console.error('Failed to send immediate reply:', await sendResp.text());
+        console.error('Failed to send immediate reply');
       }
     }
 
