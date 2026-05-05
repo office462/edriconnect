@@ -20,7 +20,7 @@ export default function WhatsAppTestSender() {
     }
     setSending(true);
     try {
-      const res = await base44.functions.invoke('sendWhatsAppMessage', { phone, message });
+      const res = await base44.functions.invoke('sendWhatsAppMessage', { phone, message, force: true });
       if (res.data?.ok) {
         if (res.data.skipped) {
           toast.warning('הבוט כבוי (מצב דמו) — ההודעה לא נשלחה');
