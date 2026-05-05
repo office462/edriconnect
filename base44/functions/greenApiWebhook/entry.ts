@@ -103,19 +103,36 @@ Deno.serve(async (req) => {
       return Response.json({ ok: true, skipped: true, reason: 'blocked' });
     }
 
-    // ===== SEND RANDOM FRIENDLY THINKING MESSAGE =====
+    // ===== SEND FRIENDLY THINKING MESSAGE =====
     try {
-      const thinkingMessages = [
-        'היי! קיבלתי 🙌 רגע בודקת ואחזור אליך מיד',
-        'קיבלתי את ההודעה! ⏳ רגע מכינה לך תשובה...',
-        'שנייה אחת! 💫 מטפלת בזה עכשיו',
-        'הודעה התקבלה ✨ עוד רגע קט חוזרת אליך!',
-        'רגע, אני כאן! 🌸 מעבדת את המידע...',
-        'קיבלתי! 😊 תן/י לי רגע ואחזור עם תשובה',
-        'אני על זה! 💜 חוזרת אליך תיכף',
-        'מעולה, התקבל! 🎯 רגע מכינה תשובה מותאמת',
-      ];
-      const thinkingMsg = thinkingMessages[Math.floor(Math.random() * thinkingMessages.length)];
+      // Check if this is the first message from this phone (new conversation)
+      const existingLogs = await base44.asServiceRole.entities.WhatsAppMessageLog.filter({ phone: phone });
+      const isFirstMessage = existingLogs.length === 0;
+
+      let thinkingMsg;
+      if (isFirstMessage) {
+        // First contact — clear and welcoming
+        const firstMessages = [
+          'נעים מאוד! 🌸 איתך עוד רגע קט',
+          'שלום וברוכ/ה הבא/ה! 💜 רגע ואחזור אליך',
+          'נעים להכיר! ✨ עוד שנייה איתך',
+        ];
+        thinkingMsg = firstMessages[Math.floor(Math.random() * firstMessages.length)];
+      } else {
+        // Returning contact — warm and casual
+        const returningMessages = [
+          'היי! קיבלתי 🙌 רגע בודקת ואחזור אליך מיד',
+          'קיבלתי את ההודעה! ⏳ רגע מכינה לך תשובה...',
+          'שנייה אחת! 💫 מטפלת בזה עכשיו',
+          'הודעה התקבלה ✨ עוד רגע קט חוזרת אליך!',
+          'רגע, אני כאן! 🌸 מעבדת את המידע...',
+          'קיבלתי! 😊 תן/י לי רגע ואחזור עם תשובה',
+          'אני על זה! 💜 חוזרת אליך תיכף',
+          'מעולה, התקבל! 🎯 רגע מכינה תשובה מותאמת',
+        ];
+        thinkingMsg = returningMessages[Math.floor(Math.random() * returningMessages.length)];
+      }
+
       const typingUrl = `https://api.green-api.com/waInstance${instanceId}/sendMessage/${token}`;
       await fetch(typingUrl, {
         method: 'POST',
