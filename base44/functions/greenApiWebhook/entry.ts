@@ -1,5 +1,62 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
 
+// Extract file URLs (PDF, images, Google Drive) from text and return clean text + file list
+function extractFilesFromText(text) {
+  const fileUrls = [];
+  let cleanText = text;
+  const alreadyMatched = new Set();
+
+  // Match direct file URLs (.pdf, .png, .jpg, .jpeg, .gif, .webp)
+  const directRegex = /https?:\/\/[^\s\n\)]+\.(pdf|png|jpg|jpeg|gif|webp)(\?[^\s\n\)]*)?/gi;
+  const directMatches = text.match(directRegex) || [];
+  for (const url of directMatches) {
+    if (alreadyMatched.has(url)) continue;
+    alreadyMatched.add(url);
+    const ext = url.split('?')[0].split('.').pop().toLowerCase();
+    const isPdf = ext === 'pdf';
+    fileUrls.push({ url, fileName: isPdf ? 'document.pdf' : `image.${ext}` });
+    cleanText = cleanText.replace(url, '');
+  }
+
+  // Match Google Drive URLs (uc?export=view or file/d/...)
+  const driveRegex = /https?:\/\/drive\.google\.com\/(?:uc\?[^\s\n\)]*|file\/d\/[^\s\n\)]*)/gi;
+  const driveMatches = text.match(driveRegex) || [];
+  for (const url of driveMatches) {
+    if (alreadyMatched.has(url)) continue;
+    alreadyMatched.add(url);
+    // Check nearby context for PDF hint
+    const urlIndex = text.indexOf(url);
+    const nearby = text.substring(Math.max(0, urlIndex - 100), urlIndex + url.length + 50).toLowerCase();
+    const isPdf = nearby.includes('pdf') || nearby.includes('מאמר') || nearby.includes('הסכם') || nearby.includes('מסמך');
+    fileUrls.push({ url, fileName: isPdf ? 'document.pdf' : 'image.jpg' });
+    cleanText = cleanText.replace(url, '');
+  }
+
+  // Clean up leftover empty lines and whitespace
+  cleanText = cleanText.replace(/\n{3,}/g, '\n\n').replace(/[ \t]+\n/g, '\n').trim();
+
+  return { textMessage: cleanText, fileUrls };
+}
+
+// Send a file via Green API sendFileByUrl
+async function sendFileByUrl(instanceId, token, chatId, urlFile, fileName) {
+  try {
+    const apiUrl = `https://api.green-api.com/waInstance${instanceId}/sendFileByUrl/${token}`;
+    const resp = await fetch(apiUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ chatId, urlFile, fileName, caption: '' }),
+    });
+    if (resp.ok) {
+      console.log(`File sent: ${fileName} to ${chatId}`);
+    } else {
+      console.error(`Failed to send file ${fileName}:`, await resp.text());
+    }
+  } catch (err) {
+    console.error(`Error sending file ${fileName}:`, err.message);
+  }
+}
+
 Deno.serve(async (req) => {
   try {
     // ===== SECURITY: Validate webhook secret =====
@@ -177,27 +234,8 @@ Deno.serve(async (req) => {
     }
 
     if (botReply) {
-      // Extract file URLs from bot reply (PDFs, images)
-      const fileUrlRegex = /https?:\/\/[^\s\n]+\.(pdf|png|jpg|jpeg|gif|webp)(\?[^\s\n]*)?/gi;
-      const driveFileRegex = /https?:\/\/drive\.google\.com\/(?:uc\?[^\s\n]*|file\/d\/[^\s\n]*)/gi;
-      const fileUrls = [];
-      let textMessage = botReply;
-
-      const directMatches = botReply.match(fileUrlRegex) || [];
-      for (const url of directMatches) {
-        const ext = url.split('?')[0].split('.').pop().toLowerCase();
-        const isPdf = ext === 'pdf';
-        fileUrls.push({ url, fileName: isPdf ? 'document.pdf' : `image.${ext}`, type: isPdf ? 'file' : 'image' });
-        textMessage = textMessage.replace(url, '').trim();
-      }
-      const driveMatches = botReply.match(driveFileRegex) || [];
-      for (const url of driveMatches) {
-        if (directMatches.includes(url)) continue;
-        const isPdf = botReply.toLowerCase().includes('pdf');
-        fileUrls.push({ url, fileName: isPdf ? 'document.pdf' : 'image.jpg', type: isPdf ? 'file' : 'image' });
-        textMessage = textMessage.replace(url, '').trim();
-      }
-      textMessage = textMessage.replace(/\n{3,}/g, '\n\n').trim();
+      // Extract files and clean text
+      const { textMessage, fileUrls } = extractFilesFromText(botReply);
 
       // Send text message (without file URLs)
       let sendOk = true;
@@ -216,21 +254,7 @@ Deno.serve(async (req) => {
 
       // Send files as separate messages via sendFileByUrl
       for (const file of fileUrls) {
-        try {
-          const fileApiUrl = `https://api.green-api.com/waInstance${instanceId}/sendFileByUrl/${token}`;
-          const fileResp = await fetch(fileApiUrl, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ chatId, urlFile: file.url, fileName: file.fileName }),
-          });
-          if (fileResp.ok) {
-            console.log(`File sent immediately: ${file.fileName}`);
-          } else {
-            console.error(`Failed to send file ${file.fileName}:`, await fileResp.text());
-          }
-        } catch (fileErr) {
-          console.error(`Error sending file ${file.fileName}:`, fileErr.message);
-        }
+        await sendFileByUrl(instanceId, token, chatId, file.url, file.fileName);
       }
 
       if (sendOk) {
