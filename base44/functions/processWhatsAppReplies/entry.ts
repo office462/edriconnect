@@ -11,9 +11,23 @@ Deno.serve(async (req) => {
     // Check if WhatsApp bot is enabled
     const botSettings = await base44.asServiceRole.entities.SystemSetting.filter({ key: 'whatsapp_bot_enabled' });
     const botEnabled = botSettings.length > 0 && botSettings[0].value === 'true';
+    
+    // Load test phones list (active even when bot is disabled)
+    let testPhonesList = [];
     if (!botEnabled) {
-      console.log('processWhatsAppReplies: bot disabled, skipping');
-      return Response.json({ ok: true, processed: 0, reason: 'bot_disabled' });
+      const testPhoneSettings = await base44.asServiceRole.entities.SystemSetting.filter({ key: 'whatsapp_test_phones' });
+      const testPhonesStr = testPhoneSettings.length > 0 ? testPhoneSettings[0].value : '';
+      testPhonesList = testPhonesStr.split(',').map(p => {
+        let clean = p.trim().replace(/[\s\-\+]/g, '');
+        if (clean.startsWith('0')) clean = '972' + clean.substring(1);
+        return clean;
+      }).filter(Boolean);
+      
+      if (testPhonesList.length === 0) {
+        console.log('processWhatsAppReplies: bot disabled, no test phones, skipping');
+        return Response.json({ ok: true, processed: 0, reason: 'bot_disabled' });
+      }
+      console.log(`processWhatsAppReplies: bot disabled, but processing test phones: ${testPhonesList.join(', ')}`);
     }
 
     // ===== PROCESS PENDING BOT MESSAGES — clear flags but don't send (bot already confirmed enabled above) =====
@@ -25,6 +39,15 @@ Deno.serve(async (req) => {
 
     for (const sr of pendingBotRequests) {
       try {
+        // If bot is disabled, only process test phones
+        if (!botEnabled) {
+          let srPhone = (sr.contact_phone || '').replace(/[\s\-\+]/g, '');
+          if (srPhone.startsWith('0')) srPhone = '972' + srPhone.substring(1);
+          if (!testPhonesList.includes(srPhone)) {
+            console.log(`processWhatsAppReplies: skipping pending bot msg for ${srPhone} (not a test phone)`);
+            continue;
+          }
+        }
         console.log(`processWhatsAppReplies: found pending_bot_message=${sr.pending_bot_message} for ${sr.id}`);
 
         // Call onServiceRequestUpdate to generate the message
@@ -132,6 +155,14 @@ Deno.serve(async (req) => {
 
     for (const msg of pending) {
       try {
+        // If bot is disabled, only process test phones
+        if (!botEnabled) {
+          let msgPhone = (msg.phone || msg.chat_id?.replace('@c.us', '') || '').replace(/[\s\-\+]/g, '');
+          if (msgPhone.startsWith('0')) msgPhone = '972' + msgPhone.substring(1);
+          if (!testPhonesList.includes(msgPhone)) {
+            continue;
+          }
+        }
         // Timeout: if message is older than 5 minutes, mark as timeout
         const createdAt = new Date(msg.created_date);
         const ageMs = Date.now() - createdAt.getTime();

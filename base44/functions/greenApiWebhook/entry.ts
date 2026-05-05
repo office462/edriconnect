@@ -50,12 +50,23 @@ Deno.serve(async (req) => {
 
     const base44 = createClientFromRequest(req);
 
-    // ===== CHECK IF WHATSAPP BOT IS ENABLED =====
+    // ===== CHECK IF WHATSAPP BOT IS ENABLED (or test phone) =====
     const botEnabledSettings = await base44.asServiceRole.entities.SystemSetting.filter({ key: 'whatsapp_bot_enabled' });
     const botEnabled = botEnabledSettings.length > 0 && botEnabledSettings[0].value === 'true';
+    
     if (!botEnabled) {
-      console.log('WhatsApp bot is disabled (demo mode). Skipping.');
-      return Response.json({ ok: true, skipped: true, reason: 'bot_disabled' });
+      // Check if this phone is in the test list
+      const testPhoneSettings = await base44.asServiceRole.entities.SystemSetting.filter({ key: 'whatsapp_test_phones' });
+      const testPhonesStr = testPhoneSettings.length > 0 ? testPhoneSettings[0].value : '';
+      const testPhones = testPhonesStr.split(',').map(p => p.trim().replace(/[\s\-\+]/g, '')).filter(Boolean);
+      // Normalize test phones to 972 format
+      const normalizedTestPhones = testPhones.map(p => p.startsWith('0') ? '972' + p.substring(1) : p);
+      
+      if (!normalizedTestPhones.includes(phone)) {
+        console.log(`WhatsApp bot is disabled and ${phone} is not a test phone. Skipping.`);
+        return Response.json({ ok: true, skipped: true, reason: 'bot_disabled' });
+      }
+      console.log(`WhatsApp bot is disabled but ${phone} is a test phone — processing.`);
     }
 
     // ===== IDEMPOTENCY =====
