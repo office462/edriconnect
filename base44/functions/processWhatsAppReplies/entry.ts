@@ -1,59 +1,5 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
 
-// Extract file URLs (PDF, images, Google Drive) from text and return clean text + file list
-function extractFilesFromText(text) {
-  const fileUrls = [];
-  let cleanText = text;
-  const alreadyMatched = new Set();
-
-  // Match direct file URLs (.pdf, .png, .jpg, .jpeg, .gif, .webp)
-  const directRegex = /https?:\/\/[^\s\n\)]+\.(pdf|png|jpg|jpeg|gif|webp)(\?[^\s\n\)]*)?/gi;
-  const directMatches = text.match(directRegex) || [];
-  for (const url of directMatches) {
-    if (alreadyMatched.has(url)) continue;
-    alreadyMatched.add(url);
-    const ext = url.split('?')[0].split('.').pop().toLowerCase();
-    const isPdf = ext === 'pdf';
-    fileUrls.push({ url, fileName: isPdf ? 'document.pdf' : `image.${ext}` });
-    cleanText = cleanText.replace(url, '');
-  }
-
-  // Match Google Drive URLs (uc?export=view or file/d/...)
-  const driveRegex = /https?:\/\/drive\.google\.com\/(?:uc\?[^\s\n\)]*|file\/d\/[^\s\n\)]*)/gi;
-  const driveMatches = text.match(driveRegex) || [];
-  for (const url of driveMatches) {
-    if (alreadyMatched.has(url)) continue;
-    alreadyMatched.add(url);
-    const urlIndex = text.indexOf(url);
-    const nearby = text.substring(Math.max(0, urlIndex - 100), urlIndex + url.length + 50).toLowerCase();
-    const isPdf = nearby.includes('pdf') || nearby.includes('מאמר') || nearby.includes('הסכם') || nearby.includes('מסמך');
-    fileUrls.push({ url, fileName: isPdf ? 'document.pdf' : 'image.jpg' });
-    cleanText = cleanText.replace(url, '');
-  }
-
-  cleanText = cleanText.replace(/\n{3,}/g, '\n\n').replace(/[ \t]+\n/g, '\n').trim();
-  return { textMessage: cleanText, fileUrls };
-}
-
-// Send a file via Green API sendFileByUrl
-async function sendFileByUrl(instanceId, token, chatId, urlFile, fileName) {
-  try {
-    const apiUrl = `https://api.green-api.com/waInstance${instanceId}/sendFileByUrl/${token}`;
-    const resp = await fetch(apiUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ chatId, urlFile, fileName, caption: '' }),
-    });
-    if (resp.ok) {
-      console.log(`File sent: ${fileName} to ${chatId}`);
-    } else {
-      console.error(`Failed to send file ${fileName}:`, await resp.text());
-    }
-  } catch (err) {
-    console.error(`Error sending file ${fileName}:`, err.message);
-  }
-}
-
 Deno.serve(async (req) => {
   try {
     const base44 = createClientFromRequest(req);
@@ -95,8 +41,27 @@ Deno.serve(async (req) => {
           if (cleanPhone.startsWith('0')) cleanPhone = '972' + cleanPhone.substring(1);
           const chatId = `${cleanPhone}@c.us`;
           
-          // Extract files and clean text
-          const { textMessage: pendingText, fileUrls: pendingFiles } = extractFilesFromText(pendingMsg.message);
+          // Extract file URLs from pending message
+          const pendingFileRegex = /https?:\/\/[^\s\n]+\.(pdf|png|jpg|jpeg|gif|webp)(\?[^\s\n]*)?/gi;
+          const pendingDriveRegex = /https?:\/\/drive\.google\.com\/(?:uc\?[^\s\n]*|file\/d\/[^\s\n]*)/gi;
+          const pendingFiles = [];
+          let pendingText = pendingMsg.message;
+          
+          const pendingDirectMatches = pendingMsg.message.match(pendingFileRegex) || [];
+          for (const url of pendingDirectMatches) {
+            const ext = url.split('?')[0].split('.').pop().toLowerCase();
+            const isPdf = ext === 'pdf';
+            pendingFiles.push({ url, fileName: isPdf ? 'document.pdf' : `image.${ext}`, type: isPdf ? 'file' : 'image' });
+            pendingText = pendingText.replace(url, '').trim();
+          }
+          const pendingDriveMatches = pendingMsg.message.match(pendingDriveRegex) || [];
+          for (const url of pendingDriveMatches) {
+            if (pendingDirectMatches.includes(url)) continue;
+            const isPdf = pendingMsg.message.toLowerCase().includes('pdf');
+            pendingFiles.push({ url, fileName: isPdf ? 'document.pdf' : 'image.jpg', type: isPdf ? 'file' : 'image' });
+            pendingText = pendingText.replace(url, '').trim();
+          }
+          pendingText = pendingText.replace(/\n{3,}/g, '\n\n').trim();
           
           // Send text
           let pendingSendOk = true;
@@ -112,7 +77,17 @@ Deno.serve(async (req) => {
           
           // Send files
           for (const pf of pendingFiles) {
-            await sendFileByUrl(instanceId, token, chatId, pf.url, pf.fileName);
+            try {
+              const pfUrl = `https://api.green-api.com/waInstance${instanceId}/sendFileByUrl/${token}`;
+              await fetch(pfUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ chatId, urlFile: pf.url, fileName: pf.fileName }),
+              });
+              console.log(`Pending file sent: ${pf.fileName}`);
+            } catch (pfErr) {
+              console.error(`Pending file error: ${pfErr.message}`);
+            }
           }
           
           if (pendingSendOk) {
@@ -204,8 +179,34 @@ Deno.serve(async (req) => {
           continue;
         }
 
-        // Extract files and clean text
-        const { textMessage, fileUrls } = extractFilesFromText(botReply);
+        // Extract file URLs from bot reply (PDFs, Drive files, images)
+        const fileUrlRegex = /https?:\/\/[^\s\n]+\.(pdf|png|jpg|jpeg|gif|webp)(\?[^\s\n]*)?/gi;
+        const driveFileRegex = /https?:\/\/drive\.google\.com\/(?:uc\?[^\s\n]*|file\/d\/[^\s\n]*)/gi;
+        
+        const fileUrls = [];
+        let textMessage = botReply;
+        
+        // Find PDF/image direct URLs
+        const directMatches = botReply.match(fileUrlRegex) || [];
+        for (const url of directMatches) {
+          const ext = url.split('?')[0].split('.').pop().toLowerCase();
+          const isPdf = ext === 'pdf';
+          fileUrls.push({ url, fileName: isPdf ? 'document.pdf' : `image.${ext}`, type: isPdf ? 'file' : 'image' });
+          textMessage = textMessage.replace(url, '').trim();
+        }
+        
+        // Find Google Drive URLs
+        const driveMatches = botReply.match(driveFileRegex) || [];
+        for (const url of driveMatches) {
+          if (directMatches.includes(url)) continue; // skip if already matched
+          // Check if it's a PDF or image based on context
+          const isPdf = botReply.toLowerCase().includes('pdf') && botReply.indexOf('pdf') < botReply.indexOf(url) + 50;
+          fileUrls.push({ url, fileName: isPdf ? 'document.pdf' : 'image.jpg', type: isPdf ? 'file' : 'image' });
+          textMessage = textMessage.replace(url, '').trim();
+        }
+        
+        // Clean up empty lines from removed URLs
+        textMessage = textMessage.replace(/\n{3,}/g, '\n\n').trim();
         
         // Send text message (without file URLs)
         let sendSuccess = true;
@@ -223,9 +224,28 @@ Deno.serve(async (req) => {
           }
         }
         
-        // Send files as separate messages
+        // Send files as separate messages via sendFileByUrl
         for (const file of fileUrls) {
-          await sendFileByUrl(instanceId, token, msg.chat_id, file.url, file.fileName);
+          try {
+            const fileApiUrl = `https://api.green-api.com/waInstance${instanceId}/sendFileByUrl/${token}`;
+            const fileResp = await fetch(fileApiUrl, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                chatId: msg.chat_id,
+                urlFile: file.url,
+                fileName: file.fileName,
+              }),
+            });
+            if (fileResp.ok) {
+              console.log(`File sent to ${msg.chat_id}: ${file.fileName}`);
+            } else {
+              const fileErr = await fileResp.json();
+              console.error(`Failed to send file ${file.fileName}:`, fileErr);
+            }
+          } catch (fileError) {
+            console.error(`Error sending file ${file.fileName}:`, fileError.message);
+          }
         }
 
         if (sendSuccess) {
