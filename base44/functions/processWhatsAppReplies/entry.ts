@@ -3,9 +3,29 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
 Deno.serve(async (req) => {
   try {
     const base44 = createClientFromRequest(req);
-    const user = await base44.auth.me();
-    if (user?.role !== 'admin') {
-      return Response.json({ error: 'Forbidden: Admin access required' }, { status: 403 });
+    
+    // This function runs as a scheduled automation (no user context).
+    // Validate that the caller is either an admin or a service role (automation).
+    let isAuthorized = false;
+    try {
+      const user = await base44.auth.me();
+      if (user?.role === 'admin') isAuthorized = true;
+    } catch (_) {
+      // auth.me() throws in automation context — that's expected
+    }
+    // If no admin user, check if this is a service-role call (automation/scheduled)
+    // by verifying we can do a service-role operation
+    if (!isAuthorized) {
+      try {
+        // Quick service-role check — if this succeeds, we're running as service role
+        await base44.asServiceRole.entities.SystemSetting.filter({ key: 'whatsapp_bot_enabled' });
+        isAuthorized = true;
+      } catch (_) {
+        // Not service role either
+      }
+    }
+    if (!isAuthorized) {
+      return Response.json({ error: 'Forbidden: Admin or automation access required' }, { status: 403 });
     }
 
     // Check if WhatsApp bot is enabled
