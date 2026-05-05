@@ -103,44 +103,54 @@ Deno.serve(async (req) => {
       return Response.json({ ok: true, skipped: true, reason: 'blocked' });
     }
 
-    // ===== SEND FRIENDLY THINKING MESSAGE (after idempotency check) =====
-    try {
-      // Check if this is the first message from this phone (new conversation)
-      const existingLogs = await base44.asServiceRole.entities.WhatsAppMessageLog.filter({ phone: phone });
-      const isFirstMessage = existingLogs.length === 0;
+    // ===== SEND FRIENDLY THINKING MESSAGE (skip for farewell/greeting messages) =====
+    const farewellPatterns = [
+      'תודה', 'תודה רבה', 'יום טוב', 'יום נפלא', 'שבוע טוב', 'שבוע נהדר',
+      'גם לך', 'גם לך תודה', 'לילה טוב', 'ערב טוב', 'בוקר טוב',
+      'שמחתי', 'שמחתי לשוחח', 'להתראות', 'ביי', 'bye', 'thanks',
+      'חג שמח', 'שבת שלום', 'סופ"ש נעים', 'סוף שבוע טוב',
+    ];
+    const textLower = text.trim().replace(/[!?.،,\u200f\u200e]/g, '').trim();
+    const isFarewellMessage = farewellPatterns.some(p => textLower === p || textLower.startsWith(p + ' '));
 
-      let thinkingMsg;
-      if (isFirstMessage) {
-        // First contact — clear and welcoming
-        const firstMessages = [
-          'נעים מאוד! 🌸 איתך עוד רגע קט',
-          'שלום וברוכ/ה הבא/ה! 💜 רגע ואחזור אליך',
-          'נעים להכיר! ✨ עוד שנייה איתך',
-        ];
-        thinkingMsg = firstMessages[Math.floor(Math.random() * firstMessages.length)];
-      } else {
-        // Returning contact — warm and casual
-        const returningMessages = [
-          'היי! קיבלתי 🙌 רגע בודקת ואחזור אליך מיד',
-          'קיבלתי את ההודעה! ⏳ רגע מכינה לך תשובה...',
-          'שנייה אחת! 💫 מטפלת בזה עכשיו',
-          'הודעה התקבלה ✨ עוד רגע קט חוזרת אליך!',
-          'רגע, אני כאן! 🌸 מעבדת את המידע...',
-          'קיבלתי! 😊 תן/י לי רגע ואחזור עם תשובה',
-          'אני על זה! 💜 חוזרת אליך תיכף',
-          'מעולה, התקבל! 🎯 רגע מכינה תשובה מותאמת',
-        ];
-        thinkingMsg = returningMessages[Math.floor(Math.random() * returningMessages.length)];
+    if (!isFarewellMessage) {
+      try {
+        const existingLogs = await base44.asServiceRole.entities.WhatsAppMessageLog.filter({ phone: phone });
+        const isFirstMessage = existingLogs.length === 0;
+
+        let thinkingMsg;
+        if (isFirstMessage) {
+          const firstMessages = [
+            'נעים מאוד! 🌸 איתך עוד רגע קט',
+            'שלום וברוכ/ה הבא/ה! 💜 רגע ואחזור אליך',
+            'נעים להכיר! ✨ עוד שנייה איתך',
+          ];
+          thinkingMsg = firstMessages[Math.floor(Math.random() * firstMessages.length)];
+        } else {
+          const returningMessages = [
+            'היי! קיבלתי 🙌 רגע בודקת ואחזור אליך מיד',
+            'קיבלתי את ההודעה! ⏳ רגע מכינה לך תשובה...',
+            'שנייה אחת! 💫 מטפלת בזה עכשיו',
+            'הודעה התקבלה ✨ עוד רגע קט חוזרת אליך!',
+            'רגע, אני כאן! 🌸 מעבדת את המידע...',
+            'קיבלתי! 😊 תן/י לי רגע ואחזור עם תשובה',
+            'אני על זה! 💜 חוזרת אליך תיכף',
+            'מעולה, התקבל! 🎯 רגע מכינה תשובה מותאמת',
+          ];
+          thinkingMsg = returningMessages[Math.floor(Math.random() * returningMessages.length)];
+        }
+
+        const typingUrl = `https://api.green-api.com/waInstance${instanceId}/sendMessage/${token}`;
+        await fetch(typingUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ chatId, message: thinkingMsg }),
+        });
+      } catch (typErr) {
+        console.warn('Thinking message failed:', typErr.message);
       }
-
-      const typingUrl = `https://api.green-api.com/waInstance${instanceId}/sendMessage/${token}`;
-      await fetch(typingUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ chatId, message: thinkingMsg }),
-      });
-    } catch (typErr) {
-      console.warn('Thinking message failed:', typErr.message);
+    } else {
+      console.log(`Farewell message detected ("${text}"), skipping thinking message`);
     }
 
     // ===== FIND CONTACT =====
