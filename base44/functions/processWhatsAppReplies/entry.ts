@@ -57,8 +57,15 @@ Deno.serve(async (req) => {
     const allRequests = await base44.asServiceRole.entities.ServiceRequest.list('-updated_date', 50);
     const pendingBotRequests = allRequests.filter(r => r.pending_bot_message && r.pending_bot_message.length > 0);
 
+    let pendingSentCount = 0;
     for (const sr of pendingBotRequests) {
       try {
+        // Rate limit: delay between different phones to avoid WhatsApp spam detection
+        if (pendingSentCount > 0) {
+          console.log('processWhatsAppReplies: waiting 5s between sends (anti-spam)');
+          await new Promise(r => setTimeout(r, 5000));
+        }
+
         // If bot is disabled, only process test phones
         if (!botEnabled) {
           let srPhone = (sr.contact_phone || '').replace(/[\s\-\+]/g, '');
@@ -137,6 +144,7 @@ Deno.serve(async (req) => {
               chat_id: `${cleanPhone}@c.us`,
             });
             console.log(`processWhatsAppReplies: sent pending bot message to ${cleanPhone}`);
+            pendingSentCount++;
           }
 
           // Also add to bot conversation if available
