@@ -289,7 +289,7 @@ Deno.serve(async (req) => {
       await base44.asServiceRole.entities.ServiceRequestTimeline.create(entry);
     }
 
-    // Build and return bot message
+    // Build and send bot message immediately via WhatsApp
     let botSent = false;
     if (botTrigger) {
       const fullRequest = await base44.asServiceRole.entities.ServiceRequest.get(requestId);
@@ -315,7 +315,7 @@ Deno.serve(async (req) => {
       const botMessage = typeof botResult === 'object' && botResult.message ? botResult.message : botResult;
       const followUpMessages = typeof botResult === 'object' && botResult.followUpMessages ? botResult.followUpMessages : [];
 
-      if (botMessage) {
+      if (botMessage && contactPhone) {
         const isValidObjectId = (id) => /^[a-f0-9]{24}$/i.test(id);
         const passedConversationId = data.conversation_id || null;
         const contactId = fullRequest.contact_id || data.contact_id || null;
@@ -325,13 +325,125 @@ Deno.serve(async (req) => {
             ? passedConversationId
             : null;
 
+        // === SEND IMMEDIATELY VIA WHATSAPP (like onCalendarBooking) ===
+        const instanceId = Deno.env.get('GREEN_API_INSTANCE_ID');
+        const token = Deno.env.get('GREEN_API_TOKEN');
+
+        let cleanPhone = contactPhone.replace(/[\s\-\+]/g, '');
+        if (cleanPhone.startsWith('0')) cleanPhone = '972' + cleanPhone.substring(1);
+        const chatId = `${cleanPhone}@c.us`;
+
+        // Parse [FILE:url:filename] tags
+        const fileTagRegex = /\[FILE:(https?:\/\/[^\]:]+):([^\]]+)\]/g;
+        const files = [];
+        let textMessage = botMessage;
+        let match;
+        while ((match = fileTagRegex.exec(botMessage)) !== null) {
+          files.push({ url: match[1], fileName: match[2] });
+          textMessage = textMessage.replace(match[0], '');
+        }
+        textMessage = textMessage.replace(/\n{3,}/g, '\n\n').trim();
+
+        // Send text
+        let sendOk = true;
+        if (textMessage) {
+          const sendUrl = `https://api.green-api.com/waInstance${instanceId}/sendMessage/${token}`;
+          const sendResp = await fetch(sendUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ chatId, message: textMessage }),
+          });
+          if (!sendResp.ok) {
+            console.error('Failed to send immediate message:', await sendResp.text());
+            sendOk = false;
+          }
+        }
+
+        // Send files from main message
+        for (const file of files) {
+          try {
+            const fileUrl = `https://api.green-api.com/waInstance${instanceId}/sendFileByUrl/${token}`;
+            await fetch(fileUrl, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ chatId, urlFile: file.url, fileName: file.fileName }),
+            });
+            console.log(`File sent: ${file.fileName}`);
+          } catch (fileErr) {
+            console.error(`File send error: ${fileErr.message}`);
+          }
+        }
+
+        // Send follow-up messages (location photo + post_directions_prompt)
+        for (const followUp of followUpMessages) {
+          try {
+            await new Promise(r => setTimeout(r, 1500));
+            const fuFileRegex = /\[FILE:(https?:\/\/[^\]:]+):([^\]]+)\]/g;
+            const fuMatch = fuFileRegex.exec(followUp);
+            if (fuMatch) {
+              const fileUrl = `https://api.green-api.com/waInstance${instanceId}/sendFileByUrl/${token}`;
+              await fetch(fileUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ chatId, urlFile: fuMatch[1], fileName: fuMatch[2] }),
+              });
+              console.log(`Follow-up file sent: ${fuMatch[2]}`);
+            } else {
+              const sendUrl = `https://api.green-api.com/waInstance${instanceId}/sendMessage/${token}`;
+              await fetch(sendUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ chatId, message: followUp }),
+              });
+              console.log(`Follow-up text sent: ${followUp.substring(0, 50)}...`);
+            }
+          } catch (fuErr) {
+            console.error(`Follow-up send error: ${fuErr.message}`);
+          }
+        }
+
+        if (sendOk) {
+          botSent = true;
+
+          // Log outgoing message
+          await base44.asServiceRole.entities.WhatsAppMessageLog.create({
+            id_message: `out_${Date.now()}_auto`,
+            phone: cleanPhone,
+            direction: 'outgoing',
+            text: botMessage.substring(0, 500),
+            status: 'replied',
+            chat_id: chatId,
+          });
+
+          // Add to bot conversation if available
+          if (effectiveConversationId) {
+            try {
+              const conv = await base44.asServiceRole.agents.getConversation(effectiveConversationId);
+              await base44.asServiceRole.agents.addMessage(conv, { role: 'assistant', content: botMessage });
+            } catch (convErr) {
+              console.warn('Conv error:', convErr.message);
+            }
+          }
+
+          // Log in timeline
+          await base44.asServiceRole.entities.ServiceRequestTimeline.create({
+            service_request_id: requestId,
+            event_type: 'message_sent',
+            description: `הודעת ${botTrigger} נשלחה מיידית (onServiceRequestUpdate)`,
+          });
+
+          // Clear pending flag
+          await base44.asServiceRole.entities.ServiceRequest.update(requestId, { pending_bot_message: '' });
+          console.log(`Immediate bot message sent to ${cleanPhone} for trigger ${botTrigger}`);
+        }
+
         return Response.json({
           ok: true,
           updates,
           timelineCount: timelineEntries.length,
           botTrigger,
-          botSent: false,
-          pendingBotMessage: {
+          botSent,
+          pendingBotMessage: sendOk ? null : {
             conversationId: effectiveConversationId,
             message: botMessage,
             followUpMessages,
