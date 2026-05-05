@@ -103,10 +103,19 @@ Deno.serve(async (req) => {
       return Response.json({ ok: true, skipped: true, reason: 'blocked' });
     }
 
-    // ===== SEND FRIENDLY THINKING MESSAGE =====
-    // Send immediately so the user knows the bot received their message
+    // ===== SEND RANDOM FRIENDLY THINKING MESSAGE =====
     try {
-      const thinkingMsg = 'היי! קיבלתי את ההודעה שלך, רגע מעבד/ת ואחזור אליך מיד 😊';
+      const thinkingMessages = [
+        'היי! קיבלתי 🙌 רגע בודקת ואחזור אליך מיד',
+        'קיבלתי את ההודעה! ⏳ רגע מכינה לך תשובה...',
+        'שנייה אחת! 💫 מטפלת בזה עכשיו',
+        'הודעה התקבלה ✨ עוד רגע קט חוזרת אליך!',
+        'רגע, אני כאן! 🌸 מעבדת את המידע...',
+        'קיבלתי! 😊 תן/י לי רגע ואחזור עם תשובה',
+        'אני על זה! 💜 חוזרת אליך תיכף',
+        'מעולה, התקבל! 🎯 רגע מכינה תשובה מותאמת',
+      ];
+      const thinkingMsg = thinkingMessages[Math.floor(Math.random() * thinkingMessages.length)];
       const typingUrl = `https://api.green-api.com/waInstance${instanceId}/sendMessage/${token}`;
       await fetch(typingUrl, {
         method: 'POST',
