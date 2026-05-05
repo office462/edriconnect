@@ -23,6 +23,7 @@ Deno.serve(async (req) => {
       'payment_confirmed_awaiting_questionnaire', 'questionnaire_completed_awaiting_payment',
       'waiting_for_admin_approval',
       'send_full_consultation_link', 'both_appointments_scheduled',
+      'legal_ready_for_meeting',
       'scheduled_consultation', 'scheduled_legal', 'scheduled_lectures', 'scheduled_clinic', 'scheduled_post_lecture',
       // Also support raw entity statuses so the frontend can trigger directly
       'paid', 'questionnaire_completed', 'scheduled', 'scheduled_whatsapp', 'whatsapp_message_to_check', 'in_review'
@@ -172,6 +173,11 @@ Deno.serve(async (req) => {
         old_value: oldStatus,
         new_value: 'in_review',
       });
+
+      // Legal track: after documents received → send meeting scheduling message
+      if (data.service_type === 'legal') {
+        botTrigger = 'legal_ready_for_meeting';
+      }
     }
 
     // Handle status -> scheduled
@@ -366,7 +372,10 @@ function computeTriggerForStatus(status, req) {
     return triggerMap[serviceType] || null;
   }
   if (status === 'whatsapp_message_to_check') return 'waiting_for_admin_approval';
-  if (status === 'in_review') return null; // no bot message for in_review
+  if (status === 'in_review') {
+    if (req.service_type === 'legal') return 'legal_ready_for_meeting';
+    return null;
+  }
   return null;
 }
 
@@ -431,6 +440,25 @@ async function buildBotMessage(base44, trigger, fullRequest, contactName) {
         .replace('{קישור_תשלום}', paymentUrl);
     }
     return `מעולה! עכשיו נמשיך לשלב התשלום 💳\n\nהנה קישור לתשלום:\n${paymentUrl}\n\nלאחר ביצוע התשלום, תשלח הודעה ממני שהתשלום התקבל. המתן/י להודעה שלי 🌸`;
+  }
+
+  if (trigger === 'legal_ready_for_meeting') {
+    // Legal track step 7: send meeting info + calendar booking link
+    const legalMeetingRecords = await base44.asServiceRole.entities.BotContent.filter({ key: 'legal_meeting' });
+    const legalMeetingText = legalMeetingRecords.length > 0 ? legalMeetingRecords[0].content : '';
+
+    const calendarContent = await base44.asServiceRole.entities.ServiceContent.filter({ service_type: 'legal', content_type: 'external_link', sub_type: 'legal_calendar' });
+    const calendarUrl = calendarContent.length > 0 ? calendarContent[0].url : '';
+
+    const calendarMsgRecords = await base44.asServiceRole.entities.BotContent.filter({ key: 'calendar_booking_message' });
+    const calendarMsgText = calendarMsgRecords.length > 0
+      ? calendarMsgRecords[0].content.replace('{קישור_יומן}', calendarUrl)
+      : `לתיאום שיחה לחצי על הקישור:\n${calendarUrl}`;
+
+    let msg = '';
+    if (legalMeetingText) msg += legalMeetingText;
+    if (calendarMsgText) msg += (msg ? '\n\n' : '') + calendarMsgText;
+    return msg || `לתיאום פגישה:\n${calendarUrl}`;
   }
 
   if (trigger === 'paid_legal') {
