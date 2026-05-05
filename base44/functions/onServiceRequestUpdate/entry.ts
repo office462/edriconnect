@@ -575,12 +575,36 @@ async function buildBotMessage(base44, trigger, fullRequest, contactName) {
   return '';
 }
 
-// --- Helper: fetch appointment message from BotContent ---
+// --- Helper: fetch appointment message from BotContent + location photo ---
 async function getAppointmentMessage(base44, timeStr) {
   const records = await base44.asServiceRole.entities.BotContent.filter({ key: 'appointment_scheduled' });
+  let msg = '';
   if (records.length > 0 && records[0].content) {
-    return records[0].content.replace('{time}', timeStr);
+    msg = records[0].content;
+    // If timeStr is empty (manual scheduling), remove the time line entirely
+    if (!timeStr) {
+      msg = msg.replace(/\n?.*\{time\}.*\n?/g, '');
+    } else {
+      msg = msg.replace('{time}', timeStr);
+    }
+  } else {
+    // Fallback
+    msg = timeStr
+      ? `✅ נקבע מועד לפגישה! 🎉\nיום ושעה: ${timeStr}\n\nנשמח לראותך! 😊`
+      : `✅ נקבע מועד לפגישה! 🎉\n\nנשמח לראותך! 😊`;
   }
-  // Fallback in case BotContent record is missing
-  return `✅ נקבע מועד לפגישה! 🎉\nיום ושעה: ${timeStr}\n\nנשמח לראותך! 😊\nרוצה לקבל הנחיות הגעה למשרד? 🗺️`;
+
+  // Append location photo from ServiceContent if available
+  try {
+    const locationContent = await base44.asServiceRole.entities.ServiceContent.filter({
+      service_type: 'general', content_type: 'image', sub_type: 'location_photo'
+    });
+    if (locationContent.length > 0 && locationContent[0].url) {
+      msg += `\n\n[FILE:${locationContent[0].url}:תמונת מיקום המשרד.jpg]`;
+    }
+  } catch (e) {
+    console.warn('Could not fetch location photo:', e.message);
+  }
+
+  return msg;
 }

@@ -103,7 +103,7 @@ Deno.serve(async (req) => {
       return Response.json({ ok: true, skipped: true, reason: 'blocked' });
     }
 
-    // ===== SEND FRIENDLY THINKING MESSAGE =====
+    // ===== SEND FRIENDLY THINKING MESSAGE (after idempotency check) =====
     try {
       // Check if this is the first message from this phone (new conversation)
       const existingLogs = await base44.asServiceRole.entities.WhatsAppMessageLog.filter({ phone: phone });
@@ -233,8 +233,8 @@ Deno.serve(async (req) => {
     let botReply = '';
     const pollStart = Date.now();
 
-    while (Date.now() - pollStart < 25000) {
-      await new Promise(r => setTimeout(r, 1000)); // wait 1s between checks
+    while (Date.now() - pollStart < 15000) {
+      await new Promise(r => setTimeout(r, 800)); // wait 800ms between checks
 
       const freshConv = await base44.asServiceRole.agents.getConversation(conversationId);
       const msgs = freshConv.messages || [];

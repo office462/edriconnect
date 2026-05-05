@@ -49,15 +49,13 @@ Deno.serve(async (req) => {
           }
         }
 
-        // ===== DEDUP: Check if this trigger was already sent in the last 5 minutes =====
+        // ===== DEDUP: Check if this trigger was already sent in the last 10 minutes =====
         const recentTimeline = await base44.asServiceRole.entities.ServiceRequestTimeline.filter({ service_request_id: sr.id });
-        const fiveMinAgo = Date.now() - 5 * 60 * 1000;
+        const tenMinAgo = Date.now() - 10 * 60 * 1000;
         const triggerName = sr.pending_bot_message;
         const alreadySent = recentTimeline.some(t => {
           if (t.event_type !== 'message_sent') return false;
-          if (new Date(t.created_date).getTime() <= fiveMinAgo) return false;
-          // Match trigger name in description — covers both sources
-          // e.g. "הודעת paid_legal נשלחה אוטומטית" or "הודעת paid_legal נשלחה אוטומטית (processWhatsAppReplies)"
+          if (new Date(t.created_date).getTime() <= tenMinAgo) return false;
           return t.description?.includes(triggerName);
         });
         if (alreadySent) {
