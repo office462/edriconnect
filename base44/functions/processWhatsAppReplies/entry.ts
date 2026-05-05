@@ -118,7 +118,7 @@ Deno.serve(async (req) => {
             if (!sendResp.ok) pendingSendOk = false;
           }
           
-          // Send files
+          // Send files from main message
           for (const pf of pendingFiles) {
             try {
               const pfUrl = `https://api.green-api.com/waInstance${instanceId}/sendFileByUrl/${token}`;
@@ -130,6 +130,35 @@ Deno.serve(async (req) => {
               console.log(`Pending file sent: ${pf.fileName}`);
             } catch (pfErr) {
               console.error(`Pending file error: ${pfErr.message}`);
+            }
+          }
+
+          // Send follow-up messages (location photo + post_directions_prompt)
+          const followUps = pendingMsg.followUpMessages || [];
+          for (const followUp of followUps) {
+            try {
+              await new Promise(r => setTimeout(r, 1500));
+              const fuFileRegex = /\[FILE:(https?:\/\/[^\]:]+):([^\]]+)\]/g;
+              const fuMatch = fuFileRegex.exec(followUp);
+              if (fuMatch) {
+                const pfUrl = `https://api.green-api.com/waInstance${instanceId}/sendFileByUrl/${token}`;
+                await fetch(pfUrl, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ chatId, urlFile: fuMatch[1], fileName: fuMatch[2] }),
+                });
+                console.log(`Follow-up file sent: ${fuMatch[2]}`);
+              } else {
+                const sendUrl = `https://api.green-api.com/waInstance${instanceId}/sendMessage/${token}`;
+                await fetch(sendUrl, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ chatId, message: followUp }),
+                });
+                console.log(`Follow-up text sent: ${followUp.substring(0, 50)}...`);
+              }
+            } catch (fuErr) {
+              console.error(`Follow-up send error: ${fuErr.message}`);
             }
           }
           

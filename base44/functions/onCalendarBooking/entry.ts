@@ -187,7 +187,7 @@ Deno.serve(async (req) => {
             }
           }
 
-          // Send files
+          // Send files from main message
           for (const file of files) {
             try {
               const fileUrl = `https://api.green-api.com/waInstance${instanceId}/sendFileByUrl/${token}`;
@@ -199,6 +199,37 @@ Deno.serve(async (req) => {
               console.log(`File sent immediately: ${file.fileName}`);
             } catch (fileErr) {
               console.error(`File send error: ${fileErr.message}`);
+            }
+          }
+
+          // Send follow-up messages (location photo + post_directions_prompt)
+          const followUps = pendingMsg.followUpMessages || [];
+          for (const followUp of followUps) {
+            try {
+              await new Promise(r => setTimeout(r, 1500)); // brief delay between messages
+              const fuFileRegex = /\[FILE:(https?:\/\/[^\]:]+):([^\]]+)\]/g;
+              const fuMatch = fuFileRegex.exec(followUp);
+              if (fuMatch) {
+                // It's a file message
+                const fileUrl = `https://api.green-api.com/waInstance${instanceId}/sendFileByUrl/${token}`;
+                await fetch(fileUrl, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ chatId, urlFile: fuMatch[1], fileName: fuMatch[2] }),
+                });
+                console.log(`Follow-up file sent: ${fuMatch[2]}`);
+              } else {
+                // It's a text message
+                const sendUrl = `https://api.green-api.com/waInstance${instanceId}/sendMessage/${token}`;
+                await fetch(sendUrl, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ chatId, message: followUp }),
+                });
+                console.log(`Follow-up text sent: ${followUp.substring(0, 50)}...`);
+              }
+            } catch (fuErr) {
+              console.error(`Follow-up send error: ${fuErr.message}`);
             }
           }
 

@@ -61,7 +61,10 @@ Deno.serve(async (req) => {
         }
       }
 
-      const botMessage = await buildBotMessage(base44, effectiveTrigger, fullRequest, contactName);
+      const botResult = await buildBotMessage(base44, effectiveTrigger, fullRequest, contactName);
+
+      const botMessage = typeof botResult === 'object' && botResult.message ? botResult.message : botResult;
+      const followUpMessages = typeof botResult === 'object' && botResult.followUpMessages ? botResult.followUpMessages : [];
 
       if (botMessage) {
         const isValidObjectId = (id) => /^[a-f0-9]{24}$/i.test(id);
@@ -74,6 +77,7 @@ Deno.serve(async (req) => {
           pendingBotMessage: {
             conversationId: effectiveConversationId,
             message: botMessage,
+            followUpMessages,
             contactName,
             contactPhone,
             botTrigger: effectiveTrigger,
@@ -305,7 +309,11 @@ Deno.serve(async (req) => {
 
       console.log(`Processing bot trigger: ${botTrigger}`, { contactName, contactPhone, conversationId });
 
-      const botMessage = await buildBotMessage(base44, botTrigger, fullRequest, contactName);
+      const botResult = await buildBotMessage(base44, botTrigger, fullRequest, contactName);
+
+      // botResult can be a string or { message, followUpMessages }
+      const botMessage = typeof botResult === 'object' && botResult.message ? botResult.message : botResult;
+      const followUpMessages = typeof botResult === 'object' && botResult.followUpMessages ? botResult.followUpMessages : [];
 
       if (botMessage) {
         const isValidObjectId = (id) => /^[a-f0-9]{24}$/i.test(id);
@@ -326,6 +334,7 @@ Deno.serve(async (req) => {
           pendingBotMessage: {
             conversationId: effectiveConversationId,
             message: botMessage,
+            followUpMessages,
             contactName,
             contactPhone,
             botTrigger,
@@ -499,27 +508,7 @@ async function buildBotMessage(base44, trigger, fullRequest, contactName) {
     return `היי ${contactName}, קיבלנו את התשלום! תודה רבה. 🙏`;
   }
 
-  if (trigger === 'scheduled_consultation') {
-    const timeStr = fullRequest.last_appointment_time_str || '';
-    return await getAppointmentMessage(base44, timeStr);
-  }
-
-  if (trigger === 'scheduled_legal') {
-    const timeStr = fullRequest.last_appointment_time_str || '';
-    return await getAppointmentMessage(base44, timeStr);
-  }
-
-  if (trigger === 'scheduled_lectures') {
-    const timeStr = fullRequest.last_appointment_time_str || '';
-    return await getAppointmentMessage(base44, timeStr);
-  }
-
-  if (trigger === 'scheduled_clinic') {
-    const timeStr = fullRequest.last_appointment_time_str || '';
-    return await getAppointmentMessage(base44, timeStr);
-  }
-
-  if (trigger === 'scheduled_post_lecture') {
+  if (trigger === 'scheduled_consultation' || trigger === 'scheduled_legal' || trigger === 'scheduled_lectures' || trigger === 'scheduled_clinic' || trigger === 'scheduled_post_lecture') {
     const timeStr = fullRequest.last_appointment_time_str || '';
     return await getAppointmentMessage(base44, timeStr);
   }
@@ -575,36 +564,45 @@ async function buildBotMessage(base44, trigger, fullRequest, contactName) {
   return '';
 }
 
-// --- Helper: fetch appointment message from BotContent + location photo ---
+// --- Helper: fetch appointment message + follow-up messages (location photo + post_directions_prompt) ---
 async function getAppointmentMessage(base44, timeStr) {
   const records = await base44.asServiceRole.entities.BotContent.filter({ key: 'appointment_scheduled' });
   let msg = '';
   if (records.length > 0 && records[0].content) {
     msg = records[0].content;
-    // If timeStr is empty (manual scheduling), remove the time line entirely
     if (!timeStr) {
       msg = msg.replace(/\n?.*\{time\}.*\n?/g, '');
     } else {
       msg = msg.replace('{time}', timeStr);
     }
   } else {
-    // Fallback
     msg = timeStr
       ? `✅ נקבע מועד לפגישה! 🎉\nיום ושעה: ${timeStr}\n\nנשמח לראותך! 😊`
       : `✅ נקבע מועד לפגישה! 🎉\n\nנשמח לראותך! 😊`;
   }
 
-  // Append location photo from ServiceContent if available
+  // Fetch follow-up messages (location photo + post_directions_prompt)
+  const followUpMessages = [];
+
   try {
     const locationContent = await base44.asServiceRole.entities.ServiceContent.filter({
       service_type: 'general', content_type: 'image', sub_type: 'location_photo'
     });
     if (locationContent.length > 0 && locationContent[0].url) {
-      msg += `\n\n[FILE:${locationContent[0].url}:תמונת מיקום המשרד.jpg]`;
+      followUpMessages.push(`[FILE:${locationContent[0].url}:תמונת מיקום המשרד.jpg]`);
     }
   } catch (e) {
     console.warn('Could not fetch location photo:', e.message);
   }
 
-  return msg;
+  try {
+    const postPrompt = await base44.asServiceRole.entities.BotContent.filter({ key: 'post_directions_prompt' });
+    if (postPrompt.length > 0 && postPrompt[0].content) {
+      followUpMessages.push(postPrompt[0].content);
+    }
+  } catch (e) {
+    console.warn('Could not fetch post_directions_prompt:', e.message);
+  }
+
+  return { message: msg, followUpMessages };
 }
