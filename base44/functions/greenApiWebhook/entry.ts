@@ -177,17 +177,53 @@ Deno.serve(async (req) => {
     }
 
     if (botReply) {
-      // Send reply immediately via Green API
-      const sendUrl = `https://api.green-api.com/waInstance${instanceId}/sendMessage/${token}`;
-      const sendResp = await fetch(sendUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ chatId, message: botReply }),
-      });
+      // Parse [FILE:url:filename] tags from bot reply
+      const fileTagRegex = /\[FILE:(https?:\/\/[^\]:]+):([^\]]+)\]/g;
+      const filesToSend = [];
+      let cleanText = botReply;
+      let match;
+      while ((match = fileTagRegex.exec(botReply)) !== null) {
+        filesToSend.push({ url: match[1], fileName: match[2] });
+        cleanText = cleanText.replace(match[0], '');
+      }
+      cleanText = cleanText.replace(/\n{3,}/g, '\n\n').trim();
 
-      if (sendResp.ok) {
+      // 1. Send clean text message
+      let sendOk = true;
+      if (cleanText) {
+        const sendUrl = `https://api.green-api.com/waInstance${instanceId}/sendMessage/${token}`;
+        const sendResp = await fetch(sendUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ chatId, message: cleanText }),
+        });
+        if (!sendResp.ok) {
+          console.error('Failed to send text:', await sendResp.text());
+          sendOk = false;
+        }
+      }
+
+      // 2. Send each file as a separate message
+      for (const file of filesToSend) {
+        try {
+          const fileUrl = `https://api.green-api.com/waInstance${instanceId}/sendFileByUrl/${token}`;
+          const fileResp = await fetch(fileUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ chatId, urlFile: file.url, fileName: file.fileName, caption: '' }),
+          });
+          if (fileResp.ok) {
+            console.log(`File sent: ${file.fileName}`);
+          } else {
+            console.error(`Failed to send file ${file.fileName}:`, await fileResp.text());
+          }
+        } catch (fileErr) {
+          console.error(`File send error: ${fileErr.message}`);
+        }
+      }
+
+      if (sendOk) {
         await base44.asServiceRole.entities.WhatsAppMessageLog.update(logRecord.id, { status: 'replied' });
-        // Log outgoing message for daily count (monitoring only, not blocking real-time replies)
         await base44.asServiceRole.entities.WhatsAppMessageLog.create({
           id_message: `out_${Date.now()}`,
           phone,
@@ -197,10 +233,10 @@ Deno.serve(async (req) => {
           chat_id: chatId,
           conversation_id: conversationId,
         });
-        console.log(`Bot reply sent immediately to ${chatId} (${Math.round((Date.now() - pollStart) / 1000)}s)`);
-        return Response.json({ ok: true, replied: true });
+        console.log(`Bot reply sent to ${chatId} (${filesToSend.length} files, ${Math.round((Date.now() - pollStart) / 1000)}s)`);
+        return Response.json({ ok: true, replied: true, files: filesToSend.length });
       } else {
-        console.error('Failed to send immediate reply:', await sendResp.text());
+        console.error('Failed to send immediate reply');
       }
     }
 

@@ -41,25 +41,14 @@ Deno.serve(async (req) => {
           if (cleanPhone.startsWith('0')) cleanPhone = '972' + cleanPhone.substring(1);
           const chatId = `${cleanPhone}@c.us`;
           
-          // Extract file URLs from pending message
-          const pendingFileRegex = /https?:\/\/[^\s\n]+\.(pdf|png|jpg|jpeg|gif|webp)(\?[^\s\n]*)?/gi;
-          const pendingDriveRegex = /https?:\/\/drive\.google\.com\/(?:uc\?[^\s\n]*|file\/d\/[^\s\n]*)/gi;
+          // Parse [FILE:url:filename] tags from pending message
+          const pendingFileTagRegex = /\[FILE:(https?:\/\/[^\]:]+):([^\]]+)\]/g;
           const pendingFiles = [];
           let pendingText = pendingMsg.message;
-          
-          const pendingDirectMatches = pendingMsg.message.match(pendingFileRegex) || [];
-          for (const url of pendingDirectMatches) {
-            const ext = url.split('?')[0].split('.').pop().toLowerCase();
-            const isPdf = ext === 'pdf';
-            pendingFiles.push({ url, fileName: isPdf ? 'document.pdf' : `image.${ext}`, type: isPdf ? 'file' : 'image' });
-            pendingText = pendingText.replace(url, '').trim();
-          }
-          const pendingDriveMatches = pendingMsg.message.match(pendingDriveRegex) || [];
-          for (const url of pendingDriveMatches) {
-            if (pendingDirectMatches.includes(url)) continue;
-            const isPdf = pendingMsg.message.toLowerCase().includes('pdf');
-            pendingFiles.push({ url, fileName: isPdf ? 'document.pdf' : 'image.jpg', type: isPdf ? 'file' : 'image' });
-            pendingText = pendingText.replace(url, '').trim();
+          let pendingMatch;
+          while ((pendingMatch = pendingFileTagRegex.exec(pendingMsg.message)) !== null) {
+            pendingFiles.push({ url: pendingMatch[1], fileName: pendingMatch[2] });
+            pendingText = pendingText.replace(pendingMatch[0], '');
           }
           pendingText = pendingText.replace(/\n{3,}/g, '\n\n').trim();
           
@@ -179,36 +168,18 @@ Deno.serve(async (req) => {
           continue;
         }
 
-        // Extract file URLs from bot reply (PDFs, Drive files, images)
-        const fileUrlRegex = /https?:\/\/[^\s\n]+\.(pdf|png|jpg|jpeg|gif|webp)(\?[^\s\n]*)?/gi;
-        const driveFileRegex = /https?:\/\/drive\.google\.com\/(?:uc\?[^\s\n]*|file\/d\/[^\s\n]*)/gi;
-        
+        // Parse [FILE:url:filename] tags from bot reply
+        const fileTagRegex = /\[FILE:(https?:\/\/[^\]:]+):([^\]]+)\]/g;
         const fileUrls = [];
         let textMessage = botReply;
-        
-        // Find PDF/image direct URLs
-        const directMatches = botReply.match(fileUrlRegex) || [];
-        for (const url of directMatches) {
-          const ext = url.split('?')[0].split('.').pop().toLowerCase();
-          const isPdf = ext === 'pdf';
-          fileUrls.push({ url, fileName: isPdf ? 'document.pdf' : `image.${ext}`, type: isPdf ? 'file' : 'image' });
-          textMessage = textMessage.replace(url, '').trim();
+        let fileMatch;
+        while ((fileMatch = fileTagRegex.exec(botReply)) !== null) {
+          fileUrls.push({ url: fileMatch[1], fileName: fileMatch[2] });
+          textMessage = textMessage.replace(fileMatch[0], '');
         }
-        
-        // Find Google Drive URLs
-        const driveMatches = botReply.match(driveFileRegex) || [];
-        for (const url of driveMatches) {
-          if (directMatches.includes(url)) continue; // skip if already matched
-          // Check if it's a PDF or image based on context
-          const isPdf = botReply.toLowerCase().includes('pdf') && botReply.indexOf('pdf') < botReply.indexOf(url) + 50;
-          fileUrls.push({ url, fileName: isPdf ? 'document.pdf' : 'image.jpg', type: isPdf ? 'file' : 'image' });
-          textMessage = textMessage.replace(url, '').trim();
-        }
-        
-        // Clean up empty lines from removed URLs
         textMessage = textMessage.replace(/\n{3,}/g, '\n\n').trim();
         
-        // Send text message (without file URLs)
+        // Send clean text message
         let sendSuccess = true;
         if (textMessage) {
           const sendUrl = `https://api.green-api.com/waInstance${instanceId}/sendMessage/${token}`;
@@ -224,24 +195,19 @@ Deno.serve(async (req) => {
           }
         }
         
-        // Send files as separate messages via sendFileByUrl
+        // Send each file as a separate message
         for (const file of fileUrls) {
           try {
             const fileApiUrl = `https://api.green-api.com/waInstance${instanceId}/sendFileByUrl/${token}`;
             const fileResp = await fetch(fileApiUrl, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                chatId: msg.chat_id,
-                urlFile: file.url,
-                fileName: file.fileName,
-              }),
+              body: JSON.stringify({ chatId: msg.chat_id, urlFile: file.url, fileName: file.fileName, caption: '' }),
             });
             if (fileResp.ok) {
               console.log(`File sent to ${msg.chat_id}: ${file.fileName}`);
             } else {
-              const fileErr = await fileResp.json();
-              console.error(`Failed to send file ${file.fileName}:`, fileErr);
+              console.error(`Failed to send file ${file.fileName}:`, await fileResp.text());
             }
           } catch (fileError) {
             console.error(`Error sending file ${file.fileName}:`, fileError.message);
