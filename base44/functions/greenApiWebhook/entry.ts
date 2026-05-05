@@ -103,17 +103,18 @@ Deno.serve(async (req) => {
       return Response.json({ ok: true, skipped: true, reason: 'blocked' });
     }
 
-    // ===== SEND TYPING INDICATOR =====
-    // Send immediately so the user sees the bot is working
+    // ===== SEND FRIENDLY THINKING MESSAGE =====
+    // Send immediately so the user knows the bot received their message
     try {
+      const thinkingMsg = 'היי! קיבלתי את ההודעה שלך, רגע מעבד/ת ואחזור אליך מיד 😊';
       const typingUrl = `https://api.green-api.com/waInstance${instanceId}/sendMessage/${token}`;
       await fetch(typingUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ chatId, message: '⏳' }),
+        body: JSON.stringify({ chatId, message: thinkingMsg }),
       });
     } catch (typErr) {
-      console.warn('Typing indicator failed:', typErr.message);
+      console.warn('Thinking message failed:', typErr.message);
     }
 
     // ===== FIND CONTACT =====
