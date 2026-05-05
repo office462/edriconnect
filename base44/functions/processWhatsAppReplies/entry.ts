@@ -48,6 +48,21 @@ Deno.serve(async (req) => {
             continue;
           }
         }
+
+        // ===== DEDUP: Check if this trigger was already sent in the last 5 minutes =====
+        const recentTimeline = await base44.asServiceRole.entities.ServiceRequestTimeline.filter({ service_request_id: sr.id });
+        const fiveMinAgo = Date.now() - 5 * 60 * 1000;
+        const alreadySent = recentTimeline.some(t =>
+          t.event_type === 'message_sent' &&
+          t.description?.includes(sr.pending_bot_message) &&
+          new Date(t.created_date).getTime() > fiveMinAgo
+        );
+        if (alreadySent) {
+          console.log(`processWhatsAppReplies: trigger ${sr.pending_bot_message} already sent for ${sr.id}, clearing flag`);
+          await base44.asServiceRole.entities.ServiceRequest.update(sr.id, { pending_bot_message: '' });
+          continue;
+        }
+
         console.log(`processWhatsAppReplies: found pending_bot_message=${sr.pending_bot_message} for ${sr.id}`);
 
         // Call onServiceRequestUpdate to generate the message

@@ -29,6 +29,12 @@ Deno.serve(async (req) => {
     const messageData = body.messageData;
     const senderInfo = body.senderData;
     const chatId = senderInfo?.chatId || '';
+
+    // ===== IGNORE GROUP MESSAGES =====
+    if (chatId.endsWith('@g.us') || chatId.includes('@g.us')) {
+      return Response.json({ ok: true, skipped: true, reason: 'group_message' });
+    }
+
     const phone = chatId.replace('@c.us', '');
     const idMessage = body.idMessage || '';
 
@@ -201,7 +207,7 @@ Deno.serve(async (req) => {
     const pollStart = Date.now();
 
     while (Date.now() - pollStart < 25000) {
-      await new Promise(r => setTimeout(r, 1500)); // wait 1.5s between checks
+      await new Promise(r => setTimeout(r, 1000)); // wait 1s between checks
 
       const freshConv = await base44.asServiceRole.agents.getConversation(conversationId);
       const msgs = freshConv.messages || [];
