@@ -194,8 +194,8 @@ Deno.serve(async (req) => {
           });
         }
 
-        // Clear the flag
-        await base44.asServiceRole.entities.ServiceRequest.update(sr.id, { pending_bot_message: '' });
+        // Clear the flag and record last system message for bot sync
+        await base44.asServiceRole.entities.ServiceRequest.update(sr.id, { pending_bot_message: '', last_system_message: sr.pending_bot_message });
       } catch (pendErr) {
         console.warn('processWhatsAppReplies: pending bot error:', pendErr.message);
       }
