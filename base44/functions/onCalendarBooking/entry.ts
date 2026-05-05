@@ -1,4 +1,4 @@
-import { createClientFromRequest } from 'npm:@base44/sdk@0.8.23';
+import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
 
 function nextFridayAtLeast9DaysOut(fromDate) {
   const target = new Date(fromDate);
@@ -133,8 +133,115 @@ Deno.serve(async (req) => {
 
     console.log('Updated ServiceRequest:', matchingReq.id, updateData);
 
-    // Bot message will be sent by the frontend via usePendingBotMessages subscription
-    // when it detects the pending_bot_message field update.
+    // === SEND BOT MESSAGE IMMEDIATELY ===
+    if (botEnabled && updateData.pending_bot_message) {
+      try {
+        const trigger = updateData.pending_bot_message;
+        const contactPhone = matchingReq.contact_phone || '';
+        const conversationId = matchingReq.conversation_id || '';
+
+        // Call onServiceRequestUpdate to generate the message
+        const updatedReq = await base44.asServiceRole.entities.ServiceRequest.filter({ id: matchingReq.id });
+        const freshReq = updatedReq.length > 0 ? updatedReq[0] : { ...matchingReq, ...updateData };
+
+        const botResponse = await base44.asServiceRole.functions.invoke('onServiceRequestUpdate', {
+          event: { type: 'update', entity_name: 'ServiceRequest', entity_id: matchingReq.id },
+          data: { ...freshReq, status: trigger, conversation_id: conversationId },
+          old_data: { ...matchingReq, status: 'previous' },
+        });
+
+        const botResult = botResponse?.data || botResponse;
+        const pendingMsg = botResult?.pendingBotMessage;
+
+        if (pendingMsg?.message && contactPhone) {
+          const instanceId = Deno.env.get('GREEN_API_INSTANCE_ID');
+          const token = Deno.env.get('GREEN_API_TOKEN');
+
+          let cleanPhone = contactPhone.replace(/[\s\-\+]/g, '');
+          if (cleanPhone.startsWith('0')) cleanPhone = '972' + cleanPhone.substring(1);
+          const chatId = `${cleanPhone}@c.us`;
+
+          // Parse [FILE:url:filename] tags
+          const fileTagRegex = /\[FILE:(https?:\/\/[^\]:]+):([^\]]+)\]/g;
+          const files = [];
+          let textMessage = pendingMsg.message;
+          let match;
+          while ((match = fileTagRegex.exec(pendingMsg.message)) !== null) {
+            files.push({ url: match[1], fileName: match[2] });
+            textMessage = textMessage.replace(match[0], '');
+          }
+          textMessage = textMessage.replace(/\n{3,}/g, '\n\n').trim();
+
+          // Send text
+          let sendOk = true;
+          if (textMessage) {
+            const sendUrl = `https://api.green-api.com/waInstance${instanceId}/sendMessage/${token}`;
+            const sendResp = await fetch(sendUrl, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ chatId, message: textMessage }),
+            });
+            if (!sendResp.ok) {
+              console.error('Failed to send immediate message:', await sendResp.text());
+              sendOk = false;
+            }
+          }
+
+          // Send files
+          for (const file of files) {
+            try {
+              const fileUrl = `https://api.green-api.com/waInstance${instanceId}/sendFileByUrl/${token}`;
+              await fetch(fileUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ chatId, urlFile: file.url, fileName: file.fileName }),
+              });
+              console.log(`File sent immediately: ${file.fileName}`);
+            } catch (fileErr) {
+              console.error(`File send error: ${fileErr.message}`);
+            }
+          }
+
+          if (sendOk) {
+            // Log outgoing message
+            await base44.asServiceRole.entities.WhatsAppMessageLog.create({
+              id_message: `out_${Date.now()}_cal`,
+              phone: cleanPhone,
+              direction: 'outgoing',
+              text: (pendingMsg.message || '').substring(0, 500),
+              status: 'replied',
+              chat_id: chatId,
+            });
+
+            // Add to bot conversation if available
+            if (conversationId && /^[a-f0-9]{24}$/i.test(conversationId)) {
+              try {
+                const conv = await base44.asServiceRole.agents.getConversation(conversationId);
+                await base44.asServiceRole.agents.addMessage(conv, { role: 'assistant', content: pendingMsg.message });
+              } catch (convErr) {
+                console.warn('Conv error:', convErr.message);
+              }
+            }
+
+            // Log in timeline
+            await base44.asServiceRole.entities.ServiceRequestTimeline.create({
+              service_request_id: matchingReq.id,
+              event_type: 'message_sent',
+              description: `הודעת ${trigger} נשלחה מיידית (onCalendarBooking)`,
+            });
+
+            // Clear the pending flag
+            await base44.asServiceRole.entities.ServiceRequest.update(matchingReq.id, { pending_bot_message: '' });
+            console.log(`Immediate bot message sent to ${cleanPhone} for trigger ${trigger}`);
+          }
+        } else {
+          console.log('No message generated or no phone for immediate send');
+        }
+      } catch (sendErr) {
+        console.error('Immediate send error (will be picked up by processWhatsAppReplies):', sendErr.message);
+        // Don't clear pending_bot_message — processWhatsAppReplies will handle it as fallback
+      }
+    }
 
     return Response.json({ status: 'ok', updated: matchingReq.id, type: appointmentType });
 
