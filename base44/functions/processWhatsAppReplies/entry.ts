@@ -67,12 +67,15 @@ Deno.serve(async (req) => {
         console.log(`processWhatsAppReplies: found pending_bot_message=${sr.pending_bot_message} for ${sr.id}`);
 
         // Call onServiceRequestUpdate to generate the message
-        const botResult = await base44.asServiceRole.functions.invoke('onServiceRequestUpdate', {
+        const botResponse = await base44.asServiceRole.functions.invoke('onServiceRequestUpdate', {
           event: { type: 'update', entity_name: 'ServiceRequest', entity_id: sr.id },
           data: { ...sr, status: sr.pending_bot_message, conversation_id: sr.conversation_id },
           old_data: { ...sr, status: 'previous' },
         });
 
+        // functions.invoke returns {data, status, headers} — extract .data
+        const botResult = botResponse?.data || botResponse;
+        console.log('processWhatsAppReplies: botResult keys:', Object.keys(botResult || {}));
         const pendingMsg = botResult?.pendingBotMessage;
         if (pendingMsg?.message && pendingMsg?.contactPhone) {
           // Send via WhatsApp
