@@ -49,6 +49,8 @@ Deno.serve(async (req) => {
     console.log(`Incoming WhatsApp from ${phone}: "${text}"`);
 
     const base44 = createClientFromRequest(req);
+    const instanceId = Deno.env.get('GREEN_API_INSTANCE_ID');
+    const token = Deno.env.get('GREEN_API_TOKEN');
 
     // ===== CHECK IF WHATSAPP BOT IS ENABLED (or test phone) =====
     const botEnabledSettings = await base44.asServiceRole.entities.SystemSetting.filter({ key: 'whatsapp_bot_enabled' });
@@ -95,6 +97,19 @@ Deno.serve(async (req) => {
       return Response.json({ ok: true, skipped: true, reason: 'blocked' });
     }
 
+    // ===== SEND TYPING INDICATOR =====
+    // Send immediately so the user sees the bot is working
+    try {
+      const typingUrl = `https://api.green-api.com/waInstance${instanceId}/sendMessage/${token}`;
+      await fetch(typingUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ chatId, message: '⏳' }),
+      });
+    } catch (typErr) {
+      console.warn('Typing indicator failed:', typErr.message);
+    }
+
     // ===== FIND CONTACT =====
     let contacts = await base44.asServiceRole.entities.Contact.filter({ phone: phone });
     if (contacts.length === 0 && phone.startsWith('972')) {
@@ -107,7 +122,6 @@ Deno.serve(async (req) => {
     if (contact) {
       const allRequests = await base44.asServiceRole.entities.ServiceRequest.filter({ contact_id: contact.id });
       if (allRequests.length > 0) {
-        // Sort by created_date descending and take first
         allRequests.sort((a, b) => new Date(b.created_date) - new Date(a.created_date));
         serviceRequest = allRequests[0];
       }
@@ -115,9 +129,26 @@ Deno.serve(async (req) => {
 
     // ===== FIND OR CREATE CONVERSATION =====
     const agentName = 'dr_adri_bot';
-    let conversationId = serviceRequest?.conversation_id || null;
+    let conversationId = null;
     let conversation;
 
+    // 1. Try from ServiceRequest
+    if (serviceRequest?.conversation_id) {
+      conversationId = serviceRequest.conversation_id;
+    }
+
+    // 2. Fallback: find recent conversation for this phone from message logs
+    if (!conversationId) {
+      const recentLogs = await base44.asServiceRole.entities.WhatsAppMessageLog.filter({ phone: phone });
+      const withConv = recentLogs.filter(l => l.conversation_id);
+      if (withConv.length > 0) {
+        withConv.sort((a, b) => new Date(b.created_date) - new Date(a.created_date));
+        conversationId = withConv[0].conversation_id;
+        console.log(`Found conversation ${conversationId} from message logs`);
+      }
+    }
+
+    // 3. Try to load existing conversation
     if (conversationId) {
       try {
         conversation = await base44.asServiceRole.agents.getConversation(conversationId);
@@ -127,6 +158,7 @@ Deno.serve(async (req) => {
       }
     }
 
+    // 4. Create new if needed
     if (!conversationId) {
       conversation = await base44.asServiceRole.agents.createConversation({
         agent_name: agentName,
@@ -165,13 +197,11 @@ Deno.serve(async (req) => {
     });
 
     // ===== POLL FOR BOT REPLY (max 15 seconds) =====
-    const instanceId = Deno.env.get('GREEN_API_INSTANCE_ID');
-    const token = Deno.env.get('GREEN_API_TOKEN');
     let botReply = '';
     const pollStart = Date.now();
 
-    while (Date.now() - pollStart < 15000) {
-      await new Promise(r => setTimeout(r, 2000)); // wait 2s between checks
+    while (Date.now() - pollStart < 25000) {
+      await new Promise(r => setTimeout(r, 1500)); // wait 1.5s between checks
 
       const freshConv = await base44.asServiceRole.agents.getConversation(conversationId);
       const msgs = freshConv.messages || [];
