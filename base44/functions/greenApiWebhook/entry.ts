@@ -188,22 +188,42 @@ Deno.serve(async (req) => {
       } catch (e) {
         console.log('Could not load existing conversation, creating new one');
         conversationId = null;
+        // Clear stale conversation_id from ServiceRequest so it doesn't block future attempts
+        if (serviceRequest) {
+          try {
+            await base44.asServiceRole.entities.ServiceRequest.update(serviceRequest.id, { conversation_id: '' });
+          } catch (clearErr) {
+            console.warn('Failed to clear stale conversation_id:', clearErr.message);
+          }
+        }
       }
     }
 
     // 4. Create new if needed
     if (!conversationId) {
-      conversation = await base44.asServiceRole.agents.createConversation({
-        agent_name: agentName,
-        metadata: { name: contact?.full_name || phone, phone, source: 'whatsapp' },
-      });
-      conversationId = conversation.id;
+      try {
+        conversation = await base44.asServiceRole.agents.createConversation({
+          agent_name: agentName,
+          metadata: { name: contact?.full_name || phone, phone, source: 'whatsapp' },
+        });
+        conversationId = conversation.id;
+      } catch (createErr) {
+        console.error('Failed to create conversation:', createErr.message);
+        return Response.json({ error: 'Failed to create conversation' }, { status: 500 });
+      }
 
       if (serviceRequest) {
         await base44.asServiceRole.entities.ServiceRequest.update(serviceRequest.id, {
           conversation_id: conversationId,
         });
       }
+    }
+
+    // Ensure ServiceRequest has conversation_id synced
+    if (serviceRequest && serviceRequest.conversation_id !== conversationId) {
+      await base44.asServiceRole.entities.ServiceRequest.update(serviceRequest.id, {
+        conversation_id: conversationId,
+      });
     }
 
     // Count messages BEFORE sending
