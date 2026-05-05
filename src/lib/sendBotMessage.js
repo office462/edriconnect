@@ -85,7 +85,15 @@ async function _handleBotMessageInternal(requestId, skipIfNoTrigger = false) {
       return null;
     }
 
-    // Clear flag BEFORE processing to prevent re-triggers
+    // Check if bot is enabled BEFORE clearing the flag
+    const botOn = await isWhatsAppBotEnabled();
+    if (!botOn) {
+      // Bot disabled — don't clear the flag, let processWhatsAppReplies handle it
+      console.log('handleBotMessage: bot disabled, leaving pending_bot_message for processWhatsAppReplies');
+      return null;
+    }
+
+    // Clear flag BEFORE processing to prevent re-triggers (bot is enabled)
     await base44.entities.ServiceRequest.update(requestId, { pending_bot_message: '' }).catch(() => {});
 
     // Get the message from backend
@@ -146,12 +154,6 @@ async function isWhatsAppBotEnabled() {
 }
 
 async function sendMessage(resultData, requestId, trigger, conversationId) {
-  // Check if WhatsApp bot is enabled FIRST — before any sending
-  const botEnabled = await isWhatsAppBotEnabled();
-  if (!botEnabled) {
-    console.log('sendMessage: SKIPPING ALL — WhatsApp bot is disabled (demo mode)');
-    return null;
-  }
 
   const pending = resultData?.pendingBotMessage;
   const effectiveConvId = pending?.conversationId || conversationId;
