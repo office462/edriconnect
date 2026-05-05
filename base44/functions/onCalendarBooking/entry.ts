@@ -261,8 +261,8 @@ Deno.serve(async (req) => {
               description: `הודעת ${trigger} נשלחה מיידית (onCalendarBooking)`,
             });
 
-            // Clear the pending flag and record what was sent
-            await base44.asServiceRole.entities.ServiceRequest.update(matchingReq.id, { pending_bot_message: '', last_system_message: trigger });
+            // Clear the pending flag
+            await base44.asServiceRole.entities.ServiceRequest.update(matchingReq.id, { pending_bot_message: '' });
             console.log(`Immediate bot message sent to ${cleanPhone} for trigger ${trigger}`);
           }
         } else {
