@@ -190,6 +190,33 @@ Deno.serve(async (req) => {
       const isAlreadyScheduledInDB = latestReqSched.status === 'scheduled';
       const skipChecks = isAlreadyScheduledInDB;
 
+      // --- DEDUP CHECK: skip if onCalendarBooking already sent this trigger ---
+      const scheduledTriggerMap = {
+        consultation: 'scheduled_consultation',
+        legal: 'scheduled_legal',
+        lectures: 'scheduled_lectures',
+        clinic: 'scheduled_clinic',
+        post_lecture: 'scheduled_post_lecture',
+      };
+      const expectedTrigger = data.pending_bot_message === 'both_appointments_scheduled'
+        ? 'both_appointments_scheduled'
+        : scheduledTriggerMap[data.service_type];
+      if (expectedTrigger && latestReqSched.last_system_message === expectedTrigger) {
+        console.log(`DEDUP: skipping scheduled trigger ${expectedTrigger} — already sent by onCalendarBooking (last_system_message matches)`);
+        timelineEntries.push({
+          service_request_id: requestId,
+          event_type: 'system_note',
+          description: `הודעת ${expectedTrigger} לא נשלחה כפולה — כבר נשלחה על ידי onCalendarBooking`,
+          old_value: oldStatus,
+          new_value: 'scheduled',
+        });
+        // Still create timeline entries but skip bot trigger
+        for (const entry of timelineEntries) {
+          await base44.asServiceRole.entities.ServiceRequestTimeline.create(entry);
+        }
+        return Response.json({ ok: true, skipped: true, reason: 'dedup_last_system_message', trigger: expectedTrigger });
+      }
+
       if (!skipChecks && data.service_type === 'legal' && (!latestReqSched.payment_confirmed || !latestReqSched.agreement_confirmed)) {
         const missing = [];
         if (!latestReqSched.payment_confirmed) missing.push('תשלום');
