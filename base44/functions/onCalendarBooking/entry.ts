@@ -140,6 +140,10 @@ Deno.serve(async (req) => {
         const contactPhone = matchingReq.contact_phone || '';
         const conversationId = matchingReq.conversation_id || '';
 
+        // Clear pending_bot_message BEFORE sending to prevent processWhatsAppReplies race condition
+        await base44.asServiceRole.entities.ServiceRequest.update(matchingReq.id, { pending_bot_message: '' });
+        console.log(`Cleared pending_bot_message before immediate send for trigger ${trigger}`);
+
         // Call onServiceRequestUpdate to generate the message
         const updatedReq = await base44.asServiceRole.entities.ServiceRequest.filter({ id: matchingReq.id });
         const freshReq = updatedReq.length > 0 ? updatedReq[0] : { ...matchingReq, ...updateData };
@@ -261,16 +265,17 @@ Deno.serve(async (req) => {
               description: `הודעת ${trigger} נשלחה מיידית (onCalendarBooking)`,
             });
 
-            // Clear the pending flag and record last system message for bot sync
-            await base44.asServiceRole.entities.ServiceRequest.update(matchingReq.id, { pending_bot_message: '', last_system_message: trigger });
+            // Record last system message for bot sync (pending_bot_message already cleared above)
+            await base44.asServiceRole.entities.ServiceRequest.update(matchingReq.id, { last_system_message: trigger });
             console.log(`Immediate bot message sent to ${cleanPhone} for trigger ${trigger}`);
           }
         } else {
           console.log('No message generated or no phone for immediate send');
         }
       } catch (sendErr) {
-        console.error('Immediate send error (will be picked up by processWhatsAppReplies):', sendErr.message);
-        // Don't clear pending_bot_message — processWhatsAppReplies will handle it as fallback
+        console.error('Immediate send error, restoring pending_bot_message for retry:', sendErr.message);
+        // Restore pending_bot_message so processWhatsAppReplies can retry
+        await base44.asServiceRole.entities.ServiceRequest.update(matchingReq.id, { pending_bot_message: updateData.pending_bot_message });
       }
     }
 

@@ -274,6 +274,8 @@ Deno.serve(async (req) => {
 
 
     // Write pending_bot_message so the frontend hook can pick it up
+    // IMPORTANT: We clear it immediately below (before sending) to prevent
+    // processWhatsAppReplies from racing and sending a duplicate.
     if (botTrigger) {
       updates.pending_bot_message = botTrigger;
     }
@@ -326,6 +328,10 @@ Deno.serve(async (req) => {
             : null;
 
         // === SEND IMMEDIATELY VIA WHATSAPP (like onCalendarBooking) ===
+        // Clear pending_bot_message BEFORE sending to prevent processWhatsAppReplies race condition
+        await base44.asServiceRole.entities.ServiceRequest.update(requestId, { pending_bot_message: '' });
+        console.log(`Cleared pending_bot_message before immediate send for trigger ${botTrigger}`);
+
         const instanceId = Deno.env.get('GREEN_API_INSTANCE_ID');
         const token = Deno.env.get('GREEN_API_TOKEN');
 
@@ -432,9 +438,13 @@ Deno.serve(async (req) => {
             description: `הודעת ${botTrigger} נשלחה מיידית (onServiceRequestUpdate)`,
           });
 
-          // Clear pending flag and record last system message for bot sync
-          await base44.asServiceRole.entities.ServiceRequest.update(requestId, { pending_bot_message: '', last_system_message: botTrigger });
+          // Record last system message for bot sync (pending_bot_message already cleared above)
+          await base44.asServiceRole.entities.ServiceRequest.update(requestId, { last_system_message: botTrigger });
           console.log(`Immediate bot message sent to ${cleanPhone} for trigger ${botTrigger}`);
+        } else {
+          // Send failed — restore pending_bot_message so processWhatsAppReplies can retry
+          await base44.asServiceRole.entities.ServiceRequest.update(requestId, { pending_bot_message: botTrigger });
+          console.error(`Immediate send failed for ${botTrigger}, restored pending_bot_message for retry`);
         }
 
         return Response.json({
