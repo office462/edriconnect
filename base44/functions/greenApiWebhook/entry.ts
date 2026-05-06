@@ -103,46 +103,6 @@ Deno.serve(async (req) => {
       return Response.json({ ok: true, skipped: true, reason: 'blocked' });
     }
 
-    // ===== SEND FRIENDLY THINKING MESSAGE (after idempotency check) =====
-    try {
-      // Check if this is the first message from this phone (new conversation)
-      const existingLogs = await base44.asServiceRole.entities.WhatsAppMessageLog.filter({ phone: phone });
-      const isFirstMessage = existingLogs.length === 0;
-
-      let thinkingMsg;
-      if (isFirstMessage) {
-        // First contact — clear and welcoming
-        const firstMessages = [
-          'נעים מאוד! 🌸 איתך עוד רגע קט',
-          'שלום וברוכ/ה הבא/ה! 💜 רגע ואחזור אליך',
-          'נעים להכיר! ✨ עוד שנייה איתך',
-        ];
-        thinkingMsg = firstMessages[Math.floor(Math.random() * firstMessages.length)];
-      } else {
-        // Returning contact — warm and casual
-        const returningMessages = [
-          'היי! קיבלתי 🙌 רגע בודקת ואחזור אליך מיד',
-          'קיבלתי את ההודעה! ⏳ רגע מכינה לך תשובה...',
-          'שנייה אחת! 💫 מטפלת בזה עכשיו',
-          'הודעה התקבלה ✨ עוד רגע קט חוזרת אליך!',
-          'רגע, אני כאן! 🌸 מעבדת את המידע...',
-          'קיבלתי! 😊 תן/י לי רגע ואחזור עם תשובה',
-          'אני על זה! 💜 חוזרת אליך תיכף',
-          'מעולה, התקבל! 🎯 רגע מכינה תשובה מותאמת',
-        ];
-        thinkingMsg = returningMessages[Math.floor(Math.random() * returningMessages.length)];
-      }
-
-      const typingUrl = `https://api.green-api.com/waInstance${instanceId}/sendMessage/${token}`;
-      await fetch(typingUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ chatId, message: thinkingMsg }),
-      });
-    } catch (typErr) {
-      console.warn('Thinking message failed:', typErr.message);
-    }
-
     // ===== FIND CONTACT =====
     let contacts = await base44.asServiceRole.entities.Contact.filter({ phone: phone });
     if (contacts.length === 0 && phone.startsWith('972')) {
@@ -200,6 +160,43 @@ Deno.serve(async (req) => {
       });
 
       return Response.json({ ok: true, blocked: true, reason: 'pending_admin_check' });
+    }
+
+    // ===== SEND FRIENDLY THINKING MESSAGE =====
+    try {
+      const existingLogs = await base44.asServiceRole.entities.WhatsAppMessageLog.filter({ phone: phone });
+      const isFirstMessage = existingLogs.length === 0;
+
+      let thinkingMsg;
+      if (isFirstMessage) {
+        const firstMessages = [
+          'נעים מאוד! 🌸 איתך עוד רגע קט',
+          'שלום וברוכ/ה הבא/ה! 💜 רגע ואחזור אליך',
+          'נעים להכיר! ✨ עוד שנייה איתך',
+        ];
+        thinkingMsg = firstMessages[Math.floor(Math.random() * firstMessages.length)];
+      } else {
+        const returningMessages = [
+          'היי! קיבלתי 🙌 רגע בודקת ואחזור אליך מיד',
+          'קיבלתי את ההודעה! ⏳ רגע מכינה לך תשובה...',
+          'שנייה אחת! 💫 מטפלת בזה עכשיו',
+          'הודעה התקבלה ✨ עוד רגע קט חוזרת אליך!',
+          'רגע, אני כאן! 🌸 מעבדת את המידע...',
+          'קיבלתי! 😊 תן/י לי רגע ואחזור עם תשובה',
+          'אני על זה! 💜 חוזרת אליך תיכף',
+          'מעולה, התקבל! 🎯 רגע מכינה תשובה מותאמת',
+        ];
+        thinkingMsg = returningMessages[Math.floor(Math.random() * returningMessages.length)];
+      }
+
+      const typingUrl = `https://api.green-api.com/waInstance${instanceId}/sendMessage/${token}`;
+      await fetch(typingUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ chatId, message: thinkingMsg }),
+      });
+    } catch (typErr) {
+      console.warn('Thinking message failed:', typErr.message);
     }
 
     // ===== FIND OR CREATE CONVERSATION =====
