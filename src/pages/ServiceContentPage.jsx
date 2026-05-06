@@ -12,7 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Badge } from '@/components/ui/badge';
-import { Plus, Pencil, Trash2, Video, FileText, Link as LinkIcon, CreditCard, ClipboardList, FileCheck, Search } from 'lucide-react';
+import { Plus, Pencil, Trash2, Video, FileText, Link as LinkIcon, CreditCard, ClipboardList, FileCheck, Search, Image } from 'lucide-react';
 import PostLectureQR from '@/components/dashboard/PostLectureQR';
 import ViewToggle from '@/components/shared/ViewToggle';
 import BulkActions from '@/components/shared/BulkActions';
@@ -25,6 +25,7 @@ const contentTypes = [
   { value: 'payment_link', label: 'קישור תשלום', icon: CreditCard },
   { value: 'external_link', label: 'קישור חיצוני', icon: LinkIcon },
   { value: 'agreement', label: 'הסכם', icon: FileCheck },
+  { value: 'image', label: 'תמונה', icon: Image },
 ];
 
 const serviceTypes = [
