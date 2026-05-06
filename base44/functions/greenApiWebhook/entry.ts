@@ -162,37 +162,16 @@ Deno.serve(async (req) => {
       return Response.json({ ok: true, blocked: true, reason: 'pending_admin_check' });
     }
 
-    // ===== SEND THINKING INDICATOR =====
+    // ===== SEND TYPING INDICATOR =====
     try {
-      const existingLogs = await base44.asServiceRole.entities.WhatsAppMessageLog.filter({ phone: phone });
-      const isFirstMessage = existingLogs.length === 0;
-
-      if (isFirstMessage) {
-        // First message ever — send a warm greeting
-        const firstMessages = [
-          'תודה שפנית! 🌸 אני על זה, חוזרת אליך מיד',
-          'שלום וברוכ/ה הבא/ה! 💜 מיד ממשיכה',
-          'נעים להכיר! ✨ עוד שנייה איתך',
-          'היי! קיבלתי 😊 רגע ואחזור אליך',
-        ];
-        const thinkingMsg = firstMessages[Math.floor(Math.random() * firstMessages.length)];
-        const sendUrl = `https://api.green-api.com/waInstance${instanceId}/sendMessage/${token}`;
-        await fetch(sendUrl, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ chatId, message: thinkingMsg }),
-        });
-      } else {
-        // Subsequent messages — just show typing indicator (no text)
-        const typingUrl = `https://api.green-api.com/waInstance${instanceId}/sendTyping/${token}`;
-        await fetch(typingUrl, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ chatId, typingTime: 20000 }),
-        });
-      }
+      const typingUrl = `https://api.green-api.com/waInstance${instanceId}/sendTyping/${token}`;
+      await fetch(typingUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ chatId, typingTime: 20000 }),
+      });
     } catch (typErr) {
-      console.warn('Thinking indicator failed:', typErr.message);
+      console.warn('Typing indicator failed:', typErr.message);
     }
 
     // ===== FIND OR CREATE CONVERSATION =====
