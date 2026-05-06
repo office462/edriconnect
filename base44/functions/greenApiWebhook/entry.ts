@@ -390,27 +390,6 @@ Deno.serve(async (req) => {
       console.warn('Fallback message failed:', fallbackErr.message);
     }
 
-    // Send a friendly fallback message so the user doesn't think there's an error
-    console.log(`No bot reply within 15s for ${idMessage}. Sending fallback message.`);
-    try {
-      const fallbackMessages = [
-        'עדיין עובד/ת על זה, אל דאגה! ⏳ תגובה בדרך',
-        'עוד רגע קט! 🌸 כמעט שם',
-        'עדיין מטפלת בזה, תיכף חוזרת! 💜',
-        'רגע נוסף, ממש בדרך! ✨',
-      ];
-      const fallbackMsg = fallbackMessages[Math.floor(Math.random() * fallbackMessages.length)];
-      const sendUrl = `https://api.green-api.com/waInstance${instanceId}/sendMessage/${token}`;
-      await fetch(sendUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ chatId, message: fallbackMsg }),
-      });
-      console.log(`Fallback message sent to ${chatId}: "${fallbackMsg}"`);
-    } catch (fallbackErr) {
-      console.warn('Fallback message failed:', fallbackErr.message);
-    }
-
     // processWhatsAppReplies will send the actual bot reply later
     return Response.json({ ok: true, queued: true });
   } catch (error) {
