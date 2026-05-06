@@ -188,7 +188,7 @@ Deno.serve(async (req) => {
         await fetch(typingUrl, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ chatId, typingTime: 5000 }),
+          body: JSON.stringify({ chatId, typingTime: 20000 }),
         });
       }
     } catch (typErr) {
