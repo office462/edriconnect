@@ -162,7 +162,7 @@ Deno.serve(async (req) => {
       return Response.json({ ok: true, blocked: true, reason: 'pending_admin_check' });
     }
 
-    // ===== SEND THINKING INDICATOR =====Page_DownPage_Down
+    // ===== SEND THINKING INDICATOR =====
     try {
       const existingLogs = await base44.asServiceRole.entities.WhatsAppMessageLog.filter({ phone: phone });
       const isFirstMessage = existingLogs.length === 0;
