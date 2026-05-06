@@ -160,6 +160,48 @@ Deno.serve(async (req) => {
       }
     }
 
+    // ===== BLOCK BOT IF PENDING ADMIN CHECK =====
+    if (serviceRequest && serviceRequest.status === 'whatsapp_message_to_check') {
+      console.log(`ServiceRequest ${serviceRequest.id} is pending admin check — blocking bot, sending fixed reply`);
+
+      // Log incoming message
+      await base44.asServiceRole.entities.WhatsAppMessageLog.create({
+        id_message: idMessage || `wa_${Date.now()}`,
+        phone, direction: 'incoming',
+        text: text.substring(0, 500), status: 'skipped',
+        chat_id: chatId,
+      });
+
+      // Fetch fixed reply from BotContent
+      let replyText = 'הפנייה שלך נמצאת בטיפול הצוות 🙏 ברגע שנאשר — נמשיך אוטומטית. אין צורך לשלוח הודעות נוספות.';
+      try {
+        const pendingContent = await base44.asServiceRole.entities.BotContent.filter({ key: 'pending_admin_check_reply' });
+        if (pendingContent.length > 0 && pendingContent[0].content) {
+          replyText = pendingContent[0].content;
+        }
+      } catch (e) {
+        console.warn('Could not fetch pending_admin_check_reply BotContent:', e.message);
+      }
+
+      // Send reply
+      const sendUrl = `https://api.green-api.com/waInstance${instanceId}/sendMessage/${token}`;
+      await fetch(sendUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ chatId, message: replyText }),
+      });
+
+      // Log outgoing
+      await base44.asServiceRole.entities.WhatsAppMessageLog.create({
+        id_message: `out_${Date.now()}_blocked`,
+        phone, direction: 'outgoing',
+        text: replyText.substring(0, 500), status: 'replied',
+        chat_id: chatId,
+      });
+
+      return Response.json({ ok: true, blocked: true, reason: 'pending_admin_check' });
+    }
+
     // ===== FIND OR CREATE CONVERSATION =====
     const agentName = 'dr_adri_bot';
     let conversationId = null;
