@@ -589,15 +589,30 @@ async function buildBotMessage(base44, trigger, fullRequest, contactName) {
   }
 
   if (trigger === 'questionnaire_completed_awaiting_payment') {
-    // Questionnaire done → send payment request only
+    // Questionnaire done → send payment request only (Paybox + Bit QR follow-up)
     const botContentRecords = await base44.asServiceRole.entities.BotContent.filter({ key: 'consultation_payment_only_request' });
     const paymentContent = await base44.asServiceRole.entities.ServiceContent.filter({ service_type: 'consultation', content_type: 'payment_link' });
     const paymentUrl = paymentContent.length > 0 ? paymentContent[0].url : '';
+
+    let mainMessage = '';
     if (botContentRecords.length > 0) {
-      return botContentRecords[0].content
-        .replace('{קישור_תשלום}', paymentUrl);
+      mainMessage = botContentRecords[0].content.replace('{קישור_תשלום}', paymentUrl);
+    } else {
+      mainMessage = `מעולה! עכשיו נמשיך לשלב התשלום 💳\n\nהנה קישור לתשלום:\n${paymentUrl}\n\nלאחר ביצוע התשלום, תשלח הודעה ממני שהתשלום התקבל. המתן/י להודעה שלי 🌸`;
     }
-    return `מעולה! עכשיו נמשיך לשלב התשלום 💳\n\nהנה קישור לתשלום:\n${paymentUrl}\n\nלאחר ביצוע התשלום, תשלח הודעה ממני שהתשלום התקבל. המתן/י להודעה שלי 🌸`;
+
+    // Fetch Bit QR image for follow-up
+    const followUpMessages = [];
+    try {
+      const bitQrContent = await base44.asServiceRole.entities.ServiceContent.filter({ service_type: 'general', content_type: 'image', sub_type: 'bit_qr' });
+      if (bitQrContent.length > 0 && bitQrContent[0].url) {
+        followUpMessages.push(`[FILE:${bitQrContent[0].url}:ברקוד ביט לתשלום.png]`);
+      }
+    } catch (e) {
+      console.warn('Could not fetch Bit QR image:', e.message);
+    }
+
+    return { message: mainMessage, followUpMessages };
   }
 
   if (trigger === 'legal_ready_for_meeting') {
