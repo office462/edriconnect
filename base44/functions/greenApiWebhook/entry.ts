@@ -162,41 +162,37 @@ Deno.serve(async (req) => {
       return Response.json({ ok: true, blocked: true, reason: 'pending_admin_check' });
     }
 
-    // ===== SEND FRIENDLY THINKING MESSAGE =====
+    // ===== SEND THINKING INDICATOR =====
     try {
       const existingLogs = await base44.asServiceRole.entities.WhatsAppMessageLog.filter({ phone: phone });
       const isFirstMessage = existingLogs.length === 0;
 
-      let thinkingMsg;
       if (isFirstMessage) {
+        // First message ever — send a warm greeting
         const firstMessages = [
-          'נעים מאוד! 🌸 איתך עוד רגע קט',
-          'שלום וברוכ/ה הבא/ה! 💜 רגע ואחזור אליך',
+          'תודה שפנית! 🌸 אני על זה, חוזרת אליך מיד',
+          'שלום וברוכ/ה הבא/ה! 💜 מיד ממשיכה',
           'נעים להכיר! ✨ עוד שנייה איתך',
+          'היי! קיבלתי 😊 רגע ואחזור אליך',
         ];
-        thinkingMsg = firstMessages[Math.floor(Math.random() * firstMessages.length)];
+        const thinkingMsg = firstMessages[Math.floor(Math.random() * firstMessages.length)];
+        const sendUrl = `https://api.green-api.com/waInstance${instanceId}/sendMessage/${token}`;
+        await fetch(sendUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ chatId, message: thinkingMsg }),
+        });
       } else {
-        const returningMessages = [
-          'היי! קיבלתי 🙌 רגע בודקת ואחזור אליך מיד',
-          'קיבלתי את ההודעה! ⏳ רגע מכינה לך תשובה...',
-          'שנייה אחת! 💫 מטפלת בזה עכשיו',
-          'הודעה התקבלה ✨ עוד רגע קט חוזרת אליך!',
-          'רגע, אני כאן! 🌸 מעבדת את המידע...',
-          'קיבלתי! 😊 תן/י לי רגע ואחזור עם תשובה',
-          'אני על זה! 💜 חוזרת אליך תיכף',
-          'מעולה, התקבל! 🎯 רגע מכינה תשובה מותאמת',
-        ];
-        thinkingMsg = returningMessages[Math.floor(Math.random() * returningMessages.length)];
+        // Subsequent messages — just show typing indicator (no text)
+        const typingUrl = `https://api.green-api.com/waInstance${instanceId}/sendTyping/${token}`;
+        await fetch(typingUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ chatId }),
+        });
       }
-
-      const typingUrl = `https://api.green-api.com/waInstance${instanceId}/sendMessage/${token}`;
-      await fetch(typingUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ chatId, message: thinkingMsg }),
-      });
     } catch (typErr) {
-      console.warn('Thinking message failed:', typErr.message);
+      console.warn('Thinking indicator failed:', typErr.message);
     }
 
     // ===== FIND OR CREATE CONVERSATION =====
