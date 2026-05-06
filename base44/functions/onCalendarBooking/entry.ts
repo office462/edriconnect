@@ -157,7 +157,7 @@ Deno.serve(async (req) => {
           const instanceId = Deno.env.get('GREEN_API_INSTANCE_ID');
           const token = Deno.env.get('GREEN_API_TOKEN');
 
-          let cleanPhone = contactPhone.replace(/[\s\-\+]/g, '');
+          let cleanPhone = contactPhone.replace(/^whatsapp:/i, '').replace(/[\s\-\+]/g, '');
           if (cleanPhone.startsWith('0')) cleanPhone = '972' + cleanPhone.substring(1);
           const chatId = `${cleanPhone}@c.us`;
 

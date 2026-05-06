@@ -91,7 +91,7 @@ Deno.serve(async (req) => {
         const pendingMsg = botResult?.pendingBotMessage;
         if (pendingMsg?.message && pendingMsg?.contactPhone) {
           // Send via WhatsApp
-          let cleanPhone = pendingMsg.contactPhone.replace(/[\s\-\+]/g, '');
+          let cleanPhone = pendingMsg.contactPhone.replace(/^whatsapp:/i, '').replace(/[\s\-\+]/g, '');
           if (cleanPhone.startsWith('0')) cleanPhone = '972' + cleanPhone.substring(1);
           const chatId = `${cleanPhone}@c.us`;
           
