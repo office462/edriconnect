@@ -7,6 +7,7 @@ import AlertCards from '@/components/dashboard/AlertCards';
 import RecentRequests from '@/components/dashboard/RecentRequests';
 import ServiceBreakdown from '@/components/dashboard/ServiceBreakdown';
 import PostLectureQR from '@/components/dashboard/PostLectureQR';
+import BackupButton from '@/components/dashboard/BackupButton';
 
 export default function Dashboard() {
   const [hideTests, setHideTests] = useState(() => localStorage.getItem('hide_tests') !== 'false');
@@ -50,10 +51,13 @@ export default function Dashboard() {
           <h1 className="text-2xl font-bold text-foreground">לוח בקרה</h1>
           <p className="text-muted-foreground text-sm mt-1 font-body">ד״ר ליאת אדרי — מערכת שירות חכמה 24/7</p>
         </div>
-        <label className="flex items-center gap-2 text-sm text-muted-foreground cursor-pointer select-none">
-          <input type="checkbox" checked={hideTests} onChange={toggleHideTests} className="rounded border-border" />
-          הסתר בדיקות
-        </label>
+        <div className="flex items-center gap-3">
+          <BackupButton />
+          <label className="flex items-center gap-2 text-sm text-muted-foreground cursor-pointer select-none">
+            <input type="checkbox" checked={hideTests} onChange={toggleHideTests} className="rounded border-border" />
+            הסתר בדיקות
+          </label>
+        </div>
       </div>
 
       <AlertCards newLeads={newLeads} toCheck={toCheck} />
