@@ -9,9 +9,9 @@ Deno.serve(async (req) => {
     }
 
     const body = await req.json();
-    const { phone, message, force } = body;
-    if (!phone || !message) {
-      return Response.json({ error: 'phone and message are required' }, { status: 400 });
+    const { phone, message, force, fileUrl, fileName } = body;
+    if (!phone || (!message && !fileUrl)) {
+      return Response.json({ error: 'phone and (message or fileUrl) are required' }, { status: 400 });
     }
 
     // Check if WhatsApp bot is enabled (skip check if force=true for test messages)
@@ -24,7 +24,13 @@ Deno.serve(async (req) => {
       }
     }
 
-    const result = await sendViaGreenApi(phone, message);
+    let result;
+    if (fileUrl) {
+      result = await sendFileViaGreenApi(phone, fileUrl, fileName || 'file');
+    }
+    if (message) {
+      result = await sendViaGreenApi(phone, message);
+    }
     return Response.json({ ok: true, result });
   } catch (error) {
     console.error('sendWhatsAppMessage error:', error);
@@ -55,5 +61,31 @@ async function sendViaGreenApi(phone, message) {
   }
 
   console.log(`WhatsApp sent to ${chatId}`);
+  return result;
+}
+
+async function sendFileViaGreenApi(phone, fileUrl, fileName) {
+  const instanceId = Deno.env.get('GREEN_API_INSTANCE_ID');
+  const token = Deno.env.get('GREEN_API_TOKEN');
+
+  let cleanPhone = phone.replace(/[\s\-\+]/g, '');
+  if (cleanPhone.startsWith('0')) {
+    cleanPhone = '972' + cleanPhone.substring(1);
+  }
+  const chatId = `${cleanPhone}@c.us`;
+
+  const url = `https://api.green-api.com/waInstance${instanceId}/sendFileByUrl/${token}`;
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ chatId, urlFile: fileUrl, fileName }),
+  });
+
+  const result = await response.json();
+  if (!response.ok) {
+    throw new Error(`Green API file error: ${JSON.stringify(result)}`);
+  }
+
+  console.log(`WhatsApp file sent to ${chatId}: ${fileName}`);
   return result;
 }
