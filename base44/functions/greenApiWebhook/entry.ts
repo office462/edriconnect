@@ -58,6 +58,9 @@ Deno.serve(async (req) => {
     const instanceId = Deno.env.get('GREEN_API_INSTANCE_ID');
     const token = Deno.env.get('GREEN_API_TOKEN');
 
+    // ===== TYPING INDICATOR — sent immediately, before any DB queries =====
+    fetch(`https://api.green-api.com/waInstance${instanceId}/sendTyping/${token}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ chatId, typingTime: 30000 }) }).catch(() => {});
+
     // ===== CHECK IF WHATSAPP BOT IS ENABLED (or test phone) =====
     const botEnabledSettings = await base44.asServiceRole.entities.SystemSetting.filter({ key: 'whatsapp_bot_enabled' });
     const botEnabled = botEnabledSettings.length > 0 && botEnabledSettings[0].value === 'true';
@@ -288,9 +291,18 @@ Deno.serve(async (req) => {
     let botReply = '';
     const pollStart = Date.now();
     let lastTypingRefresh = pollStart;
+    let sentReassurance = false;
 
     while (Date.now() - pollStart < 25000) {
       await new Promise(r => setTimeout(r, 500)); // wait 500ms between checks
+
+      // Send reassurance after 15s if no reply yet (once only)
+      if (!sentReassurance && Date.now() - pollStart > 15000) {
+        sentReassurance = true;
+        const rMsgs = ['אל דאגה, אני עוד כאן ✨', 'אני עובד/ת, את/ה יכול/ה לשתות קפה בינתיים ☕', 'עוד קצת סבלנות, כמעט שם 💜', 'זה לוקח רגע, אבל ממש בדרך! 🌸'];
+        const rMsg = rMsgs[Math.floor(Math.random() * rMsgs.length)];
+        fetch(`https://api.green-api.com/waInstance${instanceId}/sendMessage/${token}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ chatId, message: rMsg }) }).catch(() => {});
+      }
 
       // Refresh typing indicator every 4s with short 5s bursts (avoids blocking Green API queue)
       if (Date.now() - lastTypingRefresh > 4000) {
