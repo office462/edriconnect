@@ -65,7 +65,10 @@ Deno.serve(async (req) => {
 
     // ===== CHECK IF WHATSAPP BOT IS ENABLED (or test phone) =====
     console.log('Q1 start', Date.now());
-    const botEnabledSettings = await base44.asServiceRole.entities.SystemSetting.filter({ key: 'whatsapp_bot_enabled' });
+    const [botEnabledSettings, cachedConvSetting] = await Promise.all([
+      base44.asServiceRole.entities.SystemSetting.filter({ key: 'whatsapp_bot_enabled' }),
+      base44.asServiceRole.entities.SystemSetting.filter({ key: 'phone_conv_' + phone }),
+    ]);
     console.log('Q1 done', Date.now());
     const botEnabled = botEnabledSettings.length > 0 && botEnabledSettings[0].value === 'true';
     
@@ -200,11 +203,11 @@ Deno.serve(async (req) => {
       } else {
         // Subsequent messages — just show typing indicator (no text)
         const typingUrl = `https://api.green-api.com/waInstance${instanceId}/sendTyping/${token}`;
-        await fetch(typingUrl, {
+        fetch(typingUrl, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ chatId, typingTime: 8000 }),
-        });
+          body: JSON.stringify({ chatId, typingTime: 60000 }),
+        }).catch(() => {});
       }
     } catch (typErr) {
       console.warn('Thinking indicator failed:', typErr.message);
@@ -220,7 +223,12 @@ Deno.serve(async (req) => {
       conversationId = serviceRequest.conversation_id;
     }
 
-    // 2. Fallback: find recent conversation for this phone from message logs
+    // 2a. Fast cache check — avoids slow phone log scan
+    if (!conversationId && cachedConvSetting?.length > 0 && cachedConvSetting[0].value) {
+      conversationId = cachedConvSetting[0].value;
+      console.log('Found conversation from phone cache:', conversationId);
+    }
+    // 2b. Fallback: find recent conversation for this phone from message logs
     if (!conversationId) {
       const recentLogs = await phoneLogsPromise;
       const withConv = recentLogs.filter(l => l.conversation_id);
@@ -228,13 +236,19 @@ Deno.serve(async (req) => {
         withConv.sort((a, b) => new Date(b.created_date) - new Date(a.created_date));
         conversationId = withConv[0].conversation_id;
         console.log(`Found conversation ${conversationId} from message logs`);
+        // Cache for fast future lookups
+        if (!cachedConvSetting?.length) {
+          base44.asServiceRole.entities.SystemSetting.create({ key: 'phone_conv_' + phone, value: conversationId }).catch(() => {});
+        }
       }
     }
 
     // 3. Try to load existing conversation
     if (conversationId) {
       try {
+        console.log('DIAG getConv start', Date.now());
         conversation = await base44.asServiceRole.agents.getConversation(conversationId);
+        console.log('DIAG getConv done', Date.now());
       } catch (e) {
         console.log('Could not load existing conversation, creating new one');
         conversationId = null;
@@ -257,6 +271,8 @@ Deno.serve(async (req) => {
           metadata: { name: contact?.full_name || phone, phone, source: 'whatsapp' },
         });
         conversationId = conversation.id;
+        // Cache for fast future lookups
+        base44.asServiceRole.entities.SystemSetting.create({ key: 'phone_conv_' + phone, value: conversationId }).catch(() => {});
       } catch (createErr) {
         console.error('Failed to create conversation:', createErr.message);
         return Response.json({ error: 'Failed to create conversation' }, { status: 500 });
@@ -279,12 +295,24 @@ Deno.serve(async (req) => {
     // Count messages BEFORE sending
     const msgCountBefore = (conversation.messages || []).length;
 
+    // ===== REASSURANCE MESSAGE before LLM (user sees activity during long wait) =====
+    if ((conversation.messages || []).length > 1) {
+      const rMsgs = ['רגע קטן 💜', 'אני כבר על זה ✨', 'כמעט שם 🌸', 'ממש בדרך 🙏'];
+      const rMsg = rMsgs[Math.floor(Math.random() * rMsgs.length)];
+      const _su = `https://api.green-api.com/waInstance${instanceId}/sendMessage/${token}`;
+      fetch(_su, { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({chatId, message: rMsg}) }).catch(() => {});
+      const _tu = `https://api.green-api.com/waInstance${instanceId}/sendTyping/${token}`;
+      fetch(_tu, { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({chatId, typingTime: 30000}) }).catch(() => {});
+    }
+
     // ===== SEND TO BOT =====
+    console.log('DIAG addMsg start', Date.now());
     await base44.asServiceRole.agents.addMessage(conversation, {
       role: 'user',
       content: text,
     });
 
+    console.log('DIAG addMsg done', Date.now());
     const expectedIndex = msgCountBefore + 1; // user message is at msgCountBefore, bot reply expected after
 
     // ===== LOG MESSAGE =====
