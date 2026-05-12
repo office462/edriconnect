@@ -247,7 +247,7 @@ Deno.serve(async (req) => {
         let botReply = '';
         if (messages.length > expectedCount) {
           for (let i = messages.length - 1; i >= expectedCount; i--) {
-            if (messages[i].role === 'assistant' && messages[i].content) {
+            if (messages[i].role === 'assistant' && messages[i].content && messages[i].content !== '<empty message>') {
               botReply = messages[i].content;
               break;
             }
