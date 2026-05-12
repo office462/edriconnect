@@ -62,7 +62,9 @@ Deno.serve(async (req) => {
     fetch(`https://api.green-api.com/waInstance${instanceId}/sendTyping/${token}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ chatId, typingTime: 30000 }) }).catch(() => {});
 
     // ===== CHECK IF WHATSAPP BOT IS ENABLED (or test phone) =====
+    console.log('Q1 start', Date.now());
     const botEnabledSettings = await base44.asServiceRole.entities.SystemSetting.filter({ key: 'whatsapp_bot_enabled' });
+    console.log('Q1 done', Date.now());
     const botEnabled = botEnabledSettings.length > 0 && botEnabledSettings[0].value === 'true';
     
     if (!botEnabled) {
@@ -82,7 +84,9 @@ Deno.serve(async (req) => {
 
     // ===== IDEMPOTENCY =====
     if (idMessage) {
+      console.log('Q2 start', Date.now());
       const existing = await base44.asServiceRole.entities.WhatsAppMessageLog.filter({ id_message: idMessage });
+      console.log('Q2 done', Date.now());
       if (existing.length > 0) {
         console.log(`Duplicate message ${idMessage}, skipping`);
         return Response.json({ ok: true, skipped: true, reason: 'duplicate' });
@@ -90,7 +94,9 @@ Deno.serve(async (req) => {
     }
 
     // ===== BLOCK LIST =====
+    console.log('Q3 start', Date.now());
     const blockList = await base44.asServiceRole.entities.WhatsAppBlockList.list();
+    console.log('Q3 done', Date.now());
     const blockedPhones = blockList.map(b => b.phone.replace(/[\s\-\+]/g, ''));
     const normalizedPhone = phone;
     const localPhone = phone.startsWith('972') ? '0' + phone.substring(3) : phone;
@@ -107,7 +113,9 @@ Deno.serve(async (req) => {
     }
 
     // ===== FIND CONTACT =====
+    console.log('Q4 start', Date.now());
     let contacts = await base44.asServiceRole.entities.Contact.filter({ phone: phone });
+    console.log('Q4 done', Date.now());
     if (contacts.length === 0 && phone.startsWith('972')) {
       contacts = await base44.asServiceRole.entities.Contact.filter({ phone: localPhone });
     }
@@ -116,7 +124,9 @@ Deno.serve(async (req) => {
     // ===== FIND SERVICE REQUEST =====
     let serviceRequest = null;
     if (contact) {
+      console.log('Q5 start', Date.now());
       const allRequests = await base44.asServiceRole.entities.ServiceRequest.filter({ contact_id: contact.id });
+      console.log('Q5 done', Date.now());
       if (allRequests.length > 0) {
         allRequests.sort((a, b) => new Date(b.created_date) - new Date(a.created_date));
         serviceRequest = allRequests[0];
