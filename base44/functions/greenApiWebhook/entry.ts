@@ -319,7 +319,8 @@ Deno.serve(async (req) => {
 
     // ===== FAST PATH: FP-0 — welcome message for new user (first message ever) =====
     // Condition: no Contact yet + no cached conversation (cachedConvSetting empty = truly first message)
-    if (!contact && (!cachedConvSetting || cachedConvSetting.length === 0)) {
+    const _fp0GreetingSent = existingLogs.some(l => l.direction === 'outgoing' && (l.text || '').includes('fast_path_fp0'));
+    if (!contact && (!cachedConvSetting || cachedConvSetting.length === 0) && !_fp0GreetingSent) {
       console.log('FAST_PATH: FP-0 welcome for new user');
       try {
         const _fp0Mu = `https://api.green-api.com/waInstance${instanceId}/sendMessage/${token}`;
