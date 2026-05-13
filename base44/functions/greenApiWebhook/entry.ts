@@ -304,23 +304,6 @@ Deno.serve(async (req) => {
           fetch(_tu, { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ chatId, typingTime: 15000 }) }).then(r => r.text().then(t => console.log('TYPING_DIAG', r.status, t))).catch(e => console.error('TYPING_ERROR:', e.message));
     }
 
-    // ===== FAST PATH: welcome + collect details (new user, no LLM needed) =====
-    if (!contact && (conversation.messages || []).length === 0) {
-      console.log('FAST_PATH: welcome message for new user');
-      const _welcomeContents = await base44.asServiceRole.entities.BotContent.filter({ key: 'welcome_collect_details' });
-      if (_welcomeContents.length > 0) {
-        const _wmu = `https://api.green-api.com/waInstance${instanceId}/sendMessage/${token}`;
-        await fetch(_wmu, { method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ chatId, message: _welcomeContents[0].content }) });
-        await base44.asServiceRole.entities.WhatsAppMessageLog.create({
-          id_message: `out_${Date.now()}_fp_welcome`, phone, direction: 'outgoing',
-          text: '[fast_path_welcome]', status: 'replied', chat_id: chatId,
-          conversation_id: conversationId,
-        });
-        return Response.json({ ok: true, fast_path: 'welcome' });
-      }
-    }
-
     // ===== FAST PATH: consultation disease selection (no LLM needed) =====
     {
       const DISEASE_MAP = {
