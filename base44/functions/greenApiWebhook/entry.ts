@@ -395,6 +395,7 @@ Deno.serve(async (req) => {
     {
       const _c1Mu = `https://api.green-api.com/waInstance${instanceId}/sendMessage/${token}`;
       const _c1Norm = text.trim().replace(/[*"'״]/g, '');
+      console.log('FP-C1-DEBUG:', JSON.stringify({ stype: serviceRequest?.service_type, sub: serviceRequest?.sub_type, step: serviceRequest?.current_step, norm: _c1Norm }));
       if (
         serviceRequest?.service_type === 'consultation' &&
         !serviceRequest?.sub_type &&
