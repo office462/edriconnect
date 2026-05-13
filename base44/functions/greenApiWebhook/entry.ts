@@ -436,7 +436,6 @@ Deno.serve(async (req) => {
     {
       const _c1Mu = `https://api.green-api.com/waInstance${instanceId}/sendMessage/${token}`;
       const _c1Norm = text.trim().replace(/[*"'״]/g, '');
-      console.log('FP-C1-DEBUG:', JSON.stringify({ stype: serviceRequest?.service_type, sub: serviceRequest?.sub_type, step: serviceRequest?.current_step, norm: _c1Norm }));
       if (
         serviceRequest?.service_type === 'consultation' &&
         !serviceRequest?.sub_type &&
@@ -463,6 +462,55 @@ Deno.serve(async (req) => {
           console.log('FAST_PATH FP-C1: BotContent not found, falling to LLM');
         } catch (fpC1Err) {
           console.warn(`FAST_PATH FP-C1 error: ${fpC1Err.message} — falling to LLM`);
+        }
+      }
+    }
+    // ===== FAST PATH: FP-C2 — consultation "1"/autism choice → autism video =====
+    {
+      const _c2Mu = `https://api.green-api.com/waInstance${instanceId}/sendMessage/${token}`;
+      const _c2Fu = `https://api.green-api.com/waInstance${instanceId}/sendFileByUrl/${token}`;
+      const _c2Norm = text.trim().replace(/[*"'״]/g, '').toLowerCase();
+      const _c2Choices = ['1', 'אוטיזם', 'אוטיזם ותסמונות גנטיות'];
+      if (
+        serviceRequest?.service_type === 'consultation' &&
+        serviceRequest?.current_step === 'awaiting_topic_choice' &&
+        _c2Choices.includes(_c2Norm)
+      ) {
+        console.log('FAST_PATH: FP-C2 autism topic selected');
+        try {
+          const _c2Videos = await base44.asServiceRole.entities.ServiceContent.filter({
+            service_type: 'consultation', content_type: 'video', sub_type: 'אוטיזם',
+          });
+          if (_c2Videos.length > 0) {
+            const _c2Url = _c2Videos[0].url;
+            const _c2IsDirect = /\.(mp4|mov|avi|mkv|webm)(\?.*)?$/i.test(_c2Url);
+            await fetch(_c2Mu, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ chatId, message: 'מיד שולחת לך את הסרטון על אוטיזם 💜' }) });
+            if (_c2IsDirect) {
+              await fetch(_c2Fu, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ chatId, urlFile: _c2Url, fileName: 'אוטיזם.mp4', caption: '' }) });
+            } else {
+              await fetch(_c2Mu, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ chatId, message: _c2Url }) });
+            }
+            await fetch(_c2Mu, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ chatId, message: 'לאחר שצפית, אנא כתוב/י *"צפיתי"* 🌸' }) });
+            await base44.asServiceRole.entities.ServiceRequest.update(serviceRequest.id, {
+              sub_type: 'אוטיזם', current_step: 'awaiting_tsafiti_autism',
+            });
+            await base44.asServiceRole.entities.WhatsAppMessageLog.create({
+              id_message: idMessage || `wa_${Date.now()}`, phone, direction: 'incoming',
+              text: text.substring(0, 500), status: 'replied', chat_id: chatId, conversation_id: conversationId,
+            });
+            await base44.asServiceRole.entities.WhatsAppMessageLog.create({
+              id_message: `out_${Date.now()}_fp_c2`, phone, direction: 'outgoing',
+              text: '[fast_path_c2_autism]', status: 'replied', chat_id: chatId, conversation_id: conversationId,
+            });
+            return Response.json({ ok: true, fast_path: 'c2_autism' });
+          }
+          console.log('FAST_PATH FP-C2: ServiceContent not found, falling to LLM');
+        } catch (fpC2Err) {
+          console.warn(`FAST_PATH FP-C2 error: ${fpC2Err.message} — falling to LLM`);
         }
       }
     }
