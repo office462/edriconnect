@@ -514,6 +514,42 @@ Deno.serve(async (req) => {
         }
       }
     }
+    // ===== FAST PATH: FP-C3 — consultation "2"/chronic → chronic diseases menu =====
+    {
+      const _c3Mu = `https://api.green-api.com/waInstance${instanceId}/sendMessage/${token}`;
+      const _c3Norm = text.trim().replace(/[*"'״]/g, '').toLowerCase();
+      const _c3Choices = ['2', 'מחלות', 'מחלות כרוניות', 'מחלות כרוניות אחרות'];
+      if (
+        serviceRequest?.service_type === 'consultation' &&
+        serviceRequest?.current_step === 'awaiting_topic_choice' &&
+        _c3Choices.includes(_c3Norm)
+      ) {
+        console.log('FAST_PATH: FP-C3 chronic diseases menu');
+        try {
+          const _c3Contents = await base44.asServiceRole.entities.BotContent.filter({ key: 'consultation_chronic_diseases' });
+          if (_c3Contents.length > 0) {
+            await fetch(_c3Mu, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ chatId, message: _c3Contents[0].content }) });
+            // Clear current_step so FP-C2 won't interfere with disease selection
+            await base44.asServiceRole.entities.ServiceRequest.update(serviceRequest.id, {
+              current_step: '',
+            });
+            await base44.asServiceRole.entities.WhatsAppMessageLog.create({
+              id_message: idMessage || `wa_${Date.now()}`, phone, direction: 'incoming',
+              text: text.substring(0, 500), status: 'replied', chat_id: chatId, conversation_id: conversationId,
+            });
+            await base44.asServiceRole.entities.WhatsAppMessageLog.create({
+              id_message: `out_${Date.now()}_fp_c3`, phone, direction: 'outgoing',
+              text: '[fast_path_c3_chronic_menu]', status: 'replied', chat_id: chatId, conversation_id: conversationId,
+            });
+            return Response.json({ ok: true, fast_path: 'c3_chronic_menu' });
+          }
+          console.log('FAST_PATH FP-C3: BotContent not found, falling to LLM');
+        } catch (fpC3Err) {
+          console.warn(`FAST_PATH FP-C3 error: ${fpC3Err.message} — falling to LLM`);
+        }
+      }
+    }
     // ===== END FAST PATH =====
 
     // ===== SEND TO BOT =====
