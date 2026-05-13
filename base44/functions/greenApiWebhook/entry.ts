@@ -721,6 +721,40 @@ Deno.serve(async (req) => {
         }
       }
     }
+    // ===== FAST PATH: FP-C5 — consultation chronic disease "צפיתי וקראתי" → additional_reading_offer =====
+    {
+      const _c5Mu = `https://api.green-api.com/waInstance${instanceId}/sendMessage/${token}`;
+      const _c5Norm = text.trim().replace(/[*"'״]/g, '').toLowerCase();
+      if (
+        serviceRequest?.service_type === 'consultation' &&
+        serviceRequest?.sub_type &&
+        serviceRequest?.sub_type !== 'אוטיזם' &&
+        _c5Norm === 'צפיתי וקראתי'
+      ) {
+        console.log('FAST_PATH: FP-C5 chronic disease tsafiti-v-karati → additional reading offer');
+        try {
+          const _c5Contents = await base44.asServiceRole.entities.BotContent.filter({ key: 'additional_reading_offer' });
+          if (_c5Contents.length > 0) {
+            await fetch(_c5Mu, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ chatId, message: _c5Contents[0].content }) });
+            await base44.asServiceRole.entities.ServiceRequest.update(serviceRequest.id, { current_step: 'awaiting_additional_reading_response' });
+            await base44.asServiceRole.entities.WhatsAppMessageLog.create({
+              id_message: idMessage || `wa_${Date.now()}`, phone, direction: 'incoming',
+              text: text.substring(0, 500), status: 'replied', chat_id: chatId, conversation_id: conversationId,
+            });
+            await base44.asServiceRole.entities.WhatsAppMessageLog.create({
+              id_message: `out_${Date.now()}_fp_c5`, phone, direction: 'outgoing',
+              text: '[fast_path_c5_additional_reading_offer]', status: 'replied', chat_id: chatId, conversation_id: conversationId,
+            });
+            return Response.json({ ok: true, fast_path: 'c5_additional_reading_offer' });
+          }
+          console.log('FAST_PATH FP-C5: BotContent not found, falling to LLM');
+        } catch (fpC5Err) {
+          console.warn(`FAST_PATH FP-C5 error: ${fpC5Err.message} — falling to LLM`);
+        }
+      }
+    }
+
 
 
 
