@@ -304,6 +304,81 @@ Deno.serve(async (req) => {
           fetch(_tu, { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ chatId, typingTime: 15000 }) }).then(r => r.text().then(t => console.log('TYPING_DIAG', r.status, t))).catch(e => console.error('TYPING_ERROR:', e.message));
     }
 
+    // ===== FAST PATH: consultation disease selection (no LLM needed) =====
+    {
+      const DISEASE_MAP = {
+        '1': 'פוריות', 'פוריות': 'פוריות',
+        '2': 'הריון', 'הריון': 'הריון',
+        '3': 'גיל המעבר', 'גיל המעבר': 'גיל המעבר', 'גיל': 'גיל המעבר',
+        '4': 'סוכרת', 'סוכרת': 'סוכרת',
+        '5': 'דיכאון', 'דיכאון': 'דיכאון',
+        '6': 'מחלות מעי', 'מחלות מעי': 'מחלות מעי', 'מעי': 'מחלות מעי',
+        '7': 'סרטן', 'סרטן': 'סרטן',
+        '8': 'אוטיזם', 'אוטיזם': 'אוטיזם', 'אוטיזם ותסמונות גנטיות': 'אוטיזם',
+      };
+      const convMsgs = conversation.messages || [];
+      const lastBotMsg = [...convMsgs].reverse().find(m => m.role === 'assistant')?.content || '';
+      const isAtDiseaseMenu = serviceRequest?.service_type === 'consultation' && lastBotMsg.includes('פוריות');
+      if (isAtDiseaseMenu) {
+        const normalized = text.trim();
+        const subType = DISEASE_MAP[normalized] || DISEASE_MAP[normalized.split(/[\s,\.]/)[0]];
+        if (subType) {
+          console.log(`FAST_PATH: disease selection "${subType}"`);
+          let fastPathDone = false;
+          try {
+            const fpVideos = await base44.asServiceRole.entities.ServiceContent.filter({
+              service_type: 'consultation', content_type: 'video', sub_type: subType,
+            });
+            if (fpVideos.length > 0) {
+              await base44.asServiceRole.entities.WhatsAppMessageLog.create({
+                id_message: idMessage || `wa_${Date.now()}`,
+                phone, direction: 'incoming',
+                text: text.substring(0, 500), status: 'replied',
+                conversation_id: conversationId, chat_id: chatId,
+              });
+              const _mu = `https://api.green-api.com/waInstance${instanceId}/sendMessage/${token}`;
+              await fetch(_mu, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ chatId, message: `מיד שולחת לך את המידע על ${subType} 💜` }) });
+              const _fu = `https://api.green-api.com/waInstance${instanceId}/sendFileByUrl/${token}`;
+              await fetch(_fu, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ chatId, urlFile: fpVideos[0].url, fileName: `${subType}.mp4`, caption: '' }) });
+              const isAutism = subType === 'אוטיזם';
+              if (!isAutism) {
+                const fpPdfs = await base44.asServiceRole.entities.ServiceContent.filter({
+                  service_type: 'consultation', content_type: 'pdf', sub_type: subType,
+                });
+                if (fpPdfs.length > 0) {
+                  await new Promise(r => setTimeout(r, 1000));
+                  await fetch(_fu, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ chatId, urlFile: fpPdfs[0].url, fileName: `${subType}.pdf`, caption: '' }) });
+                }
+              }
+              await new Promise(r => setTimeout(r, 1000));
+              const confirmMsg = isAutism
+                ? 'לאחר שצפית, אנא כתוב/י *"צפיתי"* 🌸'
+                : 'לאחר שצפית וקראת, אנא כתוב/י *"צפיתי וקראתי"* 🌸';
+              await fetch(_mu, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ chatId, message: confirmMsg }) });
+              if (serviceRequest) {
+                await base44.asServiceRole.entities.ServiceRequest.update(serviceRequest.id, { sub_type: subType });
+              }
+              await base44.asServiceRole.entities.WhatsAppMessageLog.create({
+                id_message: `out_${Date.now()}_fp`, phone, direction: 'outgoing',
+                text: `[fast_path] ${subType}`, status: 'replied', chat_id: chatId,
+              });
+              fastPathDone = true;
+            } else {
+              console.log(`FAST_PATH: no video for "${subType}", falling to LLM`);
+            }
+          } catch (fpErr) {
+            console.warn(`FAST_PATH error: ${fpErr.message} — falling to LLM`);
+          }
+          if (fastPathDone) return Response.json({ ok: true, fast_path: true, subType });
+        }
+      }
+    }
+    // ===== END FAST PATH =====
+
     // ===== SEND TO BOT =====
     console.log('DIAG addMsg start', Date.now());
     await base44.asServiceRole.agents.addMessage(conversation, {
