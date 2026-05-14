@@ -337,6 +337,11 @@ Deno.serve(async (req) => {
             text: '[fast_path_fp0_greeting]', status: 'replied', chat_id: chatId,
             conversation_id: conversationId,
           });
+          // Add user message so LLM has context on next turn (avoids re-sending greeting)
+          try {
+            await base44.asServiceRole.agents.addMessage(conversation, { role: 'user', content: text });
+          } catch (_) {}
+          return Response.json({ ok: true, fast_path: 'fp0_greeting' });
         }
         console.log('FAST_PATH FP-0: BotContent not found, falling to LLM');
       } catch (fp0Err) {

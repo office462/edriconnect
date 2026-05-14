@@ -483,10 +483,26 @@ Deno.serve(async (req) => {
             chat_id: chatId,
           });
 
-          // Add to bot conversation if available
-          if (effectiveConversationId) {
+          // Add to bot conversation — try ServiceRequest.conversation_id first,
+          // then fall back to phone_conv_ cache so system messages appear in LLM history
+          let finalConvId = effectiveConversationId;
+          if (!finalConvId && cleanPhone) {
             try {
-              const conv = await base44.asServiceRole.agents.getConversation(effectiveConversationId);
+              const phoneConvSettings = await base44.asServiceRole.entities.SystemSetting.filter({
+                key: `phone_conv_${cleanPhone}`
+              });
+              if (phoneConvSettings.length > 0 && /^[a-f0-9]{24}$/i.test(phoneConvSettings[0].value)) {
+                finalConvId = phoneConvSettings[0].value;
+                console.log(`onServiceRequestUpdate: found conversation from phone cache: ${finalConvId}`);
+                await base44.asServiceRole.entities.ServiceRequest.update(requestId, {
+                  conversation_id: finalConvId
+                });
+              }
+            } catch (_) {}
+          }
+          if (finalConvId) {
+            try {
+              const conv = await base44.asServiceRole.agents.getConversation(finalConvId);
               await base44.asServiceRole.agents.addMessage(conv, { role: 'assistant', content: botMessage });
             } catch (convErr) {
               console.warn('Conv error:', convErr.message);
