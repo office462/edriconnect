@@ -87,7 +87,6 @@ Deno.serve(async (req) => {
     await base44.asServiceRole.entities.ServiceRequest.update(matchingReq.id, {
       status: 'paid',
       payment_confirmed: true,
-      ...(botEnabled && paymentBotTrigger ? { pending_bot_message: paymentBotTrigger } : {}),
     });
 
     if (!botEnabled) {
