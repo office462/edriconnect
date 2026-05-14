@@ -76,6 +76,13 @@ Deno.serve(async (req) => {
           }
         }
 
+        // DEDUP: skip if onServiceRequestUpdate already sent this trigger directly
+        if (sr.last_system_message && sr.last_system_message === sr.pending_bot_message) {
+          console.log(`processWhatsAppReplies: DEDUP — last_system_message matches pending_bot_message (${sr.pending_bot_message}), clearing flag without re-sending`);
+          await base44.asServiceRole.entities.ServiceRequest.update(sr.id, { pending_bot_message: '' });
+          continue;
+        }
+
         console.log(`processWhatsAppReplies: found pending_bot_message=${sr.pending_bot_message} for ${sr.id}`);
 
         // Call onServiceRequestUpdate to generate the message
