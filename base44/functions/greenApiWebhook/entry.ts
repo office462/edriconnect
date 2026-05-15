@@ -789,6 +789,414 @@ Deno.serve(async (req) => {
 
 
 
+    // ===== FAST PATH: FP-L-B-Yes — legal reading offer "כן" → website =====
+    {
+      const _lByMu = `https://api.green-api.com/waInstance${instanceId}/sendMessage/${token}`;
+      const _lByNorm = text.trim().replace(/[*"'״]/g, '').toLowerCase();
+      const _lByYes = ['כן','בטח','אשמח','כמובן','יאללה','קדימה','סבבה','אוקי','ok','רוצה','מעוניינת'].includes(_lByNorm);
+      if (
+        serviceRequest?.service_type === 'legal' &&
+        serviceRequest?.current_step === 'awaiting_legal_reading_response' &&
+        _lByYes
+      ) {
+        console.log('FAST_PATH: FP-L-B-Yes legal reading yes → website');
+        try {
+          const _lBySc = await base44.asServiceRole.entities.ServiceContent.filter({
+            service_type: 'legal', content_type: 'external_link', sub_type: 'additional_reading',
+          });
+          if (_lBySc.length > 0) {
+            await fetch(_lByMu, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ chatId, message: _lBySc[0].url }) });
+            await fetch(_lByMu, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ chatId, message: 'לאחר שקראת, כתוב/י *"קראתי"* 🌸' }) });
+            await base44.asServiceRole.entities.ServiceRequest.update(serviceRequest.id, { current_step: 'awaiting_legal_karati_website' });
+            await base44.asServiceRole.entities.WhatsAppMessageLog.create({ id_message: idMessage || `wa_${Date.now()}`, phone, direction: 'incoming', text: text.substring(0, 500), status: 'replied', chat_id: chatId, conversation_id: conversationId });
+            await base44.asServiceRole.entities.WhatsAppMessageLog.create({ id_message: `out_${Date.now()}_fp_lby`, phone, direction: 'outgoing', text: '[fast_path_l_b_yes]', status: 'replied', chat_id: chatId, conversation_id: conversationId });
+            return Response.json({ ok: true, fast_path: 'l_b_yes_website' });
+          }
+          console.log('FAST_PATH FP-L-B-Yes: content not found, falling to LLM');
+        } catch (e) { console.warn('FP-L-B-Yes error:', e.message); }
+      }
+    }
+
+    // ===== FAST PATH: FP-L1 — legal "שלחתי" → documents_received + in_review =====
+    {
+      const _l1Mu = `https://api.green-api.com/waInstance${instanceId}/sendMessage/${token}`;
+      const _l1Norm = text.trim().replace(/[*"'״]/g, '').toLowerCase();
+      const _l1Vars = ['שלחתי','שלחתי מסמכים','שלחתי את המסמכים','שלחתי הכל','נשלח'];
+      if (
+        serviceRequest?.service_type === 'legal' &&
+        serviceRequest?.payment_confirmed === true &&
+        !serviceRequest?.documents_received &&
+        _l1Vars.includes(_l1Norm)
+      ) {
+        console.log('FAST_PATH: FP-L1 legal שלחתי → in_review');
+        try {
+          await fetch(_l1Mu, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ chatId, message: 'תודה! קיבלנו את המסמכים 📁\nנבדוק ונחזור אליך בהקדם 🙏' }) });
+          const _l1Old = serviceRequest.status;
+          await base44.asServiceRole.entities.ServiceRequest.update(serviceRequest.id, {
+            documents_received: true, status: 'in_review', current_step: 'legal_documents_received',
+          });
+          await base44.asServiceRole.entities.ServiceRequestTimeline.create({
+            service_request_id: serviceRequest.id, event_type: 'status_change',
+            description: 'מסמכים התקבלו — זוהה אוטומטית מ-WhatsApp',
+            old_value: _l1Old, new_value: 'in_review',
+          });
+          await base44.asServiceRole.entities.WhatsAppMessageLog.create({ id_message: idMessage || `wa_${Date.now()}`, phone, direction: 'incoming', text: text.substring(0, 500), status: 'replied', chat_id: chatId, conversation_id: conversationId });
+          await base44.asServiceRole.entities.WhatsAppMessageLog.create({ id_message: `out_${Date.now()}_fp_l1`, phone, direction: 'outgoing', text: '[fast_path_l1_docs_received]', status: 'replied', chat_id: chatId, conversation_id: conversationId });
+          return Response.json({ ok: true, fast_path: 'l1_documents_received' });
+        } catch (e) { console.warn('FP-L1 error:', e.message); }
+      }
+    }
+
+    // ===== FAST PATH: FP-Clinic-Room — clinic room type selection =====
+    {
+      const _crMu = `https://api.green-api.com/waInstance${instanceId}/sendMessage/${token}`;
+      const _crFu = `https://api.green-api.com/waInstance${instanceId}/sendFileByUrl/${token}`;
+      const _crNorm = text.trim().replace(/[*"'״]/g, '').toLowerCase();
+      const _crRoomMap = {
+        '1': 'חדר שיחה', 'שיחה': 'חדר שיחה', 'חדר שיחה': 'חדר שיחה',
+        '2': 'חדר טיפול', 'טיפול': 'חדר טיפול', 'חדר טיפול': 'חדר טיפול',
+        '3': 'חדר רופא', 'רופא': 'חדר רופא', 'חדר רופא': 'חדר רופא', 'חדר עם רופא': 'חדר רופא',
+      };
+      const _crSubType = _crRoomMap[_crNorm];
+      if (
+        serviceRequest?.service_type === 'clinic' &&
+        serviceRequest?.current_step === 'awaiting_clinic_room_type' &&
+        _crSubType
+      ) {
+        console.log('FAST_PATH: FP-Clinic-Room:', _crSubType);
+        try {
+          const [_crImages, _crVideos] = await Promise.all([
+            base44.asServiceRole.entities.ServiceContent.filter({ service_type: 'clinic', content_type: 'image', sub_type: _crSubType }),
+            base44.asServiceRole.entities.ServiceContent.filter({ service_type: 'clinic', content_type: 'video', sub_type: _crSubType }),
+          ]);
+          if (_crImages.length > 0 || _crVideos.length > 0) {
+            await fetch(_crMu, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ chatId, message: `מיד שולחת לך מידע על ${_crSubType} 💜` }) });
+            if (_crImages.length > 0) {
+              await fetch(_crFu, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ chatId, urlFile: _crImages[0].url, fileName: `תמונת ${_crSubType}.jpg`, caption: '' }) });
+            }
+            if (_crVideos.length > 0) {
+              await new Promise(r => setTimeout(r, 1000));
+              await fetch(_crMu, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ chatId, message: `הנה סרטון של ${_crSubType}:\n${_crVideos[0].url}` }) });
+            }
+            await new Promise(r => setTimeout(r, 1000));
+            await fetch(_crMu, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ chatId, message: 'לאחר שצפית, כתוב/י *"צפיתי"* 🌸' }) });
+            await base44.asServiceRole.entities.ServiceRequest.update(serviceRequest.id, {
+              sub_type: _crSubType, current_step: 'awaiting_clinic_tsafiti',
+            });
+            await base44.asServiceRole.entities.WhatsAppMessageLog.create({ id_message: idMessage || `wa_${Date.now()}`, phone, direction: 'incoming', text: text.substring(0, 500), status: 'replied', chat_id: chatId, conversation_id: conversationId });
+            await base44.asServiceRole.entities.WhatsAppMessageLog.create({ id_message: `out_${Date.now()}_fp_cr`, phone, direction: 'outgoing', text: '[fast_path_clinic_room]', status: 'replied', chat_id: chatId, conversation_id: conversationId });
+            return Response.json({ ok: true, fast_path: 'clinic_room' });
+          }
+          console.log('FAST_PATH FP-Clinic-Room: content not found, falling to LLM');
+        } catch (e) { console.warn('FP-Clinic-Room error:', e.message); }
+      }
+    }
+
+    // ===== FAST PATH: FP-Clinic-Tsafiti — clinic "צפיתי" → info + pricing text =====
+    {
+      const _ctMu = `https://api.green-api.com/waInstance${instanceId}/sendMessage/${token}`;
+      const _ctNorm = text.trim().replace(/[*"'״]/g, '').toLowerCase();
+      if (
+        serviceRequest?.service_type === 'clinic' &&
+        serviceRequest?.current_step === 'awaiting_clinic_tsafiti' &&
+        _ctNorm === 'צפיתי'
+      ) {
+        console.log('FAST_PATH: FP-Clinic-Tsafiti → info + pricing text');
+        try {
+          const [_ctInfo, _ctPrice] = await Promise.all([
+            base44.asServiceRole.entities.BotContent.filter({ key: 'clinic_info' }),
+            base44.asServiceRole.entities.BotContent.filter({ key: 'clinic_price_message' }),
+          ]);
+          if (_ctInfo.length > 0 && _ctPrice.length > 0) {
+            await fetch(_ctMu, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ chatId, message: _ctInfo[0].content }) });
+            await new Promise(r => setTimeout(r, 1000));
+            await fetch(_ctMu, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ chatId, message: _ctPrice[0].content }) });
+            await new Promise(r => setTimeout(r, 1000));
+            await fetch(_ctMu, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ chatId, message: 'לאחר שקראת, כתוב/י *"קראתי"* 🌸' }) });
+            await base44.asServiceRole.entities.ServiceRequest.update(serviceRequest.id, { current_step: 'awaiting_clinic_karati' });
+            await base44.asServiceRole.entities.WhatsAppMessageLog.create({ id_message: idMessage || `wa_${Date.now()}`, phone, direction: 'incoming', text: text.substring(0, 500), status: 'replied', chat_id: chatId, conversation_id: conversationId });
+            await base44.asServiceRole.entities.WhatsAppMessageLog.create({ id_message: `out_${Date.now()}_fp_ct`, phone, direction: 'outgoing', text: '[fast_path_clinic_tsafiti]', status: 'replied', chat_id: chatId, conversation_id: conversationId });
+            return Response.json({ ok: true, fast_path: 'clinic_tsafiti' });
+          }
+          console.log('FAST_PATH FP-Clinic-Tsafiti: BotContent not found, falling to LLM');
+        } catch (e) { console.warn('FP-Clinic-Tsafiti error:', e.message); }
+      }
+    }
+
+    // ===== FAST PATH: FP-Clinic-Karati — clinic "קראתי" → calendar =====
+    {
+      const _ckMu = `https://api.green-api.com/waInstance${instanceId}/sendMessage/${token}`;
+      const _ckNorm = text.trim().replace(/[*"'״]/g, '').toLowerCase();
+      if (
+        serviceRequest?.service_type === 'clinic' &&
+        serviceRequest?.current_step === 'awaiting_clinic_karati' &&
+        _ckNorm === 'קראתי'
+      ) {
+        console.log('FAST_PATH: FP-Clinic-Karati → calendar');
+        try {
+          const _ckSc = await base44.asServiceRole.entities.ServiceContent.filter({
+            service_type: 'clinic', content_type: 'external_link',
+          });
+          if (_ckSc.length > 0) {
+            await fetch(_ckMu, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ chatId, message: 'מעולה! הנה הקישור לתיאום פגישה 📅\n\n' + _ckSc[0].url }) });
+            await base44.asServiceRole.entities.ServiceRequest.update(serviceRequest.id, { current_step: 'awaiting_clinic_appointment' });
+            await base44.asServiceRole.entities.WhatsAppMessageLog.create({ id_message: idMessage || `wa_${Date.now()}`, phone, direction: 'incoming', text: text.substring(0, 500), status: 'replied', chat_id: chatId, conversation_id: conversationId });
+            await base44.asServiceRole.entities.WhatsAppMessageLog.create({ id_message: `out_${Date.now()}_fp_ck`, phone, direction: 'outgoing', text: '[fast_path_clinic_karati]', status: 'replied', chat_id: chatId, conversation_id: conversationId });
+            return Response.json({ ok: true, fast_path: 'clinic_karati' });
+          }
+          console.log('FAST_PATH FP-Clinic-Karati: calendar not found, falling to LLM');
+        } catch (e) { console.warn('FP-Clinic-Karati error:', e.message); }
+      }
+    }
+
+    // ===== FAST PATH: FP-Lectures-Type — lectures type selection =====
+    {
+      const _ltMu = `https://api.green-api.com/waInstance${instanceId}/sendMessage/${token}`;
+      const _ltFu = `https://api.green-api.com/waInstance${instanceId}/sendFileByUrl/${token}`;
+      const _ltNorm = text.trim().replace(/[*"'״]/g, '').toLowerCase();
+      if (
+        serviceRequest?.service_type === 'lectures' &&
+        serviceRequest?.current_step === 'awaiting_lectures_type'
+      ) {
+        const _ltIsSeries = ['1','סדרה','הרצאות סדרה','סדרת הרצאות'].includes(_ltNorm);
+        const _ltIsSingle = ['2','בודדת','הרצאה בודדת','הרצאה'].includes(_ltNorm);
+        const _ltIsBio = ['3','ביופידבק','ביופידבק/ניהול כאב','ניהול כאב','סדנה','סדנת ביופידבק'].includes(_ltNorm);
+        if (_ltIsSeries || _ltIsSingle || _ltIsBio) {
+          console.log('FAST_PATH: FP-Lectures-Type:', _ltNorm);
+          try {
+            if (_ltIsSeries) {
+              const _ltSc = await base44.asServiceRole.entities.ServiceContent.filter({
+                service_type: 'lectures', content_type: 'external_link', sub_type: 'series_page',
+              });
+              if (!_ltSc.length) throw new Error('series_page_not_found');
+              await fetch(_ltMu, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ chatId, message: 'מיד שולחת לך את עמוד סדרת ההרצאות 📚\n\n' + _ltSc[0].url }) });
+              await fetch(_ltMu, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ chatId, message: 'לאחר שקראת, כתוב/י *"קראתי"* 🌸' }) });
+              await base44.asServiceRole.entities.ServiceRequest.update(serviceRequest.id, {
+                sub_type: 'series', current_step: 'awaiting_lectures_series_karati',
+              });
+            } else if (_ltIsSingle) {
+              const _ltBc = await base44.asServiceRole.entities.BotContent.filter({ key: 'lectures_single_list' });
+              if (!_ltBc.length) throw new Error('lectures_single_list_not_found');
+              await fetch(_ltMu, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ chatId, message: _ltBc[0].content }) });
+              await base44.asServiceRole.entities.ServiceRequest.update(serviceRequest.id, {
+                sub_type: 'single', current_step: 'awaiting_lecture_single_selection',
+              });
+            } else {
+              const _ltBioLectures = await base44.asServiceRole.entities.Lecture.filter({ lecture_type: 'workshop' });
+              const _ltBioLecture = _ltBioLectures.length > 0 ? _ltBioLectures[0] : null;
+              if (!_ltBioLecture) throw new Error('biofeedback_lecture_not_found');
+              await fetch(_ltMu, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ chatId, message: 'מיד שולחת לך מידע על סדנת הביופידבק 💜' }) });
+              if (_ltBioLecture.video_url) {
+                await fetch(_ltMu, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ chatId, message: _ltBioLecture.video_url }) });
+              }
+              if (_ltBioLecture.pdf_url) {
+                await new Promise(r => setTimeout(r, 1000));
+                await fetch(_ltFu, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ chatId, urlFile: _ltBioLecture.pdf_url, fileName: 'סדנת ביופידבק.pdf', caption: '' }) });
+              }
+              await new Promise(r => setTimeout(r, 1000));
+              await fetch(_ltMu, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ chatId, message: 'לאחר שצפית וקראת, כתוב/י *"קראתי"* 🌸' }) });
+              await base44.asServiceRole.entities.ServiceRequest.update(serviceRequest.id, {
+                sub_type: 'biofeedback', current_step: 'awaiting_lectures_biofeedback_karati',
+              });
+            }
+            const _ltLabel = _ltIsSeries ? 'series' : _ltIsSingle ? 'single' : 'biofeedback';
+            await base44.asServiceRole.entities.WhatsAppMessageLog.create({ id_message: idMessage || `wa_${Date.now()}`, phone, direction: 'incoming', text: text.substring(0, 500), status: 'replied', chat_id: chatId, conversation_id: conversationId });
+            await base44.asServiceRole.entities.WhatsAppMessageLog.create({ id_message: `out_${Date.now()}_fp_lt`, phone, direction: 'outgoing', text: `[fast_path_lectures_type_${_ltLabel}]`, status: 'replied', chat_id: chatId, conversation_id: conversationId });
+            return Response.json({ ok: true, fast_path: `lectures_type_${_ltLabel}` });
+          } catch (e) { console.warn('FP-Lectures-Type error:', e.message, '— falling to LLM'); }
+        }
+      }
+    }
+
+    // ===== FAST PATH: FP-Lectures-Single-Selection — single lecture by number =====
+    {
+      const _lsMu = `https://api.green-api.com/waInstance${instanceId}/sendMessage/${token}`;
+      const _lsFu = `https://api.green-api.com/waInstance${instanceId}/sendFileByUrl/${token}`;
+      const _lsNorm = text.trim().replace(/[*"'״]/g, '').toLowerCase();
+      const _lsNum = parseInt(_lsNorm, 10);
+      if (
+        serviceRequest?.service_type === 'lectures' &&
+        serviceRequest?.current_step === 'awaiting_lecture_single_selection' &&
+        !isNaN(_lsNum) && _lsNum >= 1 && _lsNum <= 9
+      ) {
+        console.log('FAST_PATH: FP-Lectures-Single-Selection:', _lsNum);
+        try {
+          const _lsAll = await base44.asServiceRole.entities.Lecture.filter({ lecture_type: 'single' });
+          _lsAll.sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
+          const _lsLecture = _lsAll[_lsNum - 1];
+          if (_lsLecture) {
+            await fetch(_lsMu, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ chatId, message: `מיד שולחת לך: ${_lsLecture.title} 💜` }) });
+            if (_lsLecture.video_url) {
+              await fetch(_lsMu, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ chatId, message: _lsLecture.video_url }) });
+            }
+            if (_lsLecture.pdf_url) {
+              await new Promise(r => setTimeout(r, 1000));
+              await fetch(_lsFu, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ chatId, urlFile: _lsLecture.pdf_url, fileName: `${_lsLecture.title}.pdf`, caption: '' }) });
+            }
+            await new Promise(r => setTimeout(r, 1000));
+            const _lsHasVideo = !!_lsLecture.video_url;
+            const _lsHasPdf = !!_lsLecture.pdf_url;
+            const _lsConfirm = _lsHasVideo && _lsHasPdf ? 'לאחר שצפית וקראת, כתוב/י *"קראתי"* 🌸'
+              : _lsHasVideo ? 'לאחר שצפית, כתוב/י *"קראתי"* 🌸'
+              : 'לאחר שקראת, כתוב/י *"קראתי"* 🌸';
+            await fetch(_lsMu, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ chatId, message: _lsConfirm }) });
+            await base44.asServiceRole.entities.ServiceRequest.update(serviceRequest.id, {
+              sub_type: _lsLecture.title, current_step: 'awaiting_lecture_single_karati',
+            });
+            await base44.asServiceRole.entities.WhatsAppMessageLog.create({ id_message: idMessage || `wa_${Date.now()}`, phone, direction: 'incoming', text: text.substring(0, 500), status: 'replied', chat_id: chatId, conversation_id: conversationId });
+            await base44.asServiceRole.entities.WhatsAppMessageLog.create({ id_message: `out_${Date.now()}_fp_ls`, phone, direction: 'outgoing', text: `[fast_path_lecture_single_${_lsNum}]`, status: 'replied', chat_id: chatId, conversation_id: conversationId });
+            return Response.json({ ok: true, fast_path: `lecture_single_${_lsNum}` });
+          }
+          console.log('FAST_PATH FP-Lectures-Single-Selection: lecture', _lsNum, 'not found');
+        } catch (e) { console.warn('FP-Lectures-Single error:', e.message); }
+      }
+    }
+
+    // ===== FAST PATH: FP-Lectures-Karati — lectures "קראתי" → calendar (always lecture_calendar) =====
+    {
+      const _lkMu = `https://api.green-api.com/waInstance${instanceId}/sendMessage/${token}`;
+      const _lkNorm = text.trim().replace(/[*"'״]/g, '').toLowerCase();
+      const _lkSteps = ['awaiting_lectures_series_karati','awaiting_lectures_biofeedback_karati','awaiting_lecture_single_karati'];
+      if (
+        serviceRequest?.service_type === 'lectures' &&
+        _lkSteps.includes(serviceRequest?.current_step) &&
+        _lkNorm === 'קראתי'
+      ) {
+        console.log('FAST_PATH: FP-Lectures-Karati, step:', serviceRequest.current_step);
+        try {
+          const _lkSc = await base44.asServiceRole.entities.ServiceContent.filter({
+            service_type: 'lectures', content_type: 'external_link', sub_type: 'lecture_calendar',
+          });
+          if (_lkSc.length > 0) {
+            await fetch(_lkMu, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ chatId, message: 'מעולה! הנה הקישור לתיאום 📅\n\n' + _lkSc[0].url }) });
+            await base44.asServiceRole.entities.ServiceRequest.update(serviceRequest.id, { current_step: 'awaiting_lectures_appointment' });
+            await base44.asServiceRole.entities.WhatsAppMessageLog.create({ id_message: idMessage || `wa_${Date.now()}`, phone, direction: 'incoming', text: text.substring(0, 500), status: 'replied', chat_id: chatId, conversation_id: conversationId });
+            await base44.asServiceRole.entities.WhatsAppMessageLog.create({ id_message: `out_${Date.now()}_fp_lk`, phone, direction: 'outgoing', text: '[fast_path_lectures_karati]', status: 'replied', chat_id: chatId, conversation_id: conversationId });
+            return Response.json({ ok: true, fast_path: 'lectures_karati' });
+          }
+          console.log('FAST_PATH FP-Lectures-Karati: calendar not found, falling to LLM');
+        } catch (e) { console.warn('FP-Lectures-Karati error:', e.message); }
+      }
+    }
+
+    // ===== FAST PATH: FP-PL-Karati — post_lecture "קראתי" → book offer =====
+    {
+      const _plkMu = `https://api.green-api.com/waInstance${instanceId}/sendMessage/${token}`;
+      const _plkNorm = text.trim().replace(/[*"'״]/g, '').toLowerCase();
+      if (
+        serviceRequest?.service_type === 'post_lecture' &&
+        serviceRequest?.current_step === 'awaiting_post_lecture_karati' &&
+        _plkNorm === 'קראתי'
+      ) {
+        console.log('FAST_PATH: FP-PL-Karati post_lecture karati → book offer');
+        try {
+          const [_plkBc, _plkBook] = await Promise.all([
+            base44.asServiceRole.entities.BotContent.filter({ key: 'post_lecture_book_offer' }),
+            base44.asServiceRole.entities.ServiceContent.filter({ service_type: 'post_lecture', content_type: 'external_link', sub_type: 'book' }),
+          ]);
+          if (_plkBc.length > 0 && _plkBook.length > 0) {
+            await fetch(_plkMu, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ chatId, message: _plkBc[0].content + '\n\n' + _plkBook[0].url }) });
+            await fetch(_plkMu, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ chatId, message: 'אנא רשמ/י *"הזמנתי"* או *"המשך"*' }) });
+            await base44.asServiceRole.entities.ServiceRequest.update(serviceRequest.id, { current_step: 'awaiting_book_response' });
+            await base44.asServiceRole.entities.WhatsAppMessageLog.create({ id_message: idMessage || `wa_${Date.now()}`, phone, direction: 'incoming', text: text.substring(0, 500), status: 'replied', chat_id: chatId, conversation_id: conversationId });
+            await base44.asServiceRole.entities.WhatsAppMessageLog.create({ id_message: `out_${Date.now()}_fp_plk`, phone, direction: 'outgoing', text: '[fast_path_pl_karati]', status: 'replied', chat_id: chatId, conversation_id: conversationId });
+            return Response.json({ ok: true, fast_path: 'pl_karati_book_offer' });
+          }
+          console.log('FAST_PATH FP-PL-Karati: content not found, falling to LLM');
+        } catch (e) { console.warn('FP-PL-Karati error:', e.message); }
+      }
+    }
+
+    // ===== FAST PATH: FP-PL-Book-Response — post_lecture "הזמנתי"/"המשך" → more lectures =====
+    {
+      const _plbMu = `https://api.green-api.com/waInstance${instanceId}/sendMessage/${token}`;
+      const _plbNorm = text.trim().replace(/[*"'״]/g, '').toLowerCase();
+      const _plbOrdered = _plbNorm === 'הזמנתי';
+      const _plbContinue = ['המשך','לא','לא עכשיו'].includes(_plbNorm);
+      if (
+        serviceRequest?.service_type === 'post_lecture' &&
+        serviceRequest?.current_step === 'awaiting_book_response' &&
+        (_plbOrdered || _plbContinue)
+      ) {
+        console.log('FAST_PATH: FP-PL-Book-Response:', _plbNorm);
+        try {
+          if (_plbOrdered) {
+            await fetch(_plbMu, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ chatId, message: 'מעולה! שמחה שהזמנת 📖' }) });
+          }
+          const _plbMoreBc = await base44.asServiceRole.entities.BotContent.filter({ key: 'post_lecture_more_lectures' });
+          if (_plbMoreBc.length > 0) {
+            await new Promise(r => setTimeout(r, 500));
+            await fetch(_plbMu, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ chatId, message: _plbMoreBc[0].content }) });
+            await base44.asServiceRole.entities.ServiceRequest.update(serviceRequest.id, { current_step: 'awaiting_more_lectures' });
+            await base44.asServiceRole.entities.WhatsAppMessageLog.create({ id_message: idMessage || `wa_${Date.now()}`, phone, direction: 'incoming', text: text.substring(0, 500), status: 'replied', chat_id: chatId, conversation_id: conversationId });
+            await base44.asServiceRole.entities.WhatsAppMessageLog.create({ id_message: `out_${Date.now()}_fp_plb`, phone, direction: 'outgoing', text: '[fast_path_pl_book_response]', status: 'replied', chat_id: chatId, conversation_id: conversationId });
+            return Response.json({ ok: true, fast_path: 'pl_book_response' });
+          }
+          console.log('FAST_PATH FP-PL-Book-Response: content not found, falling to LLM');
+        } catch (e) { console.warn('FP-PL-Book-Response error:', e.message); }
+      }
+    }
+
+    // ===== FAST PATH: FP-PL-More — post_lecture more lectures yes/no =====
+    {
+      const _plmMu = `https://api.green-api.com/waInstance${instanceId}/sendMessage/${token}`;
+      const _plmNorm = text.trim().replace(/[*"'״]/g, '').toLowerCase();
+      const _plmYes = ['כן','בטח','אשמח','כמובן'].includes(_plmNorm);
+      const _plmNo = ['לא','לא תודה','לא עכשיו'].includes(_plmNorm);
+      if (
+        serviceRequest?.service_type === 'post_lecture' &&
+        serviceRequest?.current_step === 'awaiting_more_lectures' &&
+        (_plmYes || _plmNo)
+      ) {
+        console.log('FAST_PATH: FP-PL-More:', _plmNorm);
+        try {
+          if (_plmYes) {
+            const _plmWelcome = await base44.asServiceRole.entities.BotContent.filter({ key: 'lectures_welcome' });
+            const _plmMsg = _plmWelcome.length > 0 ? _plmWelcome[0].content : 'נשמח לספר לך על סדרת ההרצאות שלנו! 📚';
+            await fetch(_plmMu, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ chatId, message: _plmMsg }) });
+            await base44.asServiceRole.entities.ServiceRequest.update(serviceRequest.id, { current_step: 'awaiting_lectures_type' });
+          } else {
+            const _plmBye = await base44.asServiceRole.entities.BotContent.filter({ key: 'goodbye' });
+            const _plmMsg = _plmBye.length > 0 ? _plmBye[0].content : 'שמחתי לשוחח, שיהיה לך יום נפלא 🌸';
+            await fetch(_plmMu, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ chatId, message: _plmMsg }) });
+            await base44.asServiceRole.entities.ServiceRequest.update(serviceRequest.id, { current_step: 'post_lecture_completed', status: 'completed' });
+          }
+          await base44.asServiceRole.entities.WhatsAppMessageLog.create({ id_message: idMessage || `wa_${Date.now()}`, phone, direction: 'incoming', text: text.substring(0, 500), status: 'replied', chat_id: chatId, conversation_id: conversationId });
+          await base44.asServiceRole.entities.WhatsAppMessageLog.create({ id_message: `out_${Date.now()}_fp_plm`, phone, direction: 'outgoing', text: `[fast_path_pl_more_${_plmYes ? 'yes' : 'no'}]`, status: 'replied', chat_id: chatId, conversation_id: conversationId });
+          return Response.json({ ok: true, fast_path: `pl_more_${_plmYes ? 'yes' : 'no'}` });
+        } catch (e) { console.warn('FP-PL-More error:', e.message); }
+      }
+    }
+
     // ===== END FAST PATH =====
 
     // ===== SEND TO BOT =====
