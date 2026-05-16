@@ -763,7 +763,8 @@ Deno.serve(async (req) => {
       const _u1Norm = text.trim().replace(/[*"'״]/g, '').toLowerCase();
       if (
         _u1Norm === 'המשך' &&
-        serviceRequest?.service_type !== 'post_lecture'
+        serviceRequest?.service_type !== 'post_lecture' && 
+        serviceRequest?.service_type !== 'legal'
       ) {
         console.log('FAST_PATH: FP-U1 המשך → location_directions');
         try {
@@ -850,6 +851,45 @@ Deno.serve(async (req) => {
           }
           console.log('FAST_PATH FP-L-B-Yes: content not found, falling to LLM');
         } catch (e) { console.warn('FP-L-B-Yes error:', e.message); }
+      }
+    }
+
+    // ===== FAST PATH: FP-L-Docs — legal "שלחתי"/"המשך" → send meeting scheduling link =====
+    {
+      const _lDMu = `https://api.green-api.com/waInstance${instanceId}/sendMessage/${token}`;
+      const _lDNorm = text.trim().replace(/[*"'״]/g, '').toLowerCase();
+      const _lDTriggers = ['שלחתי', 'המשך', 'שלחתי את המסמכים', 'שלחתי מסמכים'];
+      if (
+        serviceRequest?.service_type === 'legal' &&
+        _lDTriggers.some(t => _lDNorm === t || _lDNorm.startsWith('שלח'))
+      ) {
+        console.log('FAST_PATH: FP-L-Docs legal documents sent → meeting link');
+        try {
+          const _lDMeeting = await base44.asServiceRole.entities.BotContent.filter({ key: 'legal_meeting' });
+          const _lDCal = await base44.asServiceRole.entities.ServiceContent.filter({
+            service_type: 'legal', content_type: 'external_link', sub_type: 'legal_calendar'
+          });
+          if (_lDMeeting.length > 0 && _lDCal.length > 0) {
+            const _lDMsg = _lDMeeting[0].content + '\n' + _lDCal[0].url;
+            await fetch(_lDMu, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ chatId, message: _lDMsg }) });
+            await base44.asServiceRole.entities.ServiceRequest.update(serviceRequest.id, {
+              current_step: 'awaiting_legal_meeting_booking'
+            });
+            await base44.asServiceRole.entities.WhatsAppMessageLog.create({
+              id_message: idMessage || `wa_${Date.now()}`, phone, direction: 'incoming',
+              text: text.substring(0, 500), status: 'replied', chat_id: chatId, conversation_id: conversationId,
+            });
+            await base44.asServiceRole.entities.WhatsAppMessageLog.create({
+              id_message: `out_${Date.now()}_fp_l_docs`, phone, direction: 'outgoing',
+              text: '[fast_path_l_docs_meeting_link]', status: 'replied', chat_id: chatId, conversation_id: conversationId,
+            });
+            return Response.json({ ok: true, fast_path: 'l_docs_meeting_link' });
+          }
+          console.log('FAST_PATH FP-L-Docs: content not found, falling to LLM');
+        } catch (fpLDocsErr) {
+          console.warn(`FAST_PATH FP-L-Docs error: ${fpLDocsErr.message} — falling to LLM`);
+        }
       }
     }
 
