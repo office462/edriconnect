@@ -824,33 +824,80 @@ Deno.serve(async (req) => {
 
 
 
-    // ===== FAST PATH: FP-L-B-Yes — legal reading offer "כן" → website =====
+    // ===== FAST PATH: FP-L-Agreement — legal "כן" after agreement question → send agreement PDF =====
     {
-      const _lByMu = `https://api.green-api.com/waInstance${instanceId}/sendMessage/${token}`;
-      const _lByNorm = text.trim().replace(/[*"'״]/g, '').toLowerCase();
-      const _lByYes = ['כן','בטח','אשמח','כמובן','יאללה','קדימה','סבבה','אוקי','ok','רוצה','מעוניינת'].includes(_lByNorm);
+      const _lAgMu = `https://api.green-api.com/waInstance${instanceId}/sendMessage/${token}`;
+      const _lAgFu = `https://api.green-api.com/waInstance${instanceId}/sendFileByUrl/${token}`;
+      const _lAgNorm = text.trim().replace(/[*"'״]/g, '').toLowerCase();
+      const _lAgYes = ['כן','בטח','אשמח','כמובן','יאללה','קדימה','סבבה','אוקי','ok','רוצה','מעוניינת'].includes(_lAgNorm);
       if (
         serviceRequest?.service_type === 'legal' &&
         serviceRequest?.current_step === 'awaiting_legal_reading_response' &&
-        _lByYes
+        _lAgYes
       ) {
-        console.log('FAST_PATH: FP-L-B-Yes legal reading yes → website');
+        console.log('FAST_PATH: FP-L-Agreement legal yes → send agreement');
         try {
-          const _lBySc = await base44.asServiceRole.entities.ServiceContent.filter({
-            service_type: 'legal', content_type: 'external_link', sub_type: 'additional_reading',
+          const _lAgSc = await base44.asServiceRole.entities.ServiceContent.filter({
+            service_type: 'legal', content_type: 'agreement',
           });
-          if (_lBySc.length > 0) {
-            await fetch(_lByMu, { method: 'POST', headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ chatId, message: _lBySc[0].url }) });
-            await fetch(_lByMu, { method: 'POST', headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ chatId, message: 'לאחר שקראת, כתוב/י *"קראתי"* 🌸' }) });
-            await base44.asServiceRole.entities.ServiceRequest.update(serviceRequest.id, { current_step: 'awaiting_legal_karati_website' });
+          if (_lAgSc.length > 0) {
+            const _lAgUrl = _lAgSc[0].url;
+            const _lAgIsPdf = /\.pdf(\?.*)?$/i.test(_lAgUrl);
+            await fetch(_lAgMu, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ chatId, message: 'הנה ההסכם לקריאה 📋\nלאחר שקראת, אנא רשמי *"קראתי"*.' }) });
+            if (_lAgIsPdf) {
+              await fetch(_lAgFu, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ chatId, urlFile: _lAgUrl, fileName: 'הסכם שירות משפטי.pdf', caption: '' }) });
+            } else {
+              await fetch(_lAgMu, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ chatId, message: _lAgUrl }) });
+            }
+            await base44.asServiceRole.entities.ServiceRequest.update(serviceRequest.id, { current_step: 'awaiting_legal_karati_agreement' });
             await base44.asServiceRole.entities.WhatsAppMessageLog.create({ id_message: idMessage || `wa_${Date.now()}`, phone, direction: 'incoming', text: text.substring(0, 500), status: 'replied', chat_id: chatId, conversation_id: conversationId });
-            await base44.asServiceRole.entities.WhatsAppMessageLog.create({ id_message: `out_${Date.now()}_fp_lby`, phone, direction: 'outgoing', text: '[fast_path_l_b_yes]', status: 'replied', chat_id: chatId, conversation_id: conversationId });
-            return Response.json({ ok: true, fast_path: 'l_b_yes_website' });
+            await base44.asServiceRole.entities.WhatsAppMessageLog.create({ id_message: `out_${Date.now()}_fp_l_ag`, phone, direction: 'outgoing', text: '[fast_path_l_agreement]', status: 'replied', chat_id: chatId, conversation_id: conversationId });
+            return Response.json({ ok: true, fast_path: 'l_agreement' });
           }
-          console.log('FAST_PATH FP-L-B-Yes: content not found, falling to LLM');
-        } catch (e) { console.warn('FP-L-B-Yes error:', e.message); }
+          console.log('FAST_PATH FP-L-Agreement: agreement not found, falling to LLM');
+        } catch (e) { console.warn('FP-L-Agreement error:', e.message); }
+      }
+    }
+
+    // ===== FAST PATH: FP-L-Karati-Agreement — legal "קראתי" after agreement → payment request + Bit QR =====
+    {
+      const _lKaMu = `https://api.green-api.com/waInstance${instanceId}/sendMessage/${token}`;
+      const _lKaFu = `https://api.green-api.com/waInstance${instanceId}/sendFileByUrl/${token}`;
+      const _lKaNorm = text.trim().replace(/[*"'״]/g, '').toLowerCase();
+      if (
+        serviceRequest?.service_type === 'legal' &&
+        serviceRequest?.current_step === 'awaiting_legal_karati_agreement' &&
+        _lKaNorm === 'קראתי'
+      ) {
+        console.log('FAST_PATH: FP-L-Karati-Agreement → payment request + Bit QR');
+        try {
+          const [_lKaBc, _lKaPay, _lKaBit] = await Promise.all([
+            base44.asServiceRole.entities.BotContent.filter({ key: 'legal_payment_request' }),
+            base44.asServiceRole.entities.ServiceContent.filter({ service_type: 'legal', content_type: 'payment_link' }),
+            base44.asServiceRole.entities.ServiceContent.filter({ service_type: 'general', content_type: 'image', sub_type: 'bit_qr' }),
+          ]);
+          if (_lKaBc.length > 0 && _lKaPay.length > 0) {
+            const _lKaMsg = _lKaBc[0].content.replace('{קישור}', _lKaPay[0].url).replace('[קישור]', _lKaPay[0].url);
+            await fetch(_lKaMu, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ chatId, message: _lKaMsg }) });
+            // Send Bit QR as follow-up
+            if (_lKaBit.length > 0 && _lKaBit[0].url) {
+              await new Promise(r => setTimeout(r, 1000));
+              await fetch(_lKaFu, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ chatId, urlFile: _lKaBit[0].url, fileName: 'ברקוד ביט לתשלום.png', caption: '' }) });
+            }
+            await base44.asServiceRole.entities.ServiceRequest.update(serviceRequest.id, {
+              agreement_confirmed: true, current_step: 'awaiting_legal_payment',
+            });
+            await base44.asServiceRole.entities.WhatsAppMessageLog.create({ id_message: idMessage || `wa_${Date.now()}`, phone, direction: 'incoming', text: text.substring(0, 500), status: 'replied', chat_id: chatId, conversation_id: conversationId });
+            await base44.asServiceRole.entities.WhatsAppMessageLog.create({ id_message: `out_${Date.now()}_fp_l_ka`, phone, direction: 'outgoing', text: '[fast_path_l_karati_agreement_payment]', status: 'replied', chat_id: chatId, conversation_id: conversationId });
+            return Response.json({ ok: true, fast_path: 'l_karati_agreement_payment' });
+          }
+          console.log('FAST_PATH FP-L-Karati-Agreement: content not found, falling to LLM');
+        } catch (e) { console.warn('FP-L-Karati-Agreement error:', e.message); }
       }
     }
 
