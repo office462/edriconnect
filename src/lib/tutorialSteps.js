@@ -164,7 +164,7 @@ const TUTORIAL_STEPS = [
     iconColor: 'text-cyan-600',
     position: 'center',
     highlightSelector: null,
-    navigateTo: null,
+    navigateTo: '/Dashboard',
     canPractice: false,
   },
   {
