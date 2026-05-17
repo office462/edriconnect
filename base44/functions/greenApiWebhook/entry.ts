@@ -355,6 +355,94 @@ Deno.serve(async (req) => {
       }
     }
 
+    // ===== FAST PATH: FP-Details — parse name+phone+email and send confirmation =====
+    {
+      const _detMu = `https://api.green-api.com/waInstance${instanceId}/sendMessage/${token}`;
+      const _detNeedsContact = !contact || !contact.full_name || !contact.email || !contact.phone;
+      if (_detNeedsContact) {
+        const _detEmailMatch = text.match(/[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}/);
+        const _detPhoneMatch = text.replace(/[\-\s]/g, '').match(/0[5]\d{8}/);
+        if (_detEmailMatch && _detPhoneMatch) {
+          const _detEmail = _detEmailMatch[0].toLowerCase().trim();
+          const _detPhone = _detPhoneMatch[0];
+          const _detName = text
+            .replace(_detEmailMatch[0], '')
+            .replace(/0[5][\d\-\s]{8,12}/g, '')
+            .replace(/שמי?\s*/gi, '').replace(/מספרי?\s*/gi, '')
+            .replace(/טלפון:?\s*/gi, '').replace(/מייל:?\s*/gi, '').replace(/email:?\s*/gi, '')
+            .replace(/[,;:]/g, ' ').replace(/\s+/g, ' ').trim();
+          if (_detName.length >= 2) {
+            console.log(`FAST_PATH: FP-Details parsed name="${_detName}" phone="${_detPhone}" email="${_detEmail}"`);
+            const _detKey = `pending_contact_${phone}`;
+            const _detData = JSON.stringify({ name: _detName, phone: _detPhone, email: _detEmail });
+            const _detExisting = await base44.asServiceRole.entities.SystemSetting.filter({ key: _detKey });
+            if (_detExisting.length > 0) {
+              await base44.asServiceRole.entities.SystemSetting.update(_detExisting[0].id, { value: _detData });
+            } else {
+              await base44.asServiceRole.entities.SystemSetting.create({ key: _detKey, value: _detData, category: 'whatsapp' });
+            }
+            const _detConfirmMsg = `הפרטים שלך:\n📛 שם: ${_detName}\n📱 טלפון: ${_detPhone}\n📧 מייל: ${_detEmail}\n\nהאם הכל נכון? כתוב/י *כן* לאישור או תקנ/י את הפרט השגוי.`;
+            await fetch(_detMu, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ chatId, message: _detConfirmMsg }) });
+            await base44.asServiceRole.entities.WhatsAppMessageLog.create({
+              id_message: idMessage || `wa_${Date.now()}`, phone, direction: 'incoming',
+              text: text.substring(0, 500), status: 'replied', chat_id: chatId, conversation_id: conversationId,
+            });
+            await base44.asServiceRole.entities.WhatsAppMessageLog.create({
+              id_message: `out_${Date.now()}_fp_det`, phone, direction: 'outgoing',
+              text: '[fast_path_details_confirm]', status: 'replied', chat_id: chatId, conversation_id: conversationId,
+            });
+            try {
+              await base44.asServiceRole.agents.addMessage(conversation, { role: 'user', content: text });
+              await base44.asServiceRole.agents.addMessage(conversation, { role: 'assistant', content: _detConfirmMsg });
+            } catch (_) {}
+            return Response.json({ ok: true, fast_path: 'fp_details_confirm' });
+          }
+        }
+      }
+    }
+
+    // ===== FAST PATH: FP-DetailsConfirm — "כן" after details → create Contact + send welcome =====
+    {
+      const _dcMu = `https://api.green-api.com/waInstance${instanceId}/sendMessage/${token}`;
+      const _dcNorm = text.trim().replace(/[*"'״]/g, '').toLowerCase();
+      const _dcPositive = ['כן', 'נכון', 'הכל נכון', 'כן נכון', 'בטח', 'כמובן', 'אוקי', 'ok', 'סבבה', '👍', '✅'].includes(_dcNorm);
+      if (_dcPositive && !contact) {
+        const _dcKey = `pending_contact_${phone}`;
+        const _dcSettings = await base44.asServiceRole.entities.SystemSetting.filter({ key: _dcKey });
+        if (_dcSettings.length > 0) {
+          try {
+            const _dcData = JSON.parse(_dcSettings[0].value);
+            console.log(`FAST_PATH: FP-DetailsConfirm saving Contact for ${_dcData.name}`);
+            await base44.asServiceRole.entities.Contact.create({
+              full_name: _dcData.name, phone: _dcData.phone, email: _dcData.email, source: 'whatsapp',
+            });
+            await base44.asServiceRole.entities.SystemSetting.delete(_dcSettings[0].id).catch(() => {});
+            const _dcWelcomeContents = await base44.asServiceRole.entities.BotContent.filter({ key: 'welcome' });
+            const _dcWelcomeMsg = _dcWelcomeContents.length > 0 ? _dcWelcomeContents[0].content : 'ברוכ/ה הבא/ה! 😊';
+            await fetch(_dcMu, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ chatId, message: _dcWelcomeMsg }) });
+            await base44.asServiceRole.entities.WhatsAppMessageLog.create({
+              id_message: idMessage || `wa_${Date.now()}`, phone, direction: 'incoming',
+              text: text.substring(0, 500), status: 'replied', chat_id: chatId, conversation_id: conversationId,
+            });
+            await base44.asServiceRole.entities.WhatsAppMessageLog.create({
+              id_message: `out_${Date.now()}_fp_dc`, phone, direction: 'outgoing',
+              text: '[fast_path_details_saved_welcome]', status: 'replied', chat_id: chatId, conversation_id: conversationId,
+            });
+            try {
+              await base44.asServiceRole.agents.addMessage(conversation, { role: 'user', content: text });
+              await base44.asServiceRole.agents.addMessage(conversation, { role: 'assistant', content: _dcWelcomeMsg });
+            } catch (_) {}
+            return Response.json({ ok: true, fast_path: 'fp_details_saved' });
+          } catch (dcErr) {
+            console.warn(`FP-DetailsConfirm error: ${dcErr.message} — falling to LLM`);
+            await base44.asServiceRole.entities.SystemSetting.delete(_dcSettings[0].id).catch(() => {});
+          }
+        }
+      }
+    }
+
     // ===== FAST PATH: consultation disease selection (no LLM needed) =====
     {
       const DISEASE_MAP = {
