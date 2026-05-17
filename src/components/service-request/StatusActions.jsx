@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -23,6 +23,14 @@ export default function StatusActions({ request, onUpdate, isUpdating }) {
   const [notes, setNotes] = useState(request.notes || '');
   const [whatsappDate, setWhatsappDate] = useState(request.scheduled_date_whatsapp || '');
   const [clinicDate, setClinicDate] = useState(request.scheduled_date_clinic || '');
+
+  useEffect(() => {
+    setStatus(request.status);
+    setStep(request.current_step || '');
+    setNotes(request.notes || '');
+    setWhatsappDate(request.scheduled_date_whatsapp || '');
+    setClinicDate(request.scheduled_date_clinic || '');
+  }, [request]);
 
   const handleSave = () => {
     const updates = { status, current_step: step, notes };
