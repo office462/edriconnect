@@ -26,8 +26,10 @@ import {
   Zap,
   Image,
   ShieldCheck,
-  Smartphone
+  Smartphone,
+  Route
 } from 'lucide-react';
+import RouteCards from '../components/guide/RouteCards';
 
 const sections = [
   {
@@ -359,6 +361,14 @@ const sections = [
     ]
   },
   {
+    id: 'route-cards',
+    title: '🗺️ כרטיסי מסלולים — מה הבוט עושה בכל נתיב',
+    icon: Route,
+    color: 'bg-orange-500 text-white',
+    subs: [],
+    customContent: true,
+  },
+  {
     id: 'bot-chat',
     title: 'בדיקת בוט',
     icon: Bot,
@@ -500,6 +510,9 @@ export default function UserGuide() {
                 </div>
               </AccordionTrigger>
               <AccordionContent className="px-5 pb-4 pt-1">
+                {section.customContent ? (
+                  <RouteCards />
+                ) : (
                 <Accordion type="single" collapsible className="space-y-2">
                   {section.subs.map((sub) => {
                     const SubIcon = sub.icon;
@@ -524,6 +537,7 @@ export default function UserGuide() {
                     );
                   })}
                 </Accordion>
+                )}
               </AccordionContent>
             </AccordionItem>
           );
