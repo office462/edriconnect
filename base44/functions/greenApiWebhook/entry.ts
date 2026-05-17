@@ -414,9 +414,15 @@ Deno.serve(async (req) => {
           try {
             const _dcData = JSON.parse(_dcSettings[0].value);
             console.log(`FAST_PATH: FP-DetailsConfirm saving Contact for ${_dcData.name}`);
-            await base44.asServiceRole.entities.Contact.create({
-              full_name: _dcData.name, phone: _dcData.phone, email: _dcData.email, source: 'whatsapp',
-            });
+            // Check if contact already exists (prevent duplicates)
+            const _dcExisting = await base44.asServiceRole.entities.Contact.filter({ phone: _dcData.phone });
+            if (_dcExisting.length === 0) {
+              await base44.asServiceRole.entities.Contact.create({
+                full_name: _dcData.name, phone: _dcData.phone, email: _dcData.email, source: 'whatsapp',
+              });
+            } else {
+              console.log(`Contact with phone ${_dcData.phone} already exists, skipping create`);
+            }
             await base44.asServiceRole.entities.SystemSetting.delete(_dcSettings[0].id).catch(() => {});
             const _dcWelcomeContents = await base44.asServiceRole.entities.BotContent.filter({ key: 'welcome' });
             const _dcWelcomeMsg = _dcWelcomeContents.length > 0 ? _dcWelcomeContents[0].content : 'ברוכ/ה הבא/ה! 😊';
