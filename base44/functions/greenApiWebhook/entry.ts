@@ -57,56 +57,19 @@ Deno.serve(async (req) => {
     const base44 = createClientFromRequest(req);
     const instanceId = Deno.env.get('GREEN_API_INSTANCE_ID');
     const token = Deno.env.get('GREEN_API_TOKEN');
-
-    // ===== TYPING INDICATOR — sent immediately, before any DB queries =====
-    fetch(`https://api.green-api.com/waInstance${instanceId}/sendTyping/${token}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ chatId, typingTime: 15000 }) }).catch(() => {});
-    // Pre-fetch phone logs in background — runs parallel with all DB queries below
-    const phoneLogsPromise = base44.asServiceRole.entities.WhatsAppMessageLog.filter({ phone }, '-created_date', 30);
-
-    // ===== CHECK IF WHATSAPP BOT IS ENABLED (or test phone) =====
-    console.log('Q1 start', Date.now());
-    const [botEnabledSettings, cachedConvSetting] = await Promise.all([
-      base44.asServiceRole.entities.SystemSetting.filter({ key: 'whatsapp_bot_enabled' }),
-      base44.asServiceRole.entities.SystemSetting.filter({ key: 'phone_conv_' + phone }),
-    ]);
-    console.log('Q1 done', Date.now());
-    const botEnabled = botEnabledSettings.length > 0 && botEnabledSettings[0].value === 'true';
-    
-    if (!botEnabled) {
-      // Check if this phone is in the test list
-      const testPhoneSettings = await base44.asServiceRole.entities.SystemSetting.filter({ key: 'whatsapp_test_phones' });
-      const testPhonesStr = testPhoneSettings.length > 0 ? testPhoneSettings[0].value : '';
-      const testPhones = testPhonesStr.split(',').map(p => p.trim().replace(/[\s\-\+]/g, '')).filter(Boolean);
-      // Normalize test phones to 972 format
-      const normalizedTestPhones = testPhones.map(p => p.startsWith('0') ? '972' + p.substring(1) : p);
-      
-      if (!normalizedTestPhones.includes(phone)) {
-        console.log(`WhatsApp bot is disabled and ${phone} is not a test phone. Skipping.`);
-        return Response.json({ ok: true, skipped: true, reason: 'bot_disabled' });
-      }
-      console.log(`WhatsApp bot is disabled but ${phone} is a test phone — processing.`);
-    }
-
-    // ===== IDEMPOTENCY =====
-    if (idMessage) {
-      console.log('Q2 start', Date.now());
-      const existing = await base44.asServiceRole.entities.WhatsAppMessageLog.filter({ id_message: idMessage });
-      console.log('Q2 done', Date.now());
-      if (existing.length > 0) {
-        console.log(`Duplicate message ${idMessage}, skipping`);
-        return Response.json({ ok: true, skipped: true, reason: 'duplicate' });
-      }
-    }
-
-    // ===== BLOCK LIST =====
-    console.log('Q3 start', Date.now());
-    const blockList = await base44.asServiceRole.entities.WhatsAppBlockList.list();
-    console.log('Q3 done', Date.now());
-    const blockedPhones = blockList.map(b => b.phone.replace(/[\s\-\+]/g, ''));
-    const normalizedPhone = phone;
     const localPhone = phone.startsWith('972') ? '0' + phone.substring(3) : phone;
 
-    if (blockedPhones.includes(normalizedPhone) || blockedPhones.includes(localPhone)) {
+    // ===== BLOCK LIST + BOT ENABLED + IDEMPOTENCY — all checked BEFORE any message is sent =====
+    const [botEnabledSettings, cachedConvSetting, blockList, idempotencyCheck] = await Promise.all([
+      base44.asServiceRole.entities.SystemSetting.filter({ key: 'whatsapp_bot_enabled' }),
+      base44.asServiceRole.entities.SystemSetting.filter({ key: 'phone_conv_' + phone }),
+      base44.asServiceRole.entities.WhatsAppBlockList.list(),
+      idMessage ? base44.asServiceRole.entities.WhatsAppMessageLog.filter({ id_message: idMessage }) : Promise.resolve([]),
+    ]);
+
+    // --- Block list (checked first — no messages sent to blocked phones!) ---
+    const blockedPhones = blockList.map(b => b.phone.replace(/[\s\-\+]/g, ''));
+    if (blockedPhones.includes(phone) || blockedPhones.includes(localPhone)) {
       console.log(`Phone ${phone} is blocked`);
       if (idMessage) {
         await base44.asServiceRole.entities.WhatsAppMessageLog.create({
@@ -116,6 +79,45 @@ Deno.serve(async (req) => {
       }
       return Response.json({ ok: true, skipped: true, reason: 'blocked' });
     }
+
+    // --- Idempotency ---
+    if (idMessage && idempotencyCheck.length > 0) {
+      console.log(`Duplicate message ${idMessage}, skipping`);
+      return Response.json({ ok: true, skipped: true, reason: 'duplicate' });
+    }
+
+    // --- Bot enabled check ---
+    const botEnabled = botEnabledSettings.length > 0 && botEnabledSettings[0].value === 'true';
+    if (!botEnabled) {
+      const testPhoneSettings = await base44.asServiceRole.entities.SystemSetting.filter({ key: 'whatsapp_test_phones' });
+      const testPhonesStr = testPhoneSettings.length > 0 ? testPhoneSettings[0].value : '';
+      const testPhones = testPhonesStr.split(',').map(p => p.trim().replace(/[\s\-\+]/g, '')).filter(Boolean);
+      const normalizedTestPhones = testPhones.map(p => p.startsWith('0') ? '972' + p.substring(1) : p);
+      if (!normalizedTestPhones.includes(phone)) {
+        console.log(`WhatsApp bot is disabled and ${phone} is not a test phone. Skipping.`);
+        return Response.json({ ok: true, skipped: true, reason: 'bot_disabled' });
+      }
+      console.log(`WhatsApp bot is disabled but ${phone} is a test phone — processing.`);
+    }
+
+    // ===== RATE LIMITER — max 10 outgoing messages per phone per hour =====
+    const RATE_LIMIT_PER_HOUR = 10;
+    const phoneLogsPromise = base44.asServiceRole.entities.WhatsAppMessageLog.filter({ phone }, '-created_date', 30);
+    const recentOutgoing = (await phoneLogsPromise).filter(l =>
+      l.direction === 'outgoing' &&
+      (Date.now() - new Date(l.created_date).getTime()) < 60 * 60 * 1000
+    );
+    if (recentOutgoing.length >= RATE_LIMIT_PER_HOUR) {
+      console.log(`RATE_LIMIT: ${phone} has ${recentOutgoing.length} outgoing msgs in last hour (limit ${RATE_LIMIT_PER_HOUR}). Blocking.`);
+      await base44.asServiceRole.entities.WhatsAppMessageLog.create({
+        id_message: idMessage || `wa_${Date.now()}`, phone, direction: 'incoming',
+        text: text.substring(0, 500), status: 'skipped', chat_id: chatId,
+      });
+      return Response.json({ ok: true, skipped: true, reason: 'rate_limited' });
+    }
+
+    // ===== TYPING INDICATOR — only after all safety checks pass =====
+    fetch(`https://api.green-api.com/waInstance${instanceId}/sendTyping/${token}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ chatId, typingTime: 15000 }) }).catch(() => {});
 
     // ===== FIND CONTACT =====
     console.log('Q4 start', Date.now());
@@ -313,15 +315,8 @@ Deno.serve(async (req) => {
 
     // Count messages BEFORE sending
     const msgCountBefore = (conversation.messages || []).length;
-    // ===== REASSURANCE MESSAGE before LLM (user sees activity during long wait) =====
-    if ((conversation.messages || []).length > 1) {
-      const rMsgs = ['רגע קטן 💜', 'אני כבר על זה ✨', 'כמעט שם 🌸', 'ממש בדרך 🙏'];
-      const rMsg = rMsgs[Math.floor(Math.random() * rMsgs.length)];
-      const _su = `https://api.green-api.com/waInstance${instanceId}/sendMessage/${token}`;
-      await fetch(_su, { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({chatId, message: rMsg}) }).catch(() => {});
-            const _tu = `https://api.green-api.com/waInstance${instanceId}/sendTyping/${token}`;
-          fetch(_tu, { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ chatId, typingTime: 15000 }) }).then(r => r.text().then(t => console.log('TYPING_DIAG', r.status, t))).catch(e => console.error('TYPING_ERROR:', e.message));
-    }
+    // ===== TYPING INDICATOR before LLM (no text message — just typing bubble) =====
+    fetch(`https://api.green-api.com/waInstance${instanceId}/sendTyping/${token}`, { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ chatId, typingTime: 15000 }) }).catch(() => {});
 
     // ===== FAST PATH: FP-PL-QR — post_lecture QR message → send PDF immediately (no details first!) =====
     {
@@ -1617,30 +1612,17 @@ Deno.serve(async (req) => {
     let botReply = '';
     const pollStart = Date.now();
     let lastTypingRefresh = pollStart;
-    let sentReassurance = false;
 
     while (Date.now() - pollStart < 25000) {
       await new Promise(r => setTimeout(r, 500)); // wait 500ms between checks
 
-      // Send reassurance after 15s if no reply yet (once only)
-      if (!sentReassurance && Date.now() - pollStart > 15000) {
-        sentReassurance = true;
-        const rMsgs = ['אל דאגה, אני עוד כאן ✨', 'אני עובד/ת, את/ה יכול/ה לשתות קפה בינתיים ☕', 'עוד קצת סבלנות, כמעט שם 💜', 'זה לוקח רגע, אבל ממש בדרך! 🌸'];
-        const rMsg = rMsgs[Math.floor(Math.random() * rMsgs.length)];
-        fetch(`https://api.green-api.com/waInstance${instanceId}/sendMessage/${token}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ chatId, message: rMsg }) }).catch(() => {});
-      }
-
-      // Refresh typing indicator every 4s with short 5s bursts (avoids blocking Green API queue)
-      if (Date.now() - lastTypingRefresh > 4000) {
+      // Refresh typing indicator every 6s (typing bubble only — no text messages!)
+      if (Date.now() - lastTypingRefresh > 6000) {
         lastTypingRefresh = Date.now();
-        try {
-          const typingUrl = `https://api.green-api.com/waInstance${instanceId}/sendTyping/${token}`;
-          fetch(typingUrl, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ chatId, typingTime: 5000 }),
-          }).catch(() => {});
-        } catch (_) {}
+        fetch(`https://api.green-api.com/waInstance${instanceId}/sendTyping/${token}`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ chatId, typingTime: 8000 }),
+        }).catch(() => {});
       }
 
       const freshConv = await base44.asServiceRole.agents.getConversation(conversationId);
@@ -1721,28 +1703,8 @@ Deno.serve(async (req) => {
       }
     }
 
-    // If we got here, bot didn't reply in time — send a friendly fallback message
-    console.log(`No bot reply within 25s for ${idMessage}. Sending fallback message.`);
-    try {
-      const fallbackMessages = [
-        'עדיין עובד/ת על זה, אל דאגה! ⏳ תגובה בדרך',
-        'עוד רגע קט! 🌸 כמעט שם',
-        'עדיין מטפלת בזה, תיכף חוזרת! 💜',
-        'רגע נוסף, ממש בדרך! ✨',
-      ];
-      const fallbackMsg = fallbackMessages[Math.floor(Math.random() * fallbackMessages.length)];
-      const sendUrl = `https://api.green-api.com/waInstance${instanceId}/sendMessage/${token}`;
-      await fetch(sendUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ chatId, message: fallbackMsg }),
-      });
-      console.log(`Fallback message sent to ${chatId}: "${fallbackMsg}"`);
-    } catch (fallbackErr) {
-      console.warn('Fallback message failed:', fallbackErr.message);
-    }
-
-    // processWhatsAppReplies will send the actual bot reply later
+    // Bot didn't reply in 25s — processWhatsAppReplies will send it later. NO fallback text message.
+    console.log(`No bot reply within 25s for ${idMessage}. Left as pending_reply for processWhatsAppReplies.`);
     return Response.json({ ok: true, queued: true });
   } catch (error) {
     console.error('greenApiWebhook error:', error);
