@@ -22,7 +22,6 @@ Deno.serve(async (req) => {
       { name: '', phone: '0528840670' },
       { name: 'שרי', phone: '0509126680' },
       { name: 'דניאל פרץ', phone: '0544753956' },
-      { name: 'ניר דורון', phone: '0507519684' },
     ];
 
     // Get current index from SystemSetting
