@@ -1612,11 +1612,20 @@ Deno.serve(async (req) => {
     let botReply = '';
     const pollStart = Date.now();
     let lastTypingRefresh = pollStart;
+    let sentReassurance = false;
 
     while (Date.now() - pollStart < 25000) {
       await new Promise(r => setTimeout(r, 500)); // wait 500ms between checks
 
-      // Refresh typing indicator every 6s (typing bubble only — no text messages!)
+      // Send ONE reassurance after 15s if no reply yet
+      if (!sentReassurance && Date.now() - pollStart > 15000) {
+        sentReassurance = true;
+        const rMsgs = ['עוד קצת סבלנות, כמעט שם 💜', 'עוד רגע ואני חוזרת 🌸', 'ממש בדרך! ✨'];
+        const rMsg = rMsgs[Math.floor(Math.random() * rMsgs.length)];
+        fetch(`https://api.green-api.com/waInstance${instanceId}/sendMessage/${token}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ chatId, message: rMsg }) }).catch(() => {});
+      }
+
+      // Refresh typing indicator every 6s (typing bubble only)
       if (Date.now() - lastTypingRefresh > 6000) {
         lastTypingRefresh = Date.now();
         fetch(`https://api.green-api.com/waInstance${instanceId}/sendTyping/${token}`, {
