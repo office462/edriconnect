@@ -1416,7 +1416,7 @@ Deno.serve(async (req) => {
       if (
         serviceRequest?.service_type === 'post_lecture' &&
         serviceRequest?.current_step === 'awaiting_post_lecture_karati' &&
-        _plkNorm === 'קראתי'
+        _plkNorm === 'קיבלתי'
       ) {
         console.log('FAST_PATH: FP-PL-Karati post_lecture karati');
         try {
@@ -1453,12 +1453,13 @@ Deno.serve(async (req) => {
       }
     }
 
-    // ===== FAST PATH: FP-PL-Details — post_lecture details collection → save contact + book offer =====
+    // ===== FAST PATH: FP-PL-Details — post_lecture "קיבלתי" details collection → save contact + book offer =====
     {
       const _pldMu = `https://api.green-api.com/waInstance${instanceId}/sendMessage/${token}`;
       if (
         serviceRequest?.service_type === 'post_lecture' &&
-        serviceRequest?.current_step === 'awaiting_post_lecture_details'
+        serviceRequest?.current_step === 'awaiting_post_lecture_karati' &&
+        !contact || !contact.full_name || !contact.email || !contact.phone
       ) {
         // Try to parse name + email + phone from the message
         const _pldEmailMatch = text.match(/[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}/);
