@@ -323,6 +323,90 @@ Deno.serve(async (req) => {
           fetch(_tu, { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ chatId, typingTime: 15000 }) }).then(r => r.text().then(t => console.log('TYPING_DIAG', r.status, t))).catch(e => console.error('TYPING_ERROR:', e.message));
     }
 
+    // ===== FAST PATH: FP-PL-QR — post_lecture QR message → send PDF immediately (no details first!) =====
+    {
+      const _plqNorm = text.trim();
+      const _plqMatch = _plqNorm.match(/אשמח לקבל את הסיכום של ההרצאה[\s\-–—]*(.+)/i) ||
+                         _plqNorm.match(/סיכום.*הרצאה[\s\-–—]*(.+)/i);
+      if (_plqMatch) {
+        const _plqLectureName = _plqMatch[1].replace(/[״"']/g, '').trim();
+        console.log(`FAST_PATH: FP-PL-QR detected post_lecture for "${_plqLectureName}"`);
+        try {
+          const _plqMu = `https://api.green-api.com/waInstance${instanceId}/sendMessage/${token}`;
+          const _plqFu = `https://api.green-api.com/waInstance${instanceId}/sendFileByUrl/${token}`;
+
+          // Find PDF in ServiceContent by partial match on sub_type
+          const _plqAllPdfs = await base44.asServiceRole.entities.ServiceContent.filter({
+            service_type: 'post_lecture', content_type: 'pdf',
+          });
+          const _plqNameLower = _plqLectureName.toLowerCase();
+          let _plqPdf = _plqAllPdfs.find(p => p.sub_type && p.sub_type.toLowerCase() === _plqNameLower);
+          if (!_plqPdf) _plqPdf = _plqAllPdfs.find(p => p.sub_type && (_plqNameLower.includes(p.sub_type.toLowerCase()) || p.sub_type.toLowerCase().includes(_plqNameLower)));
+          if (!_plqPdf) _plqPdf = _plqAllPdfs.find(p => {
+            const words = _plqNameLower.split(/\s+/);
+            return words.some(w => w.length > 2 && p.sub_type && p.sub_type.toLowerCase().includes(w));
+          });
+
+          if (_plqPdf && _plqPdf.url) {
+            // Create ServiceRequest (without contact — will be collected later)
+            let _plqSr = serviceRequest;
+            if (!_plqSr || _plqSr.service_type !== 'post_lecture') {
+              const _plqSrData = {
+                contact_id: contact?.id || 'pending',
+                contact_name: contact?.full_name || '',
+                contact_phone: localPhone || phone,
+                service_type: 'post_lecture',
+                status: 'new_lead',
+                conversation_id: conversationId,
+                sub_type: _plqPdf.sub_type,
+              };
+              _plqSr = await base44.asServiceRole.entities.ServiceRequest.create(_plqSrData);
+              console.log(`Created ServiceRequest ${_plqSr.id} for post_lecture`);
+            }
+
+            // Send BotContent post_lecture_pdf_sent
+            const _plqBc = await base44.asServiceRole.entities.BotContent.filter({ key: 'post_lecture_pdf_sent' });
+            const _plqMsg = _plqBc.length > 0
+              ? _plqBc[0].content.replace('{שם_הרצאה}', _plqPdf.sub_type)
+              : `הנה הסיכום של ההרצאה ${_plqPdf.sub_type} 🌸\nלאחר שקראת, אנא רשמ/י "קראתי".`;
+            await fetch(_plqMu, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ chatId, message: _plqMsg }) });
+
+            // Send PDF file
+            await new Promise(r => setTimeout(r, 1500));
+            const _plqIsDirect = /\.pdf(\?.*)?$/i.test(_plqPdf.url);
+            if (_plqIsDirect) {
+              await fetch(_plqFu, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ chatId, urlFile: _plqPdf.url, fileName: `סיכום הרצאה - ${_plqPdf.sub_type}.pdf`, caption: '' }) });
+            } else {
+              await fetch(_plqMu, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ chatId, message: _plqPdf.url }) });
+            }
+
+            await base44.asServiceRole.entities.ServiceRequest.update(_plqSr.id, { current_step: 'awaiting_post_lecture_karati' });
+
+            // Log
+            await base44.asServiceRole.entities.WhatsAppMessageLog.create({
+              id_message: idMessage || `wa_${Date.now()}`, phone, direction: 'incoming',
+              text: text.substring(0, 500), status: 'replied', chat_id: chatId, conversation_id: conversationId,
+            });
+            await base44.asServiceRole.entities.WhatsAppMessageLog.create({
+              id_message: `out_${Date.now()}_fp_plq`, phone, direction: 'outgoing',
+              text: `[fast_path_pl_qr_pdf_sent] ${_plqPdf.sub_type}`, status: 'replied', chat_id: chatId, conversation_id: conversationId,
+            });
+            try {
+              await base44.asServiceRole.agents.addMessage(conversation, { role: 'user', content: text });
+              await base44.asServiceRole.agents.addMessage(conversation, { role: 'assistant', content: _plqMsg });
+            } catch (_) {}
+            return Response.json({ ok: true, fast_path: 'pl_qr_pdf_sent', lecture: _plqPdf.sub_type });
+          }
+          console.log(`FAST_PATH FP-PL-QR: no PDF found for "${_plqLectureName}", falling to LLM`);
+        } catch (plqErr) {
+          console.warn(`FAST_PATH FP-PL-QR error: ${plqErr.message} — falling to LLM`);
+        }
+      }
+    }
+
     // ===== FAST PATH: FP-0 — welcome message for new user (first message ever) =====
     // Condition: no Contact yet + no cached conversation (cachedConvSetting empty = truly first message)
     if (!contact && (!cachedConvSetting || cachedConvSetting.length === 0)) {
@@ -1325,7 +1409,7 @@ Deno.serve(async (req) => {
       }
     }
 
-    // ===== FAST PATH: FP-PL-Karati — post_lecture "קראתי" → book offer =====
+    // ===== FAST PATH: FP-PL-Karati — post_lecture "קראתי" → ask for details (if no contact) or book offer =====
     {
       const _plkMu = `https://api.green-api.com/waInstance${instanceId}/sendMessage/${token}`;
       const _plkNorm = text.trim().replace(/[*"'״]/g, '').toLowerCase();
@@ -1334,24 +1418,108 @@ Deno.serve(async (req) => {
         serviceRequest?.current_step === 'awaiting_post_lecture_karati' &&
         _plkNorm === 'קראתי'
       ) {
-        console.log('FAST_PATH: FP-PL-Karati post_lecture karati → book offer');
+        console.log('FAST_PATH: FP-PL-Karati post_lecture karati');
         try {
-          const [_plkBc, _plkBook] = await Promise.all([
-            base44.asServiceRole.entities.BotContent.filter({ key: 'post_lecture_book_offer' }),
-            base44.asServiceRole.entities.ServiceContent.filter({ service_type: 'post_lecture', content_type: 'external_link', sub_type: 'book' }),
-          ]);
-          if (_plkBc.length > 0 && _plkBook.length > 0) {
+          if (!contact || !contact.full_name || !contact.email || !contact.phone) {
+            // No contact yet → ask for details
+            const _plkDetBc = await base44.asServiceRole.entities.BotContent.filter({ key: 'post_lecture_details_request' });
+            const _plkDetMsg = _plkDetBc.length > 0 ? _plkDetBc[0].content
+              : 'תודה שהיית איתנו בהרצאה! כדי שנוכל לשלוח לך עדכונים ולהישאר בקשר, בבקשה כתוב/י את הפרטים הבאים - שם מלא, מייל וטלפון.';
             await fetch(_plkMu, { method: 'POST', headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ chatId, message: _plkBc[0].content + '\n\n' + _plkBook[0].url }) });
-            await fetch(_plkMu, { method: 'POST', headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ chatId, message: 'אנא רשמ/י *"הזמנתי"* או *"המשך"*' }) });
-            await base44.asServiceRole.entities.ServiceRequest.update(serviceRequest.id, { current_step: 'awaiting_book_response' });
+              body: JSON.stringify({ chatId, message: _plkDetMsg }) });
+            await base44.asServiceRole.entities.ServiceRequest.update(serviceRequest.id, { current_step: 'awaiting_post_lecture_details' });
             await base44.asServiceRole.entities.WhatsAppMessageLog.create({ id_message: idMessage || `wa_${Date.now()}`, phone, direction: 'incoming', text: text.substring(0, 500), status: 'replied', chat_id: chatId, conversation_id: conversationId });
-            await base44.asServiceRole.entities.WhatsAppMessageLog.create({ id_message: `out_${Date.now()}_fp_plk`, phone, direction: 'outgoing', text: '[fast_path_pl_karati]', status: 'replied', chat_id: chatId, conversation_id: conversationId });
-            return Response.json({ ok: true, fast_path: 'pl_karati_book_offer' });
+            await base44.asServiceRole.entities.WhatsAppMessageLog.create({ id_message: `out_${Date.now()}_fp_plk_det`, phone, direction: 'outgoing', text: '[fast_path_pl_karati_details_request]', status: 'replied', chat_id: chatId, conversation_id: conversationId });
+            return Response.json({ ok: true, fast_path: 'pl_karati_details_request' });
+          } else {
+            // Contact exists → go straight to book offer
+            const [_plkBc, _plkBook] = await Promise.all([
+              base44.asServiceRole.entities.BotContent.filter({ key: 'post_lecture_book_offer' }),
+              base44.asServiceRole.entities.ServiceContent.filter({ service_type: 'post_lecture', content_type: 'external_link', sub_type: 'book' }),
+            ]);
+            if (_plkBc.length > 0 && _plkBook.length > 0) {
+              await fetch(_plkMu, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ chatId, message: _plkBc[0].content + '\n\n' + _plkBook[0].url }) });
+              await fetch(_plkMu, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ chatId, message: 'אנא רשמ/י *"הזמנתי"* או *"המשך"*' }) });
+              await base44.asServiceRole.entities.ServiceRequest.update(serviceRequest.id, { current_step: 'awaiting_book_response' });
+              await base44.asServiceRole.entities.WhatsAppMessageLog.create({ id_message: idMessage || `wa_${Date.now()}`, phone, direction: 'incoming', text: text.substring(0, 500), status: 'replied', chat_id: chatId, conversation_id: conversationId });
+              await base44.asServiceRole.entities.WhatsAppMessageLog.create({ id_message: `out_${Date.now()}_fp_plk`, phone, direction: 'outgoing', text: '[fast_path_pl_karati_book]', status: 'replied', chat_id: chatId, conversation_id: conversationId });
+              return Response.json({ ok: true, fast_path: 'pl_karati_book_offer' });
+            }
           }
           console.log('FAST_PATH FP-PL-Karati: content not found, falling to LLM');
         } catch (e) { console.warn('FP-PL-Karati error:', e.message); }
+      }
+    }
+
+    // ===== FAST PATH: FP-PL-Details — post_lecture details collection → save contact + book offer =====
+    {
+      const _pldMu = `https://api.green-api.com/waInstance${instanceId}/sendMessage/${token}`;
+      if (
+        serviceRequest?.service_type === 'post_lecture' &&
+        serviceRequest?.current_step === 'awaiting_post_lecture_details'
+      ) {
+        // Try to parse name + email + phone from the message
+        const _pldEmailMatch = text.match(/[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}/);
+        const _pldPhoneMatch = text.replace(/[\-\s]/g, '').match(/0[5]\d{8}/);
+        if (_pldEmailMatch && _pldPhoneMatch) {
+          const _pldEmail = _pldEmailMatch[0].toLowerCase().trim();
+          const _pldPhone = _pldPhoneMatch[0];
+          const _pldName = text
+            .replace(_pldEmailMatch[0], '')
+            .replace(/0[5][\d\-\s]{8,12}/g, '')
+            .replace(/שמי?\s*/gi, '').replace(/מספרי?\s*/gi, '')
+            .replace(/טלפון:?\s*/gi, '').replace(/מייל:?\s*/gi, '').replace(/email:?\s*/gi, '')
+            .replace(/[,;:]/g, ' ').replace(/\s+/g, ' ').trim();
+          if (_pldName.length >= 2) {
+            console.log(`FAST_PATH: FP-PL-Details parsed name="${_pldName}" phone="${_pldPhone}" email="${_pldEmail}"`);
+            try {
+              // Create or update Contact
+              const _pldExisting = await base44.asServiceRole.entities.Contact.filter({ phone: _pldPhone });
+              let _pldContactId;
+              if (_pldExisting.length === 0) {
+                const _pldNewContact = await base44.asServiceRole.entities.Contact.create({
+                  full_name: _pldName, phone: _pldPhone, email: _pldEmail, source: 'qr',
+                });
+                _pldContactId = _pldNewContact.id;
+              } else {
+                _pldContactId = _pldExisting[0].id;
+              }
+
+              // Update ServiceRequest with contact info
+              await base44.asServiceRole.entities.ServiceRequest.update(serviceRequest.id, {
+                contact_id: _pldContactId, contact_name: _pldName, contact_phone: _pldPhone, contact_email: _pldEmail,
+              });
+
+              // Send confirmation + book offer
+              await fetch(_pldMu, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ chatId, message: `תודה ${_pldName}! 🌸 הפרטים נשמרו.` }) });
+
+              await new Promise(r => setTimeout(r, 1000));
+
+              const [_pldBc, _pldBook] = await Promise.all([
+                base44.asServiceRole.entities.BotContent.filter({ key: 'post_lecture_book_offer' }),
+                base44.asServiceRole.entities.ServiceContent.filter({ service_type: 'post_lecture', content_type: 'external_link', sub_type: 'book' }),
+              ]);
+              if (_pldBc.length > 0 && _pldBook.length > 0) {
+                await fetch(_pldMu, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ chatId, message: _pldBc[0].content + '\n\n' + _pldBook[0].url }) });
+                await fetch(_pldMu, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ chatId, message: 'אנא רשמ/י *"הזמנתי"* או *"המשך"*' }) });
+              }
+              await base44.asServiceRole.entities.ServiceRequest.update(serviceRequest.id, { current_step: 'awaiting_book_response' });
+
+              await base44.asServiceRole.entities.WhatsAppMessageLog.create({ id_message: idMessage || `wa_${Date.now()}`, phone, direction: 'incoming', text: text.substring(0, 500), status: 'replied', chat_id: chatId, conversation_id: conversationId });
+              await base44.asServiceRole.entities.WhatsAppMessageLog.create({ id_message: `out_${Date.now()}_fp_pld`, phone, direction: 'outgoing', text: '[fast_path_pl_details_saved]', status: 'replied', chat_id: chatId, conversation_id: conversationId });
+              return Response.json({ ok: true, fast_path: 'pl_details_saved_book_offer' });
+            } catch (pldErr) {
+              console.warn(`FP-PL-Details save error: ${pldErr.message} — falling to LLM`);
+            }
+          }
+        }
+        // If we couldn't parse — fall to LLM to handle incomplete details
+        console.log('FAST_PATH FP-PL-Details: could not parse all 3 fields, falling to LLM');
       }
     }
 
