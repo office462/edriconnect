@@ -1454,7 +1454,7 @@ Deno.serve(async (req) => {
       if (
         serviceRequest?.service_type === 'post_lecture' &&
         serviceRequest?.current_step === 'awaiting_post_lecture_karati' &&
-        !contact || !contact.full_name || !contact.email || !contact.phone
+        (!contact || !contact.full_name || !contact.email || !contact.phone)
       ) {
         // Try to parse name + email + phone from the message
         const _pldEmailMatch = text.match(/[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}/);
