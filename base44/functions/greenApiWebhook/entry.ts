@@ -499,6 +499,7 @@ Deno.serve(async (req) => {
               await base44.asServiceRole.entities.Contact.create({
                 full_name: _dcData.name, phone: _dcData.phone, email: _dcData.email, source: 'whatsapp',
               });
+              deduplicateContact(base44, _dcData.phone).catch(() => {});
             } else {
               console.log(`Contact with phone ${_dcData.phone} already exists, skipping create`);
             }
@@ -1479,6 +1480,7 @@ Deno.serve(async (req) => {
                   full_name: _pldName, phone: _pldPhone, email: _pldEmail, source: 'qr',
                 });
                 _pldContactId = _pldNewContact.id;
+                deduplicateContact(base44, _pldPhone).catch(() => {});
               } else {
                 _pldContactId = _pldExisting[0].id;
               }
@@ -1720,3 +1722,19 @@ Deno.serve(async (req) => {
     return Response.json({ error: error.message }, { status: 500 });
   }
 });
+
+// ===== DEDUPLICATION (Background, Fire-and-Forget) =====
+async function deduplicateContact(base44, phone) {
+  try {
+    const contacts = await base44.asServiceRole.entities.Contact.filter({ phone });
+    if (contacts.length <= 1) return;
+    
+    contacts.sort((a, b) => new Date(b.created_date) - new Date(a.created_date));
+    for (let i = 1; i < contacts.length; i++) {
+      await base44.asServiceRole.entities.Contact.delete(contacts[i].id);
+      console.log(`Deduplicated Contact ${contacts[i].id} (phone: ${phone})`);
+    }
+  } catch (dedupErr) {
+    console.warn('Dedup error:', dedupErr.message);
+  }
+}
