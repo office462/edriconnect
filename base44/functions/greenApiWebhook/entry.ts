@@ -365,10 +365,13 @@ Deno.serve(async (req) => {
             }
 
             // Send BotContent post_lecture_pdf_sent
+            // Fetch blog link for post_lecture
+            const _plqBlog = await base44.asServiceRole.entities.ServiceContent.filter({ service_type: 'post_lecture', content_type: 'external_link', sub_type: 'blog' });
+            const _plqBlogUrl = _plqBlog.length > 0 ? _plqBlog[0].url : '';
             const _plqBc = await base44.asServiceRole.entities.BotContent.filter({ key: 'post_lecture_pdf_sent' });
             const _plqMsg = _plqBc.length > 0
-              ? _plqBc[0].content.replace('{שם_הרצאה}', _plqPdf.sub_type)
-              : `הנה הסיכום של ההרצאה ${_plqPdf.sub_type} 🌸\nלאחר שקראת, אנא רשמ/י "קראתי".`;
+              ? _plqBc[0].content.replace('{שם_הרצאה}', _plqPdf.sub_type).replace('{קישור_בלוג}', _plqBlogUrl)
+              : `הנה הסיכום של ההרצאה ${_plqPdf.sub_type} 🌸`;
             await fetch(_plqMu, { method: 'POST', headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ chatId, message: _plqMsg }) });
 
@@ -383,7 +386,15 @@ Deno.serve(async (req) => {
                 body: JSON.stringify({ chatId, message: _plqPdf.url }) });
             }
 
-            await base44.asServiceRole.entities.ServiceRequest.update(_plqSr.id, { current_step: 'awaiting_post_lecture_karati' });
+            // Send mailing list request after PDF
+            const _plqMailBc = await base44.asServiceRole.entities.BotContent.filter({ key: 'post_lecture_mailing_list' });
+            if (_plqMailBc.length > 0) {
+              await new Promise(r => setTimeout(r, 2000));
+              await fetch(_plqMu, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ chatId, message: _plqMailBc[0].content }) });
+            }
+
+            await base44.asServiceRole.entities.ServiceRequest.update(_plqSr.id, { current_step: 'awaiting_mailing_list_response' });
 
             // Log
             await base44.asServiceRole.entities.WhatsAppMessageLog.create({
@@ -397,6 +408,9 @@ Deno.serve(async (req) => {
             try {
               await base44.asServiceRole.agents.addMessage(conversation, { role: 'user', content: text });
               await base44.asServiceRole.agents.addMessage(conversation, { role: 'assistant', content: _plqMsg });
+              if (_plqMailBc.length > 0) {
+                await base44.asServiceRole.agents.addMessage(conversation, { role: 'assistant', content: _plqMailBc[0].content });
+              }
             } catch (_) {}
             return Response.json({ ok: true, fast_path: 'pl_qr_pdf_sent', lecture: _plqPdf.sub_type });
           }
@@ -1394,12 +1408,12 @@ Deno.serve(async (req) => {
             }
           }
           await new Promise(r => setTimeout(r, 1000));
-          const _ccrGoodbye = await base44.asServiceRole.entities.BotContent.filter({ key: 'goodbye' });
-          if (_ccrGoodbye.length > 0) {
+          const _ccrAnything = await base44.asServiceRole.entities.BotContent.filter({ key: 'clinic_anything_else' });
+          if (_ccrAnything.length > 0) {
             await fetch(_ccrMu, { method: 'POST', headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ chatId, message: _ccrGoodbye[0].content }) });
+              body: JSON.stringify({ chatId, message: _ccrAnything[0].content }) });
           }
-          await base44.asServiceRole.entities.ServiceRequest.update(serviceRequest.id, { status: 'completed', current_step: 'completed' });
+          await base44.asServiceRole.entities.ServiceRequest.update(serviceRequest.id, { current_step: 'awaiting_clinic_anything_else' });
           await base44.asServiceRole.entities.WhatsAppMessageLog.create({ id_message: idMessage || `wa_${Date.now()}`, phone, direction: 'incoming', text: text.substring(0, 500), status: 'replied', chat_id: chatId, conversation_id: conversationId });
           await base44.asServiceRole.entities.WhatsAppMessageLog.create({ id_message: `out_${Date.now()}_fp_ccr`, phone, direction: 'outgoing', text: `[fast_path_clinic_code_${_ccrYes ? 'yes' : 'no'}]`, status: 'replied', chat_id: chatId, conversation_id: conversationId });
           return Response.json({ ok: true, fast_path: `clinic_code_${_ccrYes ? 'yes' : 'no'}` });
@@ -1633,7 +1647,7 @@ Deno.serve(async (req) => {
       const _pldMu = `https://api.green-api.com/waInstance${instanceId}/sendMessage/${token}`;
       if (
         serviceRequest?.service_type === 'post_lecture' &&
-        serviceRequest?.current_step === 'awaiting_post_lecture_karati' &&
+        (serviceRequest?.current_step === 'awaiting_post_lecture_karati' || serviceRequest?.current_step === 'awaiting_mailing_list_response') &&
         (!contact || !contact.full_name || !contact.email || !contact.phone)
       ) {
         // Try to parse name + email + phone from the message
@@ -1669,23 +1683,11 @@ Deno.serve(async (req) => {
                 contact_id: _pldContactId, contact_name: _pldName, contact_phone: _pldPhone, contact_email: _pldEmail,
               });
 
-              // Send confirmation + book offer
+              // Send confirmation
               await fetch(_pldMu, { method: 'POST', headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ chatId, message: `תודה ${_pldName}! 🌸 הפרטים נשמרו.` }) });
 
-              await new Promise(r => setTimeout(r, 1000));
-
-              const [_pldBc, _pldBook] = await Promise.all([
-                base44.asServiceRole.entities.BotContent.filter({ key: 'post_lecture_book_offer' }),
-                base44.asServiceRole.entities.ServiceContent.filter({ service_type: 'post_lecture', content_type: 'external_link', sub_type: 'book' }),
-              ]);
-              if (_pldBc.length > 0 && _pldBook.length > 0) {
-                await fetch(_pldMu, { method: 'POST', headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ chatId, message: _pldBc[0].content + '\n\n' + _pldBook[0].url }) });
-                await fetch(_pldMu, { method: 'POST', headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ chatId, message: 'אנא רשמ/י *"הזמנתי"* או *"המשך"*' }) });
-              }
-              await base44.asServiceRole.entities.ServiceRequest.update(serviceRequest.id, { current_step: 'awaiting_book_response' });
+              await base44.asServiceRole.entities.ServiceRequest.update(serviceRequest.id, { current_step: 'post_lecture_details_saved' });
 
               await base44.asServiceRole.entities.WhatsAppMessageLog.create({ id_message: idMessage || `wa_${Date.now()}`, phone, direction: 'incoming', text: text.substring(0, 500), status: 'replied', chat_id: chatId, conversation_id: conversationId });
               await base44.asServiceRole.entities.WhatsAppMessageLog.create({ id_message: `out_${Date.now()}_fp_pld`, phone, direction: 'outgoing', text: '[fast_path_pl_details_saved]', status: 'replied', chat_id: chatId, conversation_id: conversationId });
