@@ -126,6 +126,11 @@ Deno.serve(async (req) => {
     if (contacts.length === 0 && phone.startsWith('972')) {
       contacts = await base44.asServiceRole.entities.Contact.filter({ phone: localPhone });
     }
+    // Deduplicate if multiple contacts found for same phone
+    if (contacts.length > 1) {
+      contacts.sort((a, b) => new Date(b.created_date) - new Date(a.created_date));
+      deduplicateContact(base44, phone).catch(() => {});
+    }
     let contact = contacts.length > 0 ? contacts[0] : null;
 
     // ===== CONTACT COMPLETENESS CHECK — if missing fields, treat as no contact (LLM will collect) =====
@@ -1900,13 +1905,34 @@ Deno.serve(async (req) => {
 // ===== DEDUPLICATION (Background, Fire-and-Forget) =====
 async function deduplicateContact(base44, phone) {
   try {
-    const contacts = await base44.asServiceRole.entities.Contact.filter({ phone });
-    if (contacts.length <= 1) return;
+    // Search both phone formats to catch all duplicates
+    const normalizedPhone = phone.replace(/[\s\-\+]/g, '');
+    const intlPhone = normalizedPhone.startsWith('972') ? normalizedPhone : '972' + normalizedPhone.substring(1);
+    const localPhone = normalizedPhone.startsWith('0') ? normalizedPhone : '0' + normalizedPhone.substring(3);
     
-    contacts.sort((a, b) => new Date(b.created_date) - new Date(a.created_date));
-    for (let i = 1; i < contacts.length; i++) {
-      await base44.asServiceRole.entities.Contact.delete(contacts[i].id);
-      console.log(`Deduplicated Contact ${contacts[i].id} (phone: ${phone})`);
+    const [contactsIntl, contactsLocal] = await Promise.all([
+      base44.asServiceRole.entities.Contact.filter({ phone: intlPhone }),
+      base44.asServiceRole.entities.Contact.filter({ phone: localPhone }),
+    ]);
+    
+    // Merge and deduplicate by id
+    const allMap = new Map();
+    [...contactsIntl, ...contactsLocal].forEach(c => allMap.set(c.id, c));
+    const allContacts = Array.from(allMap.values());
+    
+    if (allContacts.length <= 1) return;
+    
+    // Keep the most complete one (prefer one with email+name), then newest
+    allContacts.sort((a, b) => {
+      const aComplete = (a.full_name ? 1 : 0) + (a.email ? 1 : 0) + (a.phone ? 1 : 0);
+      const bComplete = (b.full_name ? 1 : 0) + (b.email ? 1 : 0) + (b.phone ? 1 : 0);
+      if (bComplete !== aComplete) return bComplete - aComplete;
+      return new Date(b.created_date) - new Date(a.created_date);
+    });
+    
+    for (let i = 1; i < allContacts.length; i++) {
+      await base44.asServiceRole.entities.Contact.delete(allContacts[i].id);
+      console.log(`Deduplicated Contact ${allContacts[i].id} (phone: ${phone})`);
     }
   } catch (dedupErr) {
     console.warn('Dedup error:', dedupErr.message);
