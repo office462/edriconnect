@@ -147,7 +147,7 @@ Deno.serve(async (req) => {
     }
 
     // ===== BLOCK BOT IF PENDING ADMIN CHECK =====
-    if (serviceRequest && serviceRequest.status === 'whatsapp_message_to_check') {
+    if (serviceRequest && (serviceRequest.status === 'whatsapp_message_to_check' || serviceRequest.status === 'pending_human')) {
       console.log(`ServiceRequest ${serviceRequest.id} is pending admin check — blocking bot, sending fixed reply`);
 
       // Log incoming message
@@ -1044,42 +1044,122 @@ Deno.serve(async (req) => {
       }
     }
 
-    // ===== FAST PATH: FP-L-Karati-Agreement — legal "קראתי" after agreement → payment request + Bit QR =====
+    // ===== FAST PATH: FP-L-Karati-Agreement — legal "קראתי" after agreement → bank transfer details =====
     {
       const _lKaMu = `https://api.green-api.com/waInstance${instanceId}/sendMessage/${token}`;
-      const _lKaFu = `https://api.green-api.com/waInstance${instanceId}/sendFileByUrl/${token}`;
       const _lKaNorm = text.trim().replace(/[*"'״]/g, '').toLowerCase();
       if (
         serviceRequest?.service_type === 'legal' &&
         serviceRequest?.current_step === 'awaiting_legal_karati_agreement' &&
         _lKaNorm === 'קראתי'
       ) {
-        console.log('FAST_PATH: FP-L-Karati-Agreement → payment request + Bit QR');
+        console.log('FAST_PATH: FP-L-Karati-Agreement → bank transfer details');
         try {
-          const [_lKaBc, _lKaPay, _lKaBit] = await Promise.all([
-            base44.asServiceRole.entities.BotContent.filter({ key: 'legal_payment_request' }),
-            base44.asServiceRole.entities.ServiceContent.filter({ service_type: 'legal', content_type: 'payment_link' }),
-            base44.asServiceRole.entities.ServiceContent.filter({ service_type: 'general', content_type: 'image', sub_type: 'bit_qr' }),
-          ]);
-          if (_lKaBc.length > 0 && _lKaPay.length > 0) {
-            const _lKaMsg = _lKaBc[0].content.replace('{קישור}', _lKaPay[0].url).replace('[קישור]', _lKaPay[0].url);
+          const _lKaBc = await base44.asServiceRole.entities.BotContent.filter({ key: 'legal_payment_request' });
+          if (_lKaBc.length > 0) {
             await fetch(_lKaMu, { method: 'POST', headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ chatId, message: _lKaMsg }) });
-            // Send Bit QR as follow-up
-            if (_lKaBit.length > 0 && _lKaBit[0].url) {
-              await new Promise(r => setTimeout(r, 1000));
-              await fetch(_lKaFu, { method: 'POST', headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ chatId, urlFile: _lKaBit[0].url, fileName: 'ברקוד ביט לתשלום.png', caption: '' }) });
-            }
+              body: JSON.stringify({ chatId, message: _lKaBc[0].content }) });
             await base44.asServiceRole.entities.ServiceRequest.update(serviceRequest.id, {
               agreement_confirmed: true, current_step: 'awaiting_legal_payment',
             });
             await base44.asServiceRole.entities.WhatsAppMessageLog.create({ id_message: idMessage || `wa_${Date.now()}`, phone, direction: 'incoming', text: text.substring(0, 500), status: 'replied', chat_id: chatId, conversation_id: conversationId });
-            await base44.asServiceRole.entities.WhatsAppMessageLog.create({ id_message: `out_${Date.now()}_fp_l_ka`, phone, direction: 'outgoing', text: '[fast_path_l_karati_agreement_payment]', status: 'replied', chat_id: chatId, conversation_id: conversationId });
-            return Response.json({ ok: true, fast_path: 'l_karati_agreement_payment' });
+            await base44.asServiceRole.entities.WhatsAppMessageLog.create({ id_message: `out_${Date.now()}_fp_l_ka`, phone, direction: 'outgoing', text: '[fast_path_l_karati_agreement_bank_transfer]', status: 'replied', chat_id: chatId, conversation_id: conversationId });
+            return Response.json({ ok: true, fast_path: 'l_karati_agreement_bank_transfer' });
           }
           console.log('FAST_PATH FP-L-Karati-Agreement: content not found, falling to LLM');
         } catch (e) { console.warn('FP-L-Karati-Agreement error:', e.message); }
+      }
+    }
+
+    // ===== FAST PATH: FP-L-Receipt — legal awaiting_legal_payment: any message → pending_human + notify admin =====
+    {
+      const _lRcMu = `https://api.green-api.com/waInstance${instanceId}/sendMessage/${token}`;
+      if (
+        serviceRequest?.service_type === 'legal' &&
+        serviceRequest?.current_step === 'awaiting_legal_payment'
+      ) {
+        console.log('FAST_PATH: FP-L-Receipt → pending_human + notify admin');
+        try {
+          // Send confirmation to client
+          const _lRcBc = await base44.asServiceRole.entities.BotContent.filter({ key: 'legal_receipt_received' });
+          const _lRcMsg = _lRcBc.length > 0 ? _lRcBc[0].content : 'תודה! קיבלנו את ההודעה. הצוות יבדוק ויאשר בהקדם 🙏';
+          await fetch(_lRcMu, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ chatId, message: _lRcMsg }) });
+
+          // Update status to pending_human
+          await base44.asServiceRole.entities.ServiceRequest.update(serviceRequest.id, {
+            status: 'pending_human', current_step: 'awaiting_admin_payment_approval',
+          });
+
+          // Notify admin via notifyAdmin function
+          base44.asServiceRole.functions.invoke('notifyAdmin', {
+            service_request_id: serviceRequest.id,
+            reason: 'אישור תשלום העברה בנקאית — מסלול Legal',
+            context_message: `לקוח: ${serviceRequest.contact_name || phone}\nהודעה: ${text.substring(0, 200)}`,
+          }).catch(e => console.warn('notifyAdmin invoke error:', e.message));
+
+          // Log
+          await base44.asServiceRole.entities.WhatsAppMessageLog.create({ id_message: idMessage || `wa_${Date.now()}`, phone, direction: 'incoming', text: text.substring(0, 500), status: 'replied', chat_id: chatId, conversation_id: conversationId });
+          await base44.asServiceRole.entities.WhatsAppMessageLog.create({ id_message: `out_${Date.now()}_fp_l_rc`, phone, direction: 'outgoing', text: '[fast_path_l_receipt_pending_human]', status: 'replied', chat_id: chatId, conversation_id: conversationId });
+
+          // Timeline
+          await base44.asServiceRole.entities.ServiceRequestTimeline.create({
+            service_request_id: serviceRequest.id,
+            event_type: 'status_change',
+            description: 'לקוח שלח אישור העברה — ממתין לאישור אדמין',
+            old_value: 'awaiting_legal_payment',
+            new_value: 'pending_human',
+          });
+
+          return Response.json({ ok: true, fast_path: 'l_receipt_pending_human' });
+        } catch (e) { console.warn('FP-L-Receipt error:', e.message); }
+      }
+    }
+
+    // ===== FAST PATH: FP-L-AdminApproval — admin sends "כן" for pending legal payment =====
+    {
+      const _lAdMu = `https://api.green-api.com/waInstance${instanceId}/sendMessage/${token}`;
+      const _lAdNorm = text.trim().replace(/[*"'״]/g, '').toLowerCase();
+      const _lAdPositive = ['כן', 'אישור', 'מאושר', 'אושר'].includes(_lAdNorm);
+      if (_lAdPositive) {
+        // Check if this phone is the admin phone
+        try {
+          const _lAdSettings = await base44.asServiceRole.entities.SystemSetting.filter({ key: 'admin_whatsapp_phone' });
+          const _lAdAdminPhone = _lAdSettings.length > 0 ? _lAdSettings[0].value : '';
+          if (_lAdAdminPhone && (phone === _lAdAdminPhone || localPhone === _lAdAdminPhone.replace('972', '0'))) {
+            // Find pending_human legal requests
+            const _lAdPending = await base44.asServiceRole.entities.ServiceRequest.filter({ status: 'pending_human', service_type: 'legal' });
+            const _lAdReq = _lAdPending.length > 0 ? _lAdPending.sort((a, b) => new Date(b.updated_date) - new Date(a.updated_date))[0] : null;
+            if (_lAdReq) {
+              console.log('FAST_PATH: FP-L-AdminApproval → paid for request', _lAdReq.id);
+
+              // Update to paid
+              await base44.asServiceRole.entities.ServiceRequest.update(_lAdReq.id, {
+                status: 'paid', payment_confirmed: true, current_step: 'send_privacy_message',
+                pending_bot_message: 'paid_legal',
+              });
+
+              // Confirm to admin
+              await fetch(_lAdMu, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ chatId, message: `✅ תשלום אושר עבור ${_lAdReq.contact_name || 'לקוח'}. ההודעה הבאה נשלחת ללקוח.` }) });
+
+              // Timeline
+              await base44.asServiceRole.entities.ServiceRequestTimeline.create({
+                service_request_id: _lAdReq.id,
+                event_type: 'payment',
+                description: 'תשלום אושר ידנית על ידי אדמין (WhatsApp)',
+                old_value: 'pending_human',
+                new_value: 'paid',
+              });
+
+              // Log
+              await base44.asServiceRole.entities.WhatsAppMessageLog.create({ id_message: idMessage || `wa_${Date.now()}`, phone, direction: 'incoming', text: text.substring(0, 500), status: 'replied', chat_id: chatId, conversation_id: conversationId });
+              await base44.asServiceRole.entities.WhatsAppMessageLog.create({ id_message: `out_${Date.now()}_fp_l_ad`, phone, direction: 'outgoing', text: '[fast_path_l_admin_approval]', status: 'replied', chat_id: chatId, conversation_id: conversationId });
+
+              return Response.json({ ok: true, fast_path: 'l_admin_approval', approved_request: _lAdReq.id });
+            }
+          }
+        } catch (e) { console.warn('FP-L-AdminApproval error:', e.message); }
       }
     }
 

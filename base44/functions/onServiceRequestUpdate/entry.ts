@@ -99,7 +99,7 @@ Deno.serve(async (req) => {
     const timelineEntries = [];
     let botTrigger = null;
 
-    // Handle status -> paid
+    // Handle status -> paid (includes admin approval from pending_human)
     if (newStatus === 'paid' && oldStatus !== 'paid') {
       updates.payment_confirmed = true;
 
