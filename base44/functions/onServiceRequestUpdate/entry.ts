@@ -719,9 +719,18 @@ async function buildBotMessage(base44, trigger, fullRequest, contactName) {
   }
 
   if (trigger === 'paid_clinic') {
-    const linkContent = await base44.asServiceRole.entities.ServiceContent.filter({ service_type: 'clinic', content_type: 'external_link' });
-    const linkUrl = linkContent.length > 0 ? linkContent[0].url : '';
-    return `היי ${contactName}, קיבלנו את התשלום — תודה רבה! 🙏\n\nהנה קישור לתיאום קליניקה:\n${linkUrl}\n\nלאחר קביעת מועד נשלח אישור.`;
+    const confirmRecords = await base44.asServiceRole.entities.BotContent.filter({ key: 'clinic_payment_confirmed' });
+    const confirmMsg = confirmRecords.length > 0 ? confirmRecords[0].content.replace('{שם}', contactName) : `ראינו ששילמת! 🙏\nלהלן קובץ התנהלות במתחם MedWork.`;
+    const pdfContent = await base44.asServiceRole.entities.ServiceContent.filter({ service_type: 'clinic', content_type: 'pdf', sub_type: 'medwork_rules' });
+    const followUpMessages = [];
+    if (pdfContent.length > 0 && pdfContent[0].url) {
+      followUpMessages.push(`[FILE:${pdfContent[0].url}:התנהלות MedWork.pdf]`);
+    }
+    const goodbyeRecords = await base44.asServiceRole.entities.BotContent.filter({ key: 'goodbye' });
+    if (goodbyeRecords.length > 0) {
+      followUpMessages.push(goodbyeRecords[0].content);
+    }
+    return { message: confirmMsg, followUpMessages };
   }
 
   if (trigger === 'paid_post_lecture') {
@@ -732,7 +741,19 @@ async function buildBotMessage(base44, trigger, fullRequest, contactName) {
     return `היי ${contactName}, קיבלנו את התשלום! תודה רבה. 🙏`;
   }
 
-  if (trigger === 'scheduled_consultation' || trigger === 'scheduled_legal' || trigger === 'scheduled_lectures' || trigger === 'scheduled_clinic' || trigger === 'scheduled_post_lecture') {
+  if (trigger === 'scheduled_clinic') {
+    const timeStr = fullRequest.last_appointment_time_str || '';
+    const result = await getAppointmentMessage(base44, timeStr);
+    const postMeetingRecords = await base44.asServiceRole.entities.BotContent.filter({ key: 'clinic_post_meeting_prompt' });
+    const mainMsg = typeof result === 'object' ? result.message : result;
+    const followUps = typeof result === 'object' ? [...result.followUpMessages] : [];
+    if (postMeetingRecords.length > 0) {
+      followUps.push(postMeetingRecords[0].content);
+    }
+    return { message: mainMsg, followUpMessages: followUps };
+  }
+
+  if (trigger === 'scheduled_consultation' || trigger === 'scheduled_legal' || trigger === 'scheduled_lectures' || trigger === 'scheduled_post_lecture') {
     const timeStr = fullRequest.last_appointment_time_str || '';
     return await getAppointmentMessage(base44, timeStr);
   }

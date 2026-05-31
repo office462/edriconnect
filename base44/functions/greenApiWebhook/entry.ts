@@ -1343,6 +1343,100 @@ Deno.serve(async (req) => {
       }
     }
 
+    // ===== FAST PATH: FP-Clinic-Veteran — clinic existing renter choice =====
+    {
+      const _cvMu = `https://api.green-api.com/waInstance${instanceId}/sendMessage/${token}`;
+      const _cvNorm = text.trim().replace(/[*"'\u05F4]/g, '').toLowerCase();
+      const _cvIsVeteran = ['1', '\u05D5\u05EA\u05D9\u05E7', '\u05E9\u05D5\u05DB\u05E8 \u05D5\u05EA\u05D9\u05E7', '\u05E9\u05D5\u05DB\u05E8\u05EA \u05D5\u05EA\u05D9\u05E7\u05D4'].includes(_cvNorm);
+      if (
+        serviceRequest?.service_type === 'clinic' &&
+        (!serviceRequest?.current_step || serviceRequest?.current_step === '' || serviceRequest?.current_step === 'awaiting_clinic_choice') &&
+        _cvIsVeteran
+      ) {
+        console.log('FAST_PATH: FP-Clinic-Veteran');
+        try {
+          const _cvBc = await base44.asServiceRole.entities.BotContent.filter({ key: 'clinic_existing_code_question' });
+          if (_cvBc.length > 0) {
+            await fetch(_cvMu, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ chatId, message: _cvBc[0].content }) });
+            await base44.asServiceRole.entities.ServiceRequest.update(serviceRequest.id, { current_step: 'awaiting_clinic_code_response' });
+            await base44.asServiceRole.entities.WhatsAppMessageLog.create({ id_message: idMessage || `wa_${Date.now()}`, phone, direction: 'incoming', text: text.substring(0, 500), status: 'replied', chat_id: chatId, conversation_id: conversationId });
+            await base44.asServiceRole.entities.WhatsAppMessageLog.create({ id_message: `out_${Date.now()}_fp_cv`, phone, direction: 'outgoing', text: '[fast_path_clinic_veteran]', status: 'replied', chat_id: chatId, conversation_id: conversationId });
+            return Response.json({ ok: true, fast_path: 'clinic_veteran' });
+          }
+        } catch (e) { console.warn('FP-Clinic-Veteran error:', e.message); }
+      }
+    }
+
+    // ===== FAST PATH: FP-Clinic-Code — clinic existing renter code response =====
+    {
+      const _ccrMu = `https://api.green-api.com/waInstance${instanceId}/sendMessage/${token}`;
+      const _ccrNorm = text.trim().replace(/[*"'\u05F4]/g, '').toLowerCase();
+      const _ccrYes = ['\u05DB\u05DF','\u05D1\u05D8\u05D7','\u05DB\u05DE\u05D5\u05D1\u05DF','\u05D0\u05E9\u05DE\u05D7','\u05E1\u05D1\u05D1\u05D4','\u05D0\u05D5\u05E7\u05D9','ok'].includes(_ccrNorm);
+      const _ccrNo = ['\u05DC\u05D0','\u05DC\u05D0 \u05EA\u05D5\u05D3\u05D4','\u05DC\u05D0 \u05E6\u05E8\u05D9\u05DA'].includes(_ccrNorm);
+      if (
+        serviceRequest?.service_type === 'clinic' &&
+        serviceRequest?.current_step === 'awaiting_clinic_code_response' &&
+        (_ccrYes || _ccrNo)
+      ) {
+        console.log('FAST_PATH: FP-Clinic-Code', _ccrYes ? 'yes' : 'no');
+        try {
+          if (_ccrYes) {
+            const _ccrCode = await base44.asServiceRole.entities.BotContent.filter({ key: 'clinic_secret_code' });
+            if (_ccrCode.length > 0) {
+              await fetch(_ccrMu, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ chatId, message: _ccrCode[0].content }) });
+            }
+          }
+          await new Promise(r => setTimeout(r, 1000));
+          const _ccrGoodbye = await base44.asServiceRole.entities.BotContent.filter({ key: 'goodbye' });
+          if (_ccrGoodbye.length > 0) {
+            await fetch(_ccrMu, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ chatId, message: _ccrGoodbye[0].content }) });
+          }
+          await base44.asServiceRole.entities.ServiceRequest.update(serviceRequest.id, { status: 'completed', current_step: 'completed' });
+          await base44.asServiceRole.entities.WhatsAppMessageLog.create({ id_message: idMessage || `wa_${Date.now()}`, phone, direction: 'incoming', text: text.substring(0, 500), status: 'replied', chat_id: chatId, conversation_id: conversationId });
+          await base44.asServiceRole.entities.WhatsAppMessageLog.create({ id_message: `out_${Date.now()}_fp_ccr`, phone, direction: 'outgoing', text: `[fast_path_clinic_code_${_ccrYes ? 'yes' : 'no'}]`, status: 'replied', chat_id: chatId, conversation_id: conversationId });
+          return Response.json({ ok: true, fast_path: `clinic_code_${_ccrYes ? 'yes' : 'no'}` });
+        } catch (e) { console.warn('FP-Clinic-Code error:', e.message); }
+      }
+    }
+
+    // ===== FAST PATH: FP-Clinic-WantToPay — clinic "מעוניין לשלם" → payment link + Bit QR =====
+    {
+      const _cwpMu = `https://api.green-api.com/waInstance${instanceId}/sendMessage/${token}`;
+      const _cwpNorm = text.trim().replace(/[*"'\u05F4]/g, '').toLowerCase();
+      const _cwpWantPay = (_cwpNorm.includes('\u05DE\u05E2\u05D5\u05E0\u05D9\u05D9\u05DF') || _cwpNorm.includes('\u05DE\u05E2\u05D5\u05E0\u05D9\u05D9\u05E0\u05EA') || _cwpNorm.includes('\u05E8\u05D5\u05E6\u05D4')) && _cwpNorm.includes('\u05DC\u05E9\u05DC\u05DD');
+      if (
+        serviceRequest?.service_type === 'clinic' &&
+        _cwpWantPay
+      ) {
+        console.log('FAST_PATH: FP-Clinic-WantToPay');
+        try {
+          const [_cwpBc, _cwpPay, _cwpBit] = await Promise.all([
+            base44.asServiceRole.entities.BotContent.filter({ key: 'clinic_payment_request' }),
+            base44.asServiceRole.entities.ServiceContent.filter({ service_type: 'clinic', content_type: 'payment_link' }),
+            base44.asServiceRole.entities.ServiceContent.filter({ service_type: 'general', content_type: 'image', sub_type: 'bit_qr' }),
+          ]);
+          if (_cwpBc.length > 0 && _cwpPay.length > 0) {
+            const _cwpMsg = _cwpBc[0].content.replace('{\u05E7\u05D9\u05E9\u05D5\u05E8_\u05EA\u05E9\u05DC\u05D5\u05DD}', _cwpPay[0].url);
+            await fetch(_cwpMu, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ chatId, message: _cwpMsg }) });
+            if (_cwpBit.length > 0 && _cwpBit[0].url) {
+              await new Promise(r => setTimeout(r, 1500));
+              const _cwpFu = `https://api.green-api.com/waInstance${instanceId}/sendFileByUrl/${token}`;
+              await fetch(_cwpFu, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ chatId, urlFile: _cwpBit[0].url, fileName: '\u05D1\u05E8\u05E7\u05D5\u05D3 \u05D1\u05D9\u05D8 \u05DC\u05EA\u05E9\u05DC\u05D5\u05DD.png', caption: '' }) });
+            }
+            await base44.asServiceRole.entities.ServiceRequest.update(serviceRequest.id, { current_step: 'awaiting_clinic_payment' });
+            await base44.asServiceRole.entities.WhatsAppMessageLog.create({ id_message: idMessage || `wa_${Date.now()}`, phone, direction: 'incoming', text: text.substring(0, 500), status: 'replied', chat_id: chatId, conversation_id: conversationId });
+            await base44.asServiceRole.entities.WhatsAppMessageLog.create({ id_message: `out_${Date.now()}_fp_cwp`, phone, direction: 'outgoing', text: '[fast_path_clinic_want_to_pay]', status: 'replied', chat_id: chatId, conversation_id: conversationId });
+            return Response.json({ ok: true, fast_path: 'clinic_want_to_pay' });
+          }
+        } catch (e) { console.warn('FP-Clinic-WantToPay error:', e.message); }
+      }
+    }
+
     // ===== FAST PATH: FP-Lectures-Type — lectures type selection =====
     {
       const _ltMu = `https://api.green-api.com/waInstance${instanceId}/sendMessage/${token}`;
