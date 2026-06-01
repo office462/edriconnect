@@ -11,7 +11,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { Plus, Search, Filter, Pencil, Trash2 } from 'lucide-react';
+import { Plus, Search, Filter, Pencil, Trash2, UserPlus } from 'lucide-react';
 import StatusBadge from '@/components/shared/StatusBadge';
 import ServiceTypeBadge from '@/components/shared/ServiceTypeBadge';
 import ViewToggle from '@/components/shared/ViewToggle';
@@ -56,6 +56,8 @@ export default function ServiceRequests() {
   const [editingReq, setEditingReq] = useState(null);
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [newReq, setNewReq] = useState({ contact_id: '', service_type: 'consultation', notes: '' });
+  const [showNewContact, setShowNewContact] = useState(false);
+  const [newContact, setNewContact] = useState({ full_name: '', phone: '', email: '' });
   const queryClient = useQueryClient();
 
   const { data: requests = [], isLoading } = useQuery({
@@ -68,6 +70,17 @@ export default function ServiceRequests() {
   const { data: contacts = [] } = useQuery({
     queryKey: ['contacts'],
     queryFn: () => base44.entities.Contact.list('-created_date', 200),
+  });
+
+  const createContactMutation = useMutation({
+    mutationFn: (data) => base44.entities.Contact.create({ ...data, source: 'web' }),
+    onSuccess: (created) => {
+      queryClient.invalidateQueries({ queryKey: ['contacts'] });
+      setNewReq(prev => ({ ...prev, contact_id: created.id }));
+      setShowNewContact(false);
+      setNewContact({ full_name: '', phone: '', email: '' });
+      toast.success('איש קשר נוצר ונבחר');
+    },
   });
 
   const createMutation = useMutation({
@@ -261,11 +274,28 @@ export default function ServiceRequests() {
           <DialogHeader><DialogTitle>פנייה חדשה</DialogTitle></DialogHeader>
           <div className="space-y-4">
             <div>
-              <Label>איש קשר *</Label>
+              <div className="flex items-center justify-between mb-1">
+                <Label>איש קשר *</Label>
+                <Button type="button" variant="ghost" size="sm" className="h-7 text-xs gap-1 text-primary" onClick={() => setShowNewContact(true)}>
+                  <UserPlus className="w-3.5 h-3.5" /> חדש
+                </Button>
+              </div>
               <Select value={newReq.contact_id} onValueChange={(v) => setNewReq({ ...newReq, contact_id: v })}>
                 <SelectTrigger><SelectValue placeholder="בחר איש קשר" /></SelectTrigger>
                 <SelectContent>{contacts.map(c => <SelectItem key={c.id} value={c.id}>{c.full_name} {c.phone ? `(${c.phone})` : ''}</SelectItem>)}</SelectContent>
               </Select>
+              {showNewContact && (
+                <div className="mt-3 p-3 border rounded-lg bg-muted/30 space-y-2">
+                  <p className="text-xs font-medium text-muted-foreground">יצירת איש קשר חדש:</p>
+                  <Input placeholder="שם מלא *" value={newContact.full_name} onChange={(e) => setNewContact({ ...newContact, full_name: e.target.value })} />
+                  <Input placeholder="טלפון" value={newContact.phone} onChange={(e) => setNewContact({ ...newContact, phone: e.target.value })} />
+                  <Input placeholder="אימייל" value={newContact.email} onChange={(e) => setNewContact({ ...newContact, email: e.target.value })} />
+                  <div className="flex gap-2">
+                    <Button size="sm" disabled={!newContact.full_name} onClick={() => createContactMutation.mutate(newContact)}>צור ובחר</Button>
+                    <Button size="sm" variant="ghost" onClick={() => { setShowNewContact(false); setNewContact({ full_name: '', phone: '', email: '' }); }}>ביטול</Button>
+                  </div>
+                </div>
+              )}
             </div>
             <div>
               <Label>סוג שירות *</Label>
