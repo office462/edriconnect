@@ -1044,6 +1044,36 @@ Deno.serve(async (req) => {
       }
     }
 
+    // ===== FAST PATH: FP-Goodbye — "סיום" → goodbye message + completed =====
+    {
+      const _gbMu = `https://api.green-api.com/waInstance${instanceId}/sendMessage/${token}`;
+      const _gbNorm = text.trim().replace(/[*"'״]/g, '').toLowerCase();
+      const _gbTriggers = ['סיום','סיום שיחה','ביי','להתראות','תודה סיום','יאללה ביי','סיימנו','סיימתי','זהו','תודה רבה סיום'];
+      if (_gbTriggers.includes(_gbNorm) && serviceRequest) {
+        console.log('FAST_PATH: FP-Goodbye → goodbye message');
+        try {
+          const _gbBye = await base44.asServiceRole.entities.BotContent.filter({ key: 'goodbye' });
+          const _gbMsg = _gbBye.length > 0 ? _gbBye[0].content : 'שמחתי לשוחח, שיהיה לך יום נפלא 🌸';
+          await fetch(_gbMu, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ chatId, message: _gbMsg }) });
+          await base44.asServiceRole.entities.ServiceRequest.update(serviceRequest.id, {
+            status: 'completed', current_step: 'completed',
+          });
+          await base44.asServiceRole.entities.WhatsAppMessageLog.create({
+            id_message: idMessage || `wa_${Date.now()}`, phone, direction: 'incoming',
+            text: text.substring(0, 500), status: 'replied', chat_id: chatId, conversation_id: conversationId,
+          });
+          await base44.asServiceRole.entities.WhatsAppMessageLog.create({
+            id_message: `out_${Date.now()}_fp_gb`, phone, direction: 'outgoing',
+            text: '[fast_path_goodbye]', status: 'replied', chat_id: chatId, conversation_id: conversationId,
+          });
+          return Response.json({ ok: true, fast_path: 'goodbye' });
+        } catch (fpGbErr) {
+          console.warn(`FAST_PATH FP-Goodbye error: ${fpGbErr.message} — falling to LLM`);
+        }
+      }
+    }
+
 
 
 
