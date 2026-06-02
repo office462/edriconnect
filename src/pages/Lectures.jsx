@@ -12,7 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Badge } from '@/components/ui/badge';
-import { Plus, Pencil, Trash2, BookOpen, Clock, Video, FileText, Search } from 'lucide-react';
+import { Plus, Pencil, Trash2, BookOpen, Clock, Video, FileText, Search, Upload, Loader2 } from 'lucide-react';
 import ViewToggle from '@/components/shared/ViewToggle';
 import BulkActions from '@/components/shared/BulkActions';
 import { toast } from 'sonner';
@@ -35,7 +35,21 @@ export default function Lectures() {
   const [view, setView] = useState('cards');
   const [selected, setSelected] = useState([]);
   const [deleteTarget, setDeleteTarget] = useState(null);
+  const [uploading, setUploading] = useState(null); // tracks which field is uploading: 'video_url' | 'pdf_url' | 'image_url'
   const queryClient = useQueryClient();
+
+  const handleFileUpload = async (file, field) => {
+    setUploading(field);
+    try {
+      const { file_url } = await base44.integrations.Core.UploadFile({ file });
+      setForm(prev => ({ ...prev, [field]: file_url }));
+      toast.success('הקובץ הועלה בהצלחה');
+    } catch (err) {
+      toast.error('שגיאה בהעלאה: ' + err.message);
+    } finally {
+      setUploading(null);
+    }
+  };
 
   const { data: lectures = [], isLoading } = useQuery({
     queryKey: ['lectures'],
@@ -195,11 +209,38 @@ export default function Lectures() {
               <div><Label>מחיר</Label><Input value={form.price} onChange={(e) => setForm({ ...form, price: e.target.value })} placeholder="₪..." /></div>
               <div><Label>שם סדרה</Label><Input value={form.series_name} onChange={(e) => setForm({ ...form, series_name: e.target.value })} /></div>
             </div>
-            <div><Label>קישור סרטון</Label><Input value={form.video_url} onChange={(e) => setForm({ ...form, video_url: e.target.value })} dir="ltr" placeholder="https://..." /></div>
-            <div><Label>קישור PDF</Label><Input value={form.pdf_url} onChange={(e) => setForm({ ...form, pdf_url: e.target.value })} dir="ltr" placeholder="https://..." /></div>
+            <div>
+              <Label>קישור סרטון</Label>
+              <div className="flex gap-2 items-center">
+                <Input value={form.video_url} onChange={(e) => setForm({ ...form, video_url: e.target.value })} dir="ltr" placeholder="https://..." className="flex-1" />
+                <Button type="button" variant="outline" size="sm" className="gap-1 shrink-0" disabled={!!uploading} onClick={() => document.getElementById('lec-video-upload').click()}>
+                  {uploading === 'video_url' ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
+                  {uploading === 'video_url' ? 'מעלה...' : 'העלאת קובץ'}
+                </Button>
+                <input id="lec-video-upload" type="file" className="hidden" accept="video/*" onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFileUpload(f, 'video_url'); e.target.value = ''; }} />
+              </div>
+            </div>
+            <div>
+              <Label>קישור PDF</Label>
+              <div className="flex gap-2 items-center">
+                <Input value={form.pdf_url} onChange={(e) => setForm({ ...form, pdf_url: e.target.value })} dir="ltr" placeholder="https://..." className="flex-1" />
+                <Button type="button" variant="outline" size="sm" className="gap-1 shrink-0" disabled={!!uploading} onClick={() => document.getElementById('lec-pdf-upload').click()}>
+                  {uploading === 'pdf_url' ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
+                  {uploading === 'pdf_url' ? 'מעלה...' : 'העלאת קובץ'}
+                </Button>
+                <input id="lec-pdf-upload" type="file" className="hidden" accept=".pdf,application/pdf" onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFileUpload(f, 'pdf_url'); e.target.value = ''; }} />
+              </div>
+            </div>
             <div>
               <Label>תמונה</Label>
-              <Input value={form.image_url} onChange={(e) => setForm({ ...form, image_url: e.target.value })} dir="ltr" placeholder="https://..." />
+              <div className="flex gap-2 items-center">
+                <Input value={form.image_url} onChange={(e) => setForm({ ...form, image_url: e.target.value })} dir="ltr" placeholder="https://..." className="flex-1" />
+                <Button type="button" variant="outline" size="sm" className="gap-1 shrink-0" disabled={!!uploading} onClick={() => document.getElementById('lec-image-upload').click()}>
+                  {uploading === 'image_url' ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
+                  {uploading === 'image_url' ? 'מעלה...' : 'העלאת קובץ'}
+                </Button>
+                <input id="lec-image-upload" type="file" className="hidden" accept="image/*" onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFileUpload(f, 'image_url'); e.target.value = ''; }} />
+              </div>
               <ImagePreview url={form.image_url} label="תצוגה מקדימה:" />
             </div>
             <div><Label>סדר הצגה</Label><Input type="number" value={form.sort_order} onChange={(e) => setForm({ ...form, sort_order: Number(e.target.value) })} /></div>
