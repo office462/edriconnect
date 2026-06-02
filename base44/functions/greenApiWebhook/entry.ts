@@ -523,6 +523,29 @@ Deno.serve(async (req) => {
               console.log(`Contact with phone ${_dcData.phone} already exists, skipping create`);
             }
             await base44.asServiceRole.entities.SystemSetting.delete(_dcSettings[0].id).catch(() => {});
+
+            // Sync contact details to existing ServiceRequest(s)
+            try {
+              const _dcSrByConv = conversationId
+                ? await base44.asServiceRole.entities.ServiceRequest.filter({ conversation_id: conversationId })
+                : [];
+              for (const sr of _dcSrByConv) {
+                if (!sr.contact_name || sr.contact_name === '' || sr.contact_id === 'pending') {
+                  const _dcNewContact = await base44.asServiceRole.entities.Contact.filter({ phone: _dcData.phone });
+                  const _dcCid = _dcNewContact.length > 0 ? _dcNewContact[0].id : sr.contact_id;
+                  await base44.asServiceRole.entities.ServiceRequest.update(sr.id, {
+                    contact_id: _dcCid,
+                    contact_name: _dcData.name,
+                    contact_phone: _dcData.phone,
+                    contact_email: _dcData.email,
+                  });
+                  console.log(`Synced contact details to ServiceRequest ${sr.id}`);
+                }
+              }
+            } catch (syncErr) {
+              console.warn('Failed to sync contact to ServiceRequest:', syncErr.message);
+            }
+
             const _dcWelcomeContents = await base44.asServiceRole.entities.BotContent.filter({ key: 'welcome' });
             const _dcWelcomeMsg = _dcWelcomeContents.length > 0 ? _dcWelcomeContents[0].content : 'ברוכ/ה הבא/ה! 😊';
             await fetch(_dcMu, { method: 'POST', headers: { 'Content-Type': 'application/json' },
