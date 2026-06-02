@@ -1016,26 +1016,61 @@ Deno.serve(async (req) => {
       }
     }
 
-    // ===== FAST PATH: FP-U2 — "קבעתי" → appointment_confirmed =====
+    // ===== FAST PATH: FP-U2 — "קבעתי" → appointment_confirmed + directions + goodbye =====
     {
       const _u2Mu = `https://api.green-api.com/waInstance${instanceId}/sendMessage/${token}`;
+      const _u2Fu = `https://api.green-api.com/waInstance${instanceId}/sendFileByUrl/${token}`;
       const _u2Norm = text.trim().replace(/[*"'״]/g, '').toLowerCase();
       if (_u2Norm === 'קבעתי') {
         console.log('FAST_PATH: FP-U2 קבעתי → appointment_confirmed');
         try {
+          // 1. Send appointment confirmed
           const _u2Contents = await base44.asServiceRole.entities.BotContent.filter({ key: 'appointment_confirmed' });
           if (_u2Contents.length > 0) {
             await fetch(_u2Mu, { method: 'POST', headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ chatId, message: _u2Contents[0].content }) });
+
+            // 2. Send location directions
+            await new Promise(r => setTimeout(r, 1500));
+            const _u2Dir = await base44.asServiceRole.entities.BotContent.filter({ key: 'location_directions' });
+            if (_u2Dir.length > 0) {
+              await fetch(_u2Mu, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ chatId, message: _u2Dir[0].content }) });
+            }
+
+            // 3. Send location image if exists
+            const _u2LocImg = await base44.asServiceRole.entities.ServiceContent.filter({ service_type: 'general', content_type: 'image', sub_type: 'location' });
+            if (_u2LocImg.length > 0 && _u2LocImg[0].url) {
+              await new Promise(r => setTimeout(r, 1000));
+              await fetch(_u2Fu, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ chatId, urlFile: _u2LocImg[0].url, fileName: 'מיקום.jpg', caption: '' }) });
+            }
+
+            // 4. Send goodbye
+            await new Promise(r => setTimeout(r, 1500));
+            const _u2Bye = await base44.asServiceRole.entities.BotContent.filter({ key: 'goodbye' });
+            if (_u2Bye.length > 0) {
+              await fetch(_u2Mu, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ chatId, message: _u2Bye[0].content }) });
+            }
+
+            // 5. Update ServiceRequest
+            if (serviceRequest) {
+              await base44.asServiceRole.entities.ServiceRequest.update(serviceRequest.id, {
+                current_step: 'completed_goodbye_sent', status: 'completed',
+              });
+            }
+
+            // Log
             await base44.asServiceRole.entities.WhatsAppMessageLog.create({
               id_message: idMessage || `wa_${Date.now()}`, phone, direction: 'incoming',
               text: text.substring(0, 500), status: 'replied', chat_id: chatId, conversation_id: conversationId,
             });
             await base44.asServiceRole.entities.WhatsAppMessageLog.create({
               id_message: `out_${Date.now()}_fp_u2`, phone, direction: 'outgoing',
-              text: '[fast_path_u2_appointment_confirmed]', status: 'replied', chat_id: chatId, conversation_id: conversationId,
+              text: '[fast_path_u2_confirmed+directions+goodbye]', status: 'replied', chat_id: chatId, conversation_id: conversationId,
             });
-            return Response.json({ ok: true, fast_path: 'u2_appointment_confirmed' });
+            return Response.json({ ok: true, fast_path: 'u2_appointment_confirmed_full' });
           }
           console.log('FAST_PATH FP-U2: BotContent not found, falling to LLM');
         } catch (fpU2Err) {
