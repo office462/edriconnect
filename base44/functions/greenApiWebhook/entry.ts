@@ -1697,6 +1697,7 @@ Deno.serve(async (req) => {
       if (
         serviceRequest?.service_type === 'post_lecture' &&
         (serviceRequest?.current_step === 'awaiting_post_lecture_details' || serviceRequest?.current_step === 'awaiting_mailing_list_response') &&
+        serviceRequest?.status !== 'completed' &&
         (!contact || !contact.full_name || !contact.email || !contact.phone)
       ) {
         // Try to parse name + email + phone from the message
