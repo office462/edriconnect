@@ -1,12 +1,8 @@
-import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
+import { createClientFromRequest } from 'npm:@base44/sdk@0.8.31';
 
 Deno.serve(async (req) => {
   try {
     const base44 = createClientFromRequest(req);
-    const user = await base44.auth.me();
-    if (user?.role !== 'admin') {
-      return Response.json({ error: 'Forbidden' }, { status: 403 });
-    }
 
     const botSettings = await base44.asServiceRole.entities.SystemSetting.filter({ key: 'whatsapp_bot_enabled' });
     const botEnabled = botSettings.length > 0 && botSettings[0].value === 'true';
@@ -20,7 +16,8 @@ Deno.serve(async (req) => {
     const allRequests = await base44.asServiceRole.entities.ServiceRequest.filter({ service_type: 'post_lecture' });
     const eligible = allRequests.filter(r => {
       const step = r.current_step;
-      return (step === 'awaiting_mailing_list_response' || step === 'post_lecture_details_saved') &&
+      return (step === 'awaiting_mailing_list_response' || step === 'post_lecture_details_saved' || step === 'awaiting_post_lecture_details') &&
+        r.status !== 'completed' &&
         (now - new Date(r.updated_date).getTime()) >= FOLLOWUP_DELAY_MS;
     });
 
