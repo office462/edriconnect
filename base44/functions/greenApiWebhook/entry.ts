@@ -120,9 +120,7 @@ Deno.serve(async (req) => {
     fetch(`https://api.green-api.com/waInstance${instanceId}/sendTyping/${token}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ chatId, typingTime: 15000 }) }).catch(() => {});
 
     // ===== FIND CONTACT =====
-    console.log('Q4 start', Date.now());
     let contacts = await base44.asServiceRole.entities.Contact.filter({ phone: phone });
-    console.log('Q4 done', Date.now());
     if (contacts.length === 0 && phone.startsWith('972')) {
       contacts = await base44.asServiceRole.entities.Contact.filter({ phone: localPhone });
     }
@@ -142,9 +140,7 @@ Deno.serve(async (req) => {
     // ===== FIND SERVICE REQUEST =====
     let serviceRequest = null;
     if (contact) {
-      console.log('Q5 start', Date.now());
       const allRequests = await base44.asServiceRole.entities.ServiceRequest.filter({ contact_id: contact.id });
-      console.log('Q5 done', Date.now());
       if (allRequests.length > 0) {
         allRequests.sort((a, b) => new Date(b.created_date) - new Date(a.created_date));
         serviceRequest = allRequests[0];
@@ -394,7 +390,12 @@ Deno.serve(async (req) => {
                 body: JSON.stringify({ chatId, message: _plqMailBc[0].content }) });
             }
 
-            await base44.asServiceRole.entities.ServiceRequest.update(_plqSr.id, { current_step: 'awaiting_mailing_list_response' });
+            const _plqDetBc = await base44.asServiceRole.entities.BotContent.filter({ key: 'post_lecture_details_request' });
+            if (_plqDetBc.length > 0) {
+              await new Promise(r => setTimeout(r, 2000));
+              await fetch(_plqMu, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({chatId, message: _plqDetBc[0].content}) });
+            }
+            await base44.asServiceRole.entities.ServiceRequest.update(_plqSr.id, { current_step: 'awaiting_post_lecture_details' });
 
             // Log
             await base44.asServiceRole.entities.WhatsAppMessageLog.create({
@@ -1695,7 +1696,7 @@ Deno.serve(async (req) => {
       const _pldMu = `https://api.green-api.com/waInstance${instanceId}/sendMessage/${token}`;
       if (
         serviceRequest?.service_type === 'post_lecture' &&
-        (serviceRequest?.current_step === 'awaiting_post_lecture_karati' || serviceRequest?.current_step === 'awaiting_mailing_list_response') &&
+        (serviceRequest?.current_step === 'awaiting_post_lecture_details' || serviceRequest?.current_step === 'awaiting_mailing_list_response') &&
         (!contact || !contact.full_name || !contact.email || !contact.phone)
       ) {
         // Try to parse name + email + phone from the message
