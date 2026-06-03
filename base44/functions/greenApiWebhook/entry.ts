@@ -1073,11 +1073,6 @@ Deno.serve(async (req) => {
         }
       }
     }
-
-
-
-
-
     // ===== FAST PATH: FP-L-Agreement — legal "כן" after agreement question → send agreement PDF =====
     {
       const _lAgMu = `https://api.green-api.com/waInstance${instanceId}/sendMessage/${token}`;
@@ -1716,9 +1711,7 @@ Deno.serve(async (req) => {
             .replace(/טלפון:?\s*/gi, '').replace(/מייל:?\s*/gi, '').replace(/email:?\s*/gi, '')
             .replace(/[,;:]/g, ' ').replace(/\s+/g, ' ').trim();
           if (_pldName.length >= 2) {
-            console.log(`FAST_PATH: FP-PL-Details parsed name="${_pldName}" phone="${_pldPhone}" email="${_pldEmail}"`);
             try {
-              // Create or update Contact
               const _pldExisting = await base44.asServiceRole.entities.Contact.filter({ phone: _pldPhone });
               let _pldContactId;
               if (_pldExisting.length === 0) {
@@ -1739,19 +1732,35 @@ Deno.serve(async (req) => {
               // Send confirmation
               await fetch(_pldMu, { method: 'POST', headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ chatId, message: `תודה ${_pldName}! 🌸 הפרטים נשמרו.` }) });
-
-              await base44.asServiceRole.entities.ServiceRequest.update(serviceRequest.id, { current_step: 'post_lecture_details_saved' });
-
+              // Step 4: recommend + series image (Lecture catalog) + goodbye
+              const [_pldRec, _pldBye, _pldSer] = await Promise.all([
+                base44.asServiceRole.entities.BotContent.filter({ key: 'post_lecture_recommend' }),
+                base44.asServiceRole.entities.BotContent.filter({ key: 'post_lecture_final_goodbye' }),
+                base44.asServiceRole.entities.Lecture.filter({ lecture_type: 'series' }),
+              ]);
+              if (_pldRec.length > 0) {
+                await new Promise(r => setTimeout(r, 1500));
+                await fetch(_pldMu, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ chatId, message: _pldRec[0].content }) });
+              }
+              if (_pldSer.length > 0 && _pldSer[0].image_url) {
+                await new Promise(r => setTimeout(r, 1500));
+                const _pldFu = `https://api.green-api.com/waInstance${instanceId}/sendFileByUrl/${token}`;
+                await fetch(_pldFu, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ chatId, urlFile: _pldSer[0].image_url, fileName: 'סדרת הרצאות.jpg', caption: '' }) });
+              }
+              if (_pldBye.length > 0) {
+                await new Promise(r => setTimeout(r, 1500));
+                await fetch(_pldMu, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ chatId, message: _pldBye[0].content }) });
+              }
+              await base44.asServiceRole.entities.ServiceRequest.update(serviceRequest.id, { current_step: 'post_lecture_completed', status: 'completed' });
               await base44.asServiceRole.entities.WhatsAppMessageLog.create({ id_message: idMessage || `wa_${Date.now()}`, phone, direction: 'incoming', text: text.substring(0, 500), status: 'replied', chat_id: chatId, conversation_id: conversationId });
-              await base44.asServiceRole.entities.WhatsAppMessageLog.create({ id_message: `out_${Date.now()}_fp_pld`, phone, direction: 'outgoing', text: '[fast_path_pl_details_saved]', status: 'replied', chat_id: chatId, conversation_id: conversationId });
-              return Response.json({ ok: true, fast_path: 'pl_details_saved_book_offer' });
+              await base44.asServiceRole.entities.WhatsAppMessageLog.create({ id_message: `out_${Date.now()}_fp_pld`, phone, direction: 'outgoing', text: '[fp_pl_details_recommend_bye]', status: 'replied', chat_id: chatId, conversation_id: conversationId });
+              return Response.json({ ok: true, fast_path: 'pl_details_recommend_goodbye' });
             } catch (pldErr) {
               console.warn(`FP-PL-Details save error: ${pldErr.message} — falling to LLM`);
             }
           }
         }
-        // If we couldn't parse — fall to LLM to handle incomplete details
-        console.log('FAST_PATH FP-PL-Details: could not parse all 3 fields, falling to LLM');
+        // If we couldn't parse — fall to LLM
       }
     }
 
@@ -1823,14 +1832,8 @@ Deno.serve(async (req) => {
     // ===== END FAST PATH =====
 
     // ===== SEND TO BOT =====
-    console.log('DIAG addMsg start', Date.now());
-    await base44.asServiceRole.agents.addMessage(conversation, {
-      role: 'user',
-      content: text,
-    });
-
-    console.log('DIAG addMsg done', Date.now());
-    const expectedIndex = msgCountBefore + 1; // user message is at msgCountBefore, bot reply expected after
+    await base44.asServiceRole.agents.addMessage(conversation, { role: 'user', content: text });
+    const expectedIndex = msgCountBefore + 1;
 
     // ===== LOG MESSAGE =====
     const logRecord = await base44.asServiceRole.entities.WhatsAppMessageLog.create({
