@@ -16,7 +16,7 @@ Deno.serve(async (req) => {
     const allRequests = await base44.asServiceRole.entities.ServiceRequest.filter({ service_type: 'post_lecture' });
     const eligible = allRequests.filter(r => {
       const step = r.current_step;
-      return (step === 'awaiting_mailing_list_response' || step === 'post_lecture_details_saved') &&
+      return (step === 'awaiting_mailing_list_response' || step === 'post_lecture_details_saved' || step === 'awaiting_post_lecture_details') &&
         r.status !== 'completed' &&
         (now - new Date(r.updated_date).getTime()) >= FOLLOWUP_DELAY_MS;
     });
