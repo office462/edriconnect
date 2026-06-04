@@ -247,11 +247,6 @@ Deno.serve(async (req) => {
               await new Promise(r => setTimeout(r, 2000));
               await fetch(_plqMu, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ chatId, message: _plqMailBc[0].content }) });
             }
-            const _plqDetBc = await base44.asServiceRole.entities.BotContent.filter({ key: 'post_lecture_details_request' });
-            if (_plqDetBc.length > 0) {
-              await new Promise(r => setTimeout(r, 2000));
-              await fetch(_plqMu, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({chatId, message: _plqDetBc[0].content}) });
-            }
             await base44.asServiceRole.entities.ServiceRequest.update(_plqSr.id, { current_step: 'awaiting_post_lecture_details' });
             await base44.asServiceRole.entities.WhatsAppMessageLog.create({ id_message: idMessage || `wa_${Date.now()}`, phone, direction: 'incoming', text: text.substring(0, 500), status: 'replied', chat_id: chatId, conversation_id: conversationId });
             await base44.asServiceRole.entities.WhatsAppMessageLog.create({ id_message: `out_${Date.now()}_fp_plq`, phone, direction: 'outgoing', text: `[fast_path_pl_qr_pdf_sent] ${_plqPdf.sub_type}`, status: 'replied', chat_id: chatId, conversation_id: conversationId });
