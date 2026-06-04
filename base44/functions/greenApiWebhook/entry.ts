@@ -281,8 +281,50 @@ Deno.serve(async (req) => {
       } catch (fp0Err) {}
     }
 
+    // ===== FAST PATH: FP-PL-Details — MUST be BEFORE FP-Details to catch post_lecture details =====
+    { const _pldMu = `https://api.green-api.com/waInstance${instanceId}/sendMessage/${token}`;
+      // Find post_lecture SR by conversation_id even if serviceRequest is null/different type
+      let _pldSr = (serviceRequest?.service_type === 'post_lecture') ? serviceRequest : null;
+      if (!_pldSr && conversationId) {
+        try {
+          const _pldByConv = await base44.asServiceRole.entities.ServiceRequest.filter({ conversation_id: conversationId, service_type: 'post_lecture' });
+          if (_pldByConv.length > 0) {
+            _pldByConv.sort((a, b) => new Date(b.created_date) - new Date(a.created_date));
+            if (_pldByConv[0].status !== 'completed') _pldSr = _pldByConv[0];
+          }
+        } catch (_) {}
+      }
+      if (_pldSr && (_pldSr.current_step === 'awaiting_post_lecture_details' || _pldSr.current_step === 'awaiting_mailing_list_response') && (!contact || !contact.full_name || !contact.email || !contact.phone)) {
+        const _pldEmailMatch = text.match(/[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}/);
+        const _pldPhoneMatch = text.replace(/[\-\s]/g, '').match(/0[5]\d{8}/);
+        if (_pldEmailMatch && _pldPhoneMatch) {
+          const _pldEmail = _pldEmailMatch[0].toLowerCase().trim(); const _pldPhone = _pldPhoneMatch[0];
+          const _pldName = text.replace(_pldEmailMatch[0], '').replace(/0[5][\d\-\s]{8,12}/g, '').replace(/שמי?\s*/gi, '').replace(/מספרי?\s*/gi, '').replace(/טלפון:?\s*/gi, '').replace(/מייל:?\s*/gi, '').replace(/email:?\s*/gi, '').replace(/[,;:]/g, ' ').replace(/\s+/g, ' ').trim();
+          if (_pldName.length >= 2) {
+            try {
+              const _pldExisting = await base44.asServiceRole.entities.Contact.filter({ phone: _pldPhone });
+              let _pldContactId;
+              if (_pldExisting.length === 0) { const _pldNewContact = await base44.asServiceRole.entities.Contact.create({ full_name: _pldName, phone: _pldPhone, email: _pldEmail, source: 'qr' }); _pldContactId = _pldNewContact.id; deduplicateContact(base44, _pldPhone).catch(() => {}); }
+              else { _pldContactId = _pldExisting[0].id; }
+              await base44.asServiceRole.entities.ServiceRequest.update(_pldSr.id, { contact_id: _pldContactId, contact_name: _pldName, contact_phone: _pldPhone, contact_email: _pldEmail });
+              await fetch(_pldMu, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ chatId, message: `תודה ${_pldName}! 🌸 הפרטים נשמרו.` }) });
+              const [_pldRec, _pldBye, _pldSer] = await Promise.all([base44.asServiceRole.entities.BotContent.filter({ key: 'post_lecture_recommend' }), base44.asServiceRole.entities.BotContent.filter({ key: 'post_lecture_final_goodbye' }), base44.asServiceRole.entities.Lecture.filter({ lecture_type: 'series' })]);
+              if (_pldRec.length > 0) { await new Promise(r => setTimeout(r, 1500)); await fetch(_pldMu, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ chatId, message: _pldRec[0].content }) }); }
+              if (_pldSer.length > 0 && _pldSer[0].image_url) { await new Promise(r => setTimeout(r, 1500)); const _pldFu = `https://api.green-api.com/waInstance${instanceId}/sendFileByUrl/${token}`; await fetch(_pldFu, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ chatId, urlFile: _pldSer[0].image_url, fileName: 'סדרת הרצאות.jpg', caption: '' }) }); }
+              if (_pldBye.length > 0) { await new Promise(r => setTimeout(r, 1500)); await fetch(_pldMu, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ chatId, message: _pldBye[0].content }) }); }
+              await base44.asServiceRole.entities.ServiceRequest.update(_pldSr.id, { current_step: 'post_lecture_completed', status: 'completed' });
+              await base44.asServiceRole.entities.WhatsAppMessageLog.create({ id_message: idMessage || `wa_${Date.now()}`, phone, direction: 'incoming', text: text.substring(0, 500), status: 'replied', chat_id: chatId, conversation_id: conversationId });
+              await base44.asServiceRole.entities.WhatsAppMessageLog.create({ id_message: `out_${Date.now()}_fp_pld`, phone, direction: 'outgoing', text: '[fp_pl_details_recommend_bye]', status: 'replied', chat_id: chatId, conversation_id: conversationId });
+              try { await base44.asServiceRole.agents.addMessage(conversation, { role: 'user', content: text }); await base44.asServiceRole.agents.addMessage(conversation, { role: 'assistant', content: `תודה ${_pldName}! 🌸 הפרטים נשמרו.` }); } catch (_) {}
+              return Response.json({ ok: true, fast_path: 'pl_details_recommend_goodbye' });
+            } catch (pldErr) { console.warn(`FP-PL-Details error: ${pldErr.message}`); }
+          }
+        }
+      }
+    }
+
     // ===== FAST PATH: FP-Details — parse name+phone+email and send confirmation =====
-    // SKIP for post_lecture — details are handled directly by FP-PL-Details (no confirm loop)
+    // SKIP for post_lecture — details are handled by FP-PL-Details above
     {
       const _detMu = `https://api.green-api.com/waInstance${instanceId}/sendMessage/${token}`;
       const _detNeedsContact = !contact || !contact.full_name || !contact.email || !contact.phone;
@@ -560,35 +602,6 @@ Deno.serve(async (req) => {
         try { if (!contact || !contact.full_name || !contact.email || !contact.phone) { const _plkDetBc = await base44.asServiceRole.entities.BotContent.filter({ key: 'post_lecture_details_request' }); const _plkDetMsg = _plkDetBc.length > 0 ? _plkDetBc[0].content : 'תודה שהיית איתנו בהרצאה! בבקשה כתוב/י שם מלא, מייל וטלפון.'; await fetch(_plkMu, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ chatId, message: _plkDetMsg }) }); await base44.asServiceRole.entities.ServiceRequest.update(serviceRequest.id, { current_step: 'awaiting_post_lecture_details' }); await base44.asServiceRole.entities.WhatsAppMessageLog.create({ id_message: idMessage || `wa_${Date.now()}`, phone, direction: 'incoming', text: text.substring(0, 500), status: 'replied', chat_id: chatId, conversation_id: conversationId }); await base44.asServiceRole.entities.WhatsAppMessageLog.create({ id_message: `out_${Date.now()}_fp_plk_det`, phone, direction: 'outgoing', text: '[fast_path_pl_karati_details_request]', status: 'replied', chat_id: chatId, conversation_id: conversationId }); return Response.json({ ok: true, fast_path: 'pl_karati_details_request' }); }
           else { const [_plkBc, _plkBook] = await Promise.all([base44.asServiceRole.entities.BotContent.filter({ key: 'post_lecture_book_offer' }), base44.asServiceRole.entities.ServiceContent.filter({ service_type: 'post_lecture', content_type: 'external_link', sub_type: 'book' })]); if (_plkBc.length > 0 && _plkBook.length > 0) { await fetch(_plkMu, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ chatId, message: _plkBc[0].content + '\n\n' + _plkBook[0].url }) }); await fetch(_plkMu, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ chatId, message: 'אנא רשמ/י *"הזמנתי"* או *"המשך"*' }) }); await base44.asServiceRole.entities.ServiceRequest.update(serviceRequest.id, { current_step: 'awaiting_book_response' }); await base44.asServiceRole.entities.WhatsAppMessageLog.create({ id_message: idMessage || `wa_${Date.now()}`, phone, direction: 'incoming', text: text.substring(0, 500), status: 'replied', chat_id: chatId, conversation_id: conversationId }); await base44.asServiceRole.entities.WhatsAppMessageLog.create({ id_message: `out_${Date.now()}_fp_plk`, phone, direction: 'outgoing', text: '[fast_path_pl_karati_book]', status: 'replied', chat_id: chatId, conversation_id: conversationId }); return Response.json({ ok: true, fast_path: 'pl_karati_book_offer' }); } }
         } catch (e) {} } }
-    // ===== FP-PL-Details — post_lecture details → save contact + recommend + goodbye (NO confirm loop) =====
-    { const _pldMu = `https://api.green-api.com/waInstance${instanceId}/sendMessage/${token}`;
-      if (serviceRequest?.service_type === 'post_lecture' && (serviceRequest?.current_step === 'awaiting_post_lecture_details' || serviceRequest?.current_step === 'awaiting_mailing_list_response') && (!contact || !contact.full_name || !contact.email || !contact.phone)) {
-        const _pldEmailMatch = text.match(/[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}/);
-        const _pldPhoneMatch = text.replace(/[\-\s]/g, '').match(/0[5]\d{8}/);
-        if (_pldEmailMatch && _pldPhoneMatch) {
-          const _pldEmail = _pldEmailMatch[0].toLowerCase().trim(); const _pldPhone = _pldPhoneMatch[0];
-          const _pldName = text.replace(_pldEmailMatch[0], '').replace(/0[5][\d\-\s]{8,12}/g, '').replace(/שמי?\s*/gi, '').replace(/מספרי?\s*/gi, '').replace(/טלפון:?\s*/gi, '').replace(/מייל:?\s*/gi, '').replace(/email:?\s*/gi, '').replace(/[,;:]/g, ' ').replace(/\s+/g, ' ').trim();
-          if (_pldName.length >= 2) {
-            try {
-              const _pldExisting = await base44.asServiceRole.entities.Contact.filter({ phone: _pldPhone });
-              let _pldContactId;
-              if (_pldExisting.length === 0) { const _pldNewContact = await base44.asServiceRole.entities.Contact.create({ full_name: _pldName, phone: _pldPhone, email: _pldEmail, source: 'qr' }); _pldContactId = _pldNewContact.id; deduplicateContact(base44, _pldPhone).catch(() => {}); }
-              else { _pldContactId = _pldExisting[0].id; }
-              await base44.asServiceRole.entities.ServiceRequest.update(serviceRequest.id, { contact_id: _pldContactId, contact_name: _pldName, contact_phone: _pldPhone, contact_email: _pldEmail });
-              await fetch(_pldMu, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ chatId, message: `תודה ${_pldName}! 🌸 הפרטים נשמרו.` }) });
-              const [_pldRec, _pldBye, _pldSer] = await Promise.all([base44.asServiceRole.entities.BotContent.filter({ key: 'post_lecture_recommend' }), base44.asServiceRole.entities.BotContent.filter({ key: 'post_lecture_final_goodbye' }), base44.asServiceRole.entities.Lecture.filter({ lecture_type: 'series' })]);
-              if (_pldRec.length > 0) { await new Promise(r => setTimeout(r, 1500)); await fetch(_pldMu, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ chatId, message: _pldRec[0].content }) }); }
-              if (_pldSer.length > 0 && _pldSer[0].image_url) { await new Promise(r => setTimeout(r, 1500)); const _pldFu = `https://api.green-api.com/waInstance${instanceId}/sendFileByUrl/${token}`; await fetch(_pldFu, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ chatId, urlFile: _pldSer[0].image_url, fileName: 'סדרת הרצאות.jpg', caption: '' }) }); }
-              if (_pldBye.length > 0) { await new Promise(r => setTimeout(r, 1500)); await fetch(_pldMu, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ chatId, message: _pldBye[0].content }) }); }
-              await base44.asServiceRole.entities.ServiceRequest.update(serviceRequest.id, { current_step: 'post_lecture_completed', status: 'completed' });
-              await base44.asServiceRole.entities.WhatsAppMessageLog.create({ id_message: idMessage || `wa_${Date.now()}`, phone, direction: 'incoming', text: text.substring(0, 500), status: 'replied', chat_id: chatId, conversation_id: conversationId });
-              await base44.asServiceRole.entities.WhatsAppMessageLog.create({ id_message: `out_${Date.now()}_fp_pld`, phone, direction: 'outgoing', text: '[fp_pl_details_recommend_bye]', status: 'replied', chat_id: chatId, conversation_id: conversationId });
-              return Response.json({ ok: true, fast_path: 'pl_details_recommend_goodbye' });
-            } catch (pldErr) { console.warn(`FP-PL-Details error: ${pldErr.message}`); }
-          }
-        }
-      }
-    }
     // ===== FP-PL-Book-Response =====
     { const _plbMu = `https://api.green-api.com/waInstance${instanceId}/sendMessage/${token}`; const _plbNorm = text.trim().replace(/[*"'״]/g, '').toLowerCase();
       if (serviceRequest?.service_type === 'post_lecture' && serviceRequest?.current_step === 'awaiting_book_response' && (_plbNorm === 'הזמנתי' || ['המשך','לא','לא עכשיו'].includes(_plbNorm))) {
