@@ -393,39 +393,7 @@ Deno.serve(async (req) => {
       }
     }
 
-    // ===== FAST PATH: FP-Consultation-Start — "2" from welcome menu → send general video =====
-    { const _csNorm = text.trim().replace(/[*"'״]/g, '').toLowerCase();
-      if (_csNorm === '2' && contact && (!serviceRequest || serviceRequest?.status === 'completed' || serviceRequest?.status === 'new_lead')) {
-        // Check if there's already an active consultation SR
-        const _csExisting = serviceRequest?.service_type === 'consultation' && serviceRequest?.status !== 'completed';
-        if (!_csExisting) {
-          try {
-            const _csMu = `https://api.green-api.com/waInstance${instanceId}/sendMessage/${token}`;
-            const [_csVideo, _csBc] = await Promise.all([
-              base44.asServiceRole.entities.ServiceContent.filter({ service_type: 'consultation', content_type: 'video' }),
-              base44.asServiceRole.entities.BotContent.filter({ key: 'consultation_video_intro' }),
-            ]);
-            // Find the general video (no sub_type or empty sub_type)
-            const _csGeneralVideo = _csVideo.find(v => !v.sub_type || v.sub_type === '') || _csVideo[0];
-            if (_csBc.length > 0 && _csGeneralVideo) {
-              // Create consultation ServiceRequest
-              const _csNewSr = await base44.asServiceRole.entities.ServiceRequest.create({
-                contact_id: contact.id, contact_name: contact.full_name,
-                contact_phone: contact.phone, contact_email: contact.email,
-                service_type: 'consultation', status: 'new_lead',
-                conversation_id: conversationId,
-              });
-              const _csMsg = _csBc[0].content.replace('{קישור_סרטון}', _csGeneralVideo.url);
-              await fetch(_csMu, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ chatId, message: _csMsg }) });
-              await base44.asServiceRole.entities.WhatsAppMessageLog.create({ id_message: idMessage || `wa_${Date.now()}`, phone, direction: 'incoming', text: text.substring(0, 500), status: 'replied', chat_id: chatId, conversation_id: conversationId });
-              await base44.asServiceRole.entities.WhatsAppMessageLog.create({ id_message: `out_${Date.now()}_fp_cs`, phone, direction: 'outgoing', text: '[fast_path_consultation_start_video]', status: 'replied', chat_id: chatId, conversation_id: conversationId });
-              try { await base44.asServiceRole.agents.addMessage(conversation, { role: 'user', content: text }); await base44.asServiceRole.agents.addMessage(conversation, { role: 'assistant', content: _csMsg }); } catch (_) {}
-              return Response.json({ ok: true, fast_path: 'consultation_start_video', sr_id: _csNewSr.id });
-            }
-          } catch (csErr) { console.warn(`FP-Consultation-Start error: ${csErr.message}`); }
-        }
-      }
-    }
+    // FP-Consultation-Start removed — "2" is handled by the bot agent naturally
 
     // ===== FAST PATH: consultation disease selection =====
     {
@@ -470,6 +438,12 @@ Deno.serve(async (req) => {
         }
       }
     }
+    // ===== FP-C1b consultation "צפיתי" at awaiting_topic_choice → resend topic menu =====
+    { const _c1bMu = `https://api.green-api.com/waInstance${instanceId}/sendMessage/${token}`; const _c1bNorm = text.trim().replace(/[*"'״]/g, '').toLowerCase();
+      if (serviceRequest?.service_type === 'consultation' && serviceRequest?.current_step === 'awaiting_topic_choice' && ['צפיתי', 'צפיתי וקראתי'].includes(_c1bNorm)) {
+        try { const _c1bContents = await base44.asServiceRole.entities.BotContent.filter({ key: 'consultation_topic_selection' });
+          if (_c1bContents.length > 0) { await fetch(_c1bMu, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ chatId, message: _c1bContents[0].content }) }); await base44.asServiceRole.entities.WhatsAppMessageLog.create({ id_message: idMessage || `wa_${Date.now()}`, phone, direction: 'incoming', text: text.substring(0, 500), status: 'replied', chat_id: chatId, conversation_id: conversationId }); await base44.asServiceRole.entities.WhatsAppMessageLog.create({ id_message: `out_${Date.now()}_fp_c1b`, phone, direction: 'outgoing', text: '[fast_path_c1b_resend_topic_menu]', status: 'replied', chat_id: chatId, conversation_id: conversationId }); try { await base44.asServiceRole.agents.addMessage(conversation, { role: 'user', content: text }); await base44.asServiceRole.agents.addMessage(conversation, { role: 'assistant', content: _c1bContents[0].content }); } catch (_) {} return Response.json({ ok: true, fast_path: 'c1b_resend_topic_menu' }); }
+        } catch (e) {} } }
     // ===== FP-C1 consultation "צפיתי" → topic selection =====
     { const _c1Mu = `https://api.green-api.com/waInstance${instanceId}/sendMessage/${token}`; const _c1Norm = text.trim().replace(/[*"'״]/g, '');
       if (serviceRequest?.service_type === 'consultation' && !serviceRequest?.sub_type && !serviceRequest?.current_step && _c1Norm === 'צפיתי') {
