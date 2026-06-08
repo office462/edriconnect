@@ -267,6 +267,19 @@ Deno.serve(async (req) => {
 
     // Handle status -> scheduled_whatsapp (consultation first booking)
     if (newStatus === 'scheduled_whatsapp' && oldStatus !== 'scheduled_whatsapp') {
+      // --- DEDUP CHECK: skip if onCalendarBooking already sent this trigger ---
+      const latestReqWhatsapp = await base44.asServiceRole.entities.ServiceRequest.get(requestId);
+      if (latestReqWhatsapp.last_system_message === 'send_full_consultation_link') {
+        console.log('DEDUP: skipping scheduled_whatsapp trigger — already sent by onCalendarBooking (last_system_message matches)');
+        await base44.asServiceRole.entities.ServiceRequestTimeline.create({
+          service_request_id: requestId,
+          event_type: 'system_note',
+          description: 'הודעת send_full_consultation_link לא נשלחה כפולה — כבר נשלחה על ידי onCalendarBooking',
+          old_value: oldStatus,
+          new_value: 'scheduled_whatsapp',
+        });
+        return Response.json({ ok: true, skipped: true, reason: 'dedup_scheduled_whatsapp' });
+      }
       timelineEntries.push({
         service_request_id: requestId,
         event_type: 'status_change',
@@ -275,6 +288,18 @@ Deno.serve(async (req) => {
         new_value: 'scheduled_whatsapp',
       });
       botTrigger = 'send_full_consultation_link';
+    }
+
+    // Handle status -> completed (manual or automatic)
+    if (newStatus === 'completed' && oldStatus !== 'completed') {
+      timelineEntries.push({
+        service_request_id: requestId,
+        event_type: 'status_change',
+        description: 'פנייה הושלמה',
+        old_value: oldStatus,
+        new_value: 'completed',
+      });
+      botTrigger = 'goodbye';
     }
 
     // Handle appointment triggers
@@ -590,6 +615,11 @@ function computeTriggerForStatus(status, req) {
 
 // --- Bot message builder (shared between both paths) ---
 async function buildBotMessage(base44, trigger, fullRequest, contactName) {
+  if (trigger === 'goodbye') {
+    const rec = await base44.asServiceRole.entities.BotContent.filter({ key: 'goodbye' });
+    return rec.length > 0 ? rec[0].content : 'שמחתי לשוחח, שיהיה לך יום נפלא 🌸';
+  }
+
   if (trigger === 'waiting_for_admin_approval') {
     return `תודה על העדכון. התשלום ייבדק על ידי הצוות ויאושר בהקדם. נמשיך בתהליך ברגע שהתשלום יאושר. אנא המתן/י לעדכון מאיתנו.`;
   }
