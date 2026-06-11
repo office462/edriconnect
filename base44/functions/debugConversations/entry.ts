@@ -8,7 +8,20 @@ Deno.serve(async (req) => {
       return Response.json({ error: 'Forbidden' }, { status: 403 });
     }
 
-    const { phone, contactName } = await req.json();
+    const { phone, contactName, conversation_id } = await req.json();
+
+    if (conversation_id) {
+      const conv = await base44.asServiceRole.agents.getConversation(conversation_id);
+      return Response.json({
+        id: conv.id,
+        metadata: conv.metadata,
+        messages: (conv.messages || []).filter(m => m.content && m.content.trim()).map(m => ({
+          role: m.role,
+          content: (m.content || '').substring(0, 500),
+          tool_calls: (m.tool_calls || []).map(tc => ({ name: tc.name, args: (tc.arguments_string || '').substring(0, 300) })),
+        })),
+      });
+    }
     
     // Try listing all conversations
     let conversations = [];
