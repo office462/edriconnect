@@ -10,6 +10,7 @@ import StatusActions from '@/components/service-request/StatusActions';
 import TimelineView from '@/components/service-request/TimelineView';
 import FilesList from '@/components/service-request/FilesList';
 import TestBotMessageButton from '@/components/service-request/TestBotMessageButton';
+import EditContactButton from '@/components/service-request/EditContactButton';
 import { toast } from 'sonner';
 import { handleBotMessage } from '@/lib/sendBotMessage';
 
@@ -95,7 +96,10 @@ export default function ServiceRequestDetail() {
           <Button variant="ghost" size="icon"><ArrowRight className="w-5 h-5" /></Button>
         </Link>
         <div>
-          <h1 className="text-2xl font-bold">{request.contact_name || 'פנייה'}</h1>
+          <div className="flex items-center gap-1">
+            <h1 className="text-2xl font-bold">{request.contact_name || 'פנייה'}</h1>
+            <EditContactButton request={request} contact={contact} />
+          </div>
           <p className="text-sm text-muted-foreground">מזהה: {request.id}</p>
         </div>
       </div>
