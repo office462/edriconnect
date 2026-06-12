@@ -74,13 +74,19 @@ Deno.serve(async (req) => {
       }
     }
 
-    const RATE_LIMIT_PER_HOUR = 10;
-    const phoneLogsPromise = base44.asServiceRole.entities.WhatsAppMessageLog.filter({ phone }, '-created_date', 30);
+    const RATE_LIMIT_PER_HOUR = 25;
+    const phoneLogsPromise = base44.asServiceRole.entities.WhatsAppMessageLog.filter({ phone }, '-created_date', 60);
     const recentOutgoing = (await phoneLogsPromise).filter(l =>
       l.direction === 'outgoing' &&
       (Date.now() - new Date(l.created_date).getTime()) < 60 * 60 * 1000
     );
-    if (recentOutgoing.length >= RATE_LIMIT_PER_HOUR) {
+    let isTestPhoneRL = false;
+    try {
+      const _rlTestSettings = await base44.asServiceRole.entities.SystemSetting.filter({ key: 'whatsapp_test_phones' });
+      const _rlTestPhones = (_rlTestSettings.length > 0 ? _rlTestSettings[0].value : '').split(',').map(p => p.trim().replace(/[\s\-\+]/g, '')).filter(Boolean).map(p => p.startsWith('0') ? '972' + p.substring(1) : p);
+      isTestPhoneRL = _rlTestPhones.includes(phone);
+    } catch (_) {}
+    if (!isTestPhoneRL && recentOutgoing.length >= RATE_LIMIT_PER_HOUR) {
       await base44.asServiceRole.entities.WhatsAppMessageLog.create({
         id_message: idMessage || `wa_${Date.now()}`, phone, direction: 'incoming',
         text: text.substring(0, 500), status: 'skipped', chat_id: chatId,
