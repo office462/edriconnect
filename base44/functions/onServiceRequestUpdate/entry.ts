@@ -866,6 +866,17 @@ async function getLocationFollowUps(base44) {
   const followUpMessages = [];
 
   try {
+    const wazeContent = await base44.asServiceRole.entities.ServiceContent.filter({
+      service_type: 'general', content_type: 'external_link', sub_type: 'waze'
+    });
+    if (wazeContent.length > 0 && wazeContent[0].url) {
+      followUpMessages.push(`🚗 ניווט בווייז:\n${wazeContent[0].url}`);
+    }
+  } catch (e) {
+    console.warn('Could not fetch waze link:', e.message);
+  }
+
+  try {
     const locationContent = await base44.asServiceRole.entities.ServiceContent.filter({
       service_type: 'general', content_type: 'image', sub_type: 'location_photo'
     });

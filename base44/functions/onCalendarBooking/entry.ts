@@ -85,6 +85,12 @@ Deno.serve(async (req) => {
 
     console.log('Matched ServiceRequest:', matchingReq.id, 'type:', matchingReq.service_type, 'for attendee:', attendeeName, attendeeEmail);
 
+    // IDEMPOTENCY: skip duplicate Cal.com webhooks (retries) — this exact booking already recorded
+    if (matchingReq[appointmentField] === startTimeRaw) {
+      console.log('DUPLICATE webhook: booking already recorded, skipping send');
+      return Response.json({ status: 'duplicate', request: matchingReq.id });
+    }
+
     // Build update data
     const updateData = {
       [appointmentField]: startTimeRaw,
@@ -118,6 +124,12 @@ Deno.serve(async (req) => {
         };
         updateData.pending_bot_message = triggerMap[serviceType] || 'scheduled_consultation';
       }
+    }
+
+    // Set last_system_message in the SAME update as the status change, so the parallel
+    // entity automation (onServiceRequestUpdate) sees it and its dedup check skips sending
+    if (updateData.pending_bot_message) {
+      updateData.last_system_message = updateData.pending_bot_message;
     }
 
     await base44.asServiceRole.entities.ServiceRequest.update(matchingReq.id, updateData);
