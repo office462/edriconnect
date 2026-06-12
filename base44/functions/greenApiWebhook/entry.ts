@@ -624,6 +624,21 @@ Deno.serve(async (req) => {
           else { const _plmBye = await base44.asServiceRole.entities.BotContent.filter({ key: 'goodbye' }); await fetch(_plmMu, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ chatId, message: _plmBye.length > 0 ? _plmBye[0].content : 'שמחתי לשוחח, שיהיה לך יום נפלא 🌸' }) }); await updateSrWithTimeline(base44, serviceRequest, { current_step: 'post_lecture_completed', status: 'completed' }, 'נשלחה פרידה — מסלול פוסט הרצאה הושלם'); }
           await base44.asServiceRole.entities.WhatsAppMessageLog.create({ id_message: idMessage || `wa_${Date.now()}`, phone, direction: 'incoming', text: text.substring(0, 500), status: 'replied', chat_id: chatId, conversation_id: conversationId }); await base44.asServiceRole.entities.WhatsAppMessageLog.create({ id_message: `out_${Date.now()}_fp_plm`, phone, direction: 'outgoing', text: `[fast_path_pl_more_${_plmYes ? 'yes' : 'no'}]`, status: 'replied', chat_id: chatId, conversation_id: conversationId }); return Response.json({ ok: true, fast_path: `pl_more_${_plmYes ? 'yes' : 'no'}` }); } catch (e) {} } }
 
+    // ===== FP-C-Payment — consultation client reports payment → pending admin approval (prevents LLM creating duplicate SRs) =====
+    { const _cpMu = `https://api.green-api.com/waInstance${instanceId}/sendMessage/${token}`; const _cpNorm = text.trim().replace(/[*"'״]/g, '').toLowerCase();
+      const _cpIsPaymentMsg = ['שילמתי','העברתי','שולם','ביצעתי תשלום','ביצעתי את התשלום','התשלום בוצע','העברתי תשלום','שלחתי תשלום'].some(t => _cpNorm === t || _cpNorm.startsWith(t));
+      if (serviceRequest?.service_type === 'consultation' && !serviceRequest?.payment_confirmed && _cpIsPaymentMsg && ['awaiting_questionnaire_completion','questionnaire_completed_awaiting_payment'].includes(serviceRequest?.current_step)) {
+        try {
+          await fetch(_cpMu, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ chatId, message: 'תודה! קיבלנו את העדכון על התשלום 🙏 הצוות יבדוק ויאשר בהקדם — וברגע שיאושר נמשיך אוטומטית לתיאום הפגישה.' }) });
+          await base44.asServiceRole.entities.ServiceRequest.update(serviceRequest.id, { status: 'pending_human', current_step: 'awaiting_admin_payment_approval' });
+          await base44.asServiceRole.entities.ServiceRequestTimeline.create({ service_request_id: serviceRequest.id, event_type: 'status_change', description: 'לקוח דיווח על תשלום — ממתין לאישור אדמין', old_value: serviceRequest.status, new_value: 'pending_human' });
+          base44.asServiceRole.functions.invoke('notifyAdmin', { service_request_id: serviceRequest.id, reason: 'אישור תשלום — מסלול ייעוץ', context_message: `לקוח: ${serviceRequest.contact_name || phone}\nהודעה: ${text.substring(0, 200)}` }).catch(() => {});
+          await base44.asServiceRole.entities.WhatsAppMessageLog.create({ id_message: idMessage || `wa_${Date.now()}`, phone, direction: 'incoming', text: text.substring(0, 500), status: 'replied', chat_id: chatId, conversation_id: conversationId });
+          await base44.asServiceRole.entities.WhatsAppMessageLog.create({ id_message: `out_${Date.now()}_fp_cp`, phone, direction: 'outgoing', text: '[fast_path_consultation_payment_pending_human]', status: 'replied', chat_id: chatId, conversation_id: conversationId });
+          try { await base44.asServiceRole.agents.addMessage(conversation, { role: 'assistant', content: '[לקוח כתב]: ' + text }); } catch (_) {}
+          return Response.json({ ok: true, fast_path: 'consultation_payment_pending_human' });
+        } catch (e) {} } }
+
     // ===== END FAST PATH — SEND TO BOT =====
     await base44.asServiceRole.agents.addMessage(conversation, { role: 'user', content: text });
     const expectedIndex = msgCountBefore + 1;
