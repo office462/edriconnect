@@ -629,14 +629,15 @@ Deno.serve(async (req) => {
       const _cpIsPaymentMsg = ['שילמתי','העברתי','שולם','ביצעתי תשלום','ביצעתי את התשלום','התשלום בוצע','העברתי תשלום','שלחתי תשלום'].some(t => _cpNorm === t || _cpNorm.startsWith(t));
       if (serviceRequest?.service_type === 'consultation' && !serviceRequest?.payment_confirmed && _cpIsPaymentMsg && ['awaiting_questionnaire_completion','questionnaire_completed_awaiting_payment'].includes(serviceRequest?.current_step)) {
         try {
-          await fetch(_cpMu, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ chatId, message: 'תודה! קיבלנו את העדכון על התשלום 🙏 הצוות יבדוק ויאשר בהקדם — וברגע שיאושר נמשיך אוטומטית לתיאום הפגישה.' }) });
-          await base44.asServiceRole.entities.ServiceRequest.update(serviceRequest.id, { status: 'pending_human', current_step: 'awaiting_admin_payment_approval' });
-          await base44.asServiceRole.entities.ServiceRequestTimeline.create({ service_request_id: serviceRequest.id, event_type: 'status_change', description: 'לקוח דיווח על תשלום — ממתין לאישור אדמין', old_value: serviceRequest.status, new_value: 'pending_human' });
-          base44.asServiceRole.functions.invoke('notifyAdmin', { service_request_id: serviceRequest.id, reason: 'אישור תשלום — מסלול ייעוץ', context_message: `לקוח: ${serviceRequest.contact_name || phone}\nהודעה: ${text.substring(0, 200)}` }).catch(() => {});
+          // NO status change and NO admin approval — Bit/Paybox automation (paymentWebhook) updates status to 'paid' automatically.
+          // This fast path only acknowledges the client and prevents the LLM from creating duplicate ServiceRequests.
+          const _cpAckMsg = 'תודה על העדכון! 🙏 ברגע שהתשלום ייקלט במערכת נמשיך אוטומטית לשלב הבא. אין צורך לשלוח הודעות נוספות 🌸';
+          await fetch(_cpMu, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ chatId, message: _cpAckMsg }) });
+          await base44.asServiceRole.entities.ServiceRequestTimeline.create({ service_request_id: serviceRequest.id, event_type: 'system_note', description: 'לקוח דיווח על תשלום — ממתינים לקליטת התשלום באוטומציה (ביט/פייבוקס)' });
           await base44.asServiceRole.entities.WhatsAppMessageLog.create({ id_message: idMessage || `wa_${Date.now()}`, phone, direction: 'incoming', text: text.substring(0, 500), status: 'replied', chat_id: chatId, conversation_id: conversationId });
-          await base44.asServiceRole.entities.WhatsAppMessageLog.create({ id_message: `out_${Date.now()}_fp_cp`, phone, direction: 'outgoing', text: '[fast_path_consultation_payment_pending_human]', status: 'replied', chat_id: chatId, conversation_id: conversationId });
-          try { await base44.asServiceRole.agents.addMessage(conversation, { role: 'assistant', content: '[לקוח כתב]: ' + text }); } catch (_) {}
-          return Response.json({ ok: true, fast_path: 'consultation_payment_pending_human' });
+          await base44.asServiceRole.entities.WhatsAppMessageLog.create({ id_message: `out_${Date.now()}_fp_cp`, phone, direction: 'outgoing', text: '[fast_path_consultation_payment_ack]', status: 'replied', chat_id: chatId, conversation_id: conversationId });
+          try { await base44.asServiceRole.agents.addMessage(conversation, { role: 'assistant', content: '[לקוח כתב]: ' + text }); await base44.asServiceRole.agents.addMessage(conversation, { role: 'assistant', content: _cpAckMsg }); } catch (_) {}
+          return Response.json({ ok: true, fast_path: 'consultation_payment_ack' });
         } catch (e) {} } }
 
     // ===== END FAST PATH — SEND TO BOT =====
