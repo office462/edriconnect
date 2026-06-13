@@ -417,23 +417,29 @@ Deno.serve(async (req) => {
               await fetch(_mu, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ chatId, message: `מיד שולחת לך את המידע על ${subType} 💜` }) });
               const _fu = `https://api.green-api.com/waInstance${instanceId}/sendFileByUrl/${token}`;
               const _fpVideoUrl = fpVideos[0].url;
-              if (/\.(mp4|mov|avi|mkv|webm)(\?.*)?$/i.test(_fpVideoUrl)) {
-                await fetch(_fu, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ chatId, urlFile: _fpVideoUrl, fileName: `${subType}.mp4`, caption: '' }) });
-              } else {
-                await fetch(_mu, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ chatId, message: _fpVideoUrl }) });
-              }
               const isAutism = subType === 'אוטיזם';
               let fpPdfs = [];
               if (!isAutism) {
                 fpPdfs = await base44.asServiceRole.entities.ServiceContent.filter({ service_type: 'consultation', content_type: 'pdf', sub_type: subType });
-                if (fpPdfs.length > 0 && fpPdfs[0].url) {
-                  await new Promise(r => setTimeout(r, 1000));
-                  if (/\.pdf(\?.*)?$/i.test(fpPdfs[0].url)) { await fetch(_fu, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ chatId, urlFile: fpPdfs[0].url, fileName: `${subType}.pdf`, caption: '' }) }); }
-                  else { await fetch(_mu, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ chatId, message: fpPdfs[0].url }) }); }
+              }
+              // Send video only if URL is not empty
+              if (_fpVideoUrl) {
+                if (/\.(mp4|mov|avi|mkv|webm)(\?.*)?$/i.test(_fpVideoUrl)) {
+                  await fetch(_fu, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ chatId, urlFile: _fpVideoUrl, fileName: `${subType}.mp4`, caption: '' }) });
+                } else {
+                  await fetch(_mu, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ chatId, message: _fpVideoUrl }) });
                 }
               }
+              // Send PDF if exists
+              if (!isAutism && fpPdfs.length > 0 && fpPdfs[0].url) {
+                await new Promise(r => setTimeout(r, 1000));
+                if (/\.pdf(\?.*)?$/i.test(fpPdfs[0].url)) { await fetch(_fu, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ chatId, urlFile: fpPdfs[0].url, fileName: `${subType}.pdf`, caption: '' }) }); }
+                else { await fetch(_mu, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ chatId, message: fpPdfs[0].url }) }); }
+              }
               await new Promise(r => setTimeout(r, 1000));
-              const confirmMsg = (fpPdfs.length > 0 && fpPdfs[0].url) ? 'לאחר שצפית וקראת, אנא רשמי *"צפיתי וקראתי"* 🌸' : 'לאחר שצפית, אנא רשמי *"צפיתי"* 🌸';
+              const hasPdf = !isAutism && fpPdfs.length > 0 && fpPdfs[0].url;
+              const hasVideo = !!_fpVideoUrl;
+              const confirmMsg = (hasVideo && hasPdf) ? 'לאחר שצפית וקראת, אנא רשמי *"צפיתי וקראתי"* 🌸' : hasPdf ? 'לאחר שקראת, אנא רשמי *"קראתי"* 🌸' : 'לאחר שצפית, אנא רשמי *"צפיתי"* 🌸';
               await fetch(_mu, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ chatId, message: confirmMsg }) });
               if (serviceRequest) await updateSrWithTimeline(base44, serviceRequest, { sub_type: subType, current_step: '' }, 'נשלח חומר בנושא ' + subType);
               await base44.asServiceRole.entities.WhatsAppMessageLog.create({ id_message: `out_${Date.now()}_fp`, phone, direction: 'outgoing', text: `[fast_path] ${subType}`, status: 'replied', chat_id: chatId });
