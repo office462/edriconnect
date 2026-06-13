@@ -66,15 +66,72 @@ Deno.serve(async (req) => {
       const botMessage = typeof botResult === 'object' && botResult.message ? botResult.message : botResult;
       const followUpMessages = typeof botResult === 'object' && botResult.followUpMessages ? botResult.followUpMessages : [];
 
-      if (botMessage) {
+      if (botMessage && contactPhone) {
         const isValidObjectId = (id) => /^[a-f0-9]{24}$/i.test(id);
         const effectiveConversationId = (conversationId && isValidObjectId(conversationId)) ? conversationId : null;
+
+        // === SEND IMMEDIATELY VIA WHATSAPP ===
+        const instanceId = Deno.env.get('GREEN_API_INSTANCE_ID');
+        const token = Deno.env.get('GREEN_API_TOKEN');
+        let cleanPhone = contactPhone.replace(/^whatsapp:/i, '').replace(/[\s\-\+]/g, '');
+        if (cleanPhone.startsWith('0')) cleanPhone = '972' + cleanPhone.substring(1);
+        const chatId = `${cleanPhone}@c.us`;
+
+        // Parse [FILE:url:filename] tags
+        const fileTagRegex = /\[FILE:(https?:\/\/[^\]:]+):([^\]]+)\]/g;
+        const files = [];
+        let textMessage = botMessage;
+        let fmatch;
+        while ((fmatch = fileTagRegex.exec(botMessage)) !== null) {
+          files.push({ url: fmatch[1], fileName: fmatch[2] });
+          textMessage = textMessage.replace(fmatch[0], '');
+        }
+        textMessage = textMessage.replace(/\n{3,}/g, '\n\n').trim();
+
+        let sendOk = false;
+        if (textMessage) {
+          const sendUrl = `https://api.green-api.com/waInstance${instanceId}/sendMessage/${token}`;
+          for (let attempt = 1; attempt <= 3; attempt++) {
+            try {
+              if (attempt > 1) await new Promise(r => setTimeout(r, 1500 * attempt));
+              const sendResp = await fetch(sendUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ chatId, message: textMessage }) });
+              if (sendResp.ok) { sendOk = true; break; }
+            } catch (_) {}
+          }
+        } else {
+          sendOk = true; // file-only message
+        }
+
+        for (const file of files) {
+          try {
+            await fetch(`https://api.green-api.com/waInstance${instanceId}/sendFileByUrl/${token}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ chatId, urlFile: file.url, fileName: file.fileName }) });
+          } catch (_) {}
+        }
+
+        for (const followUp of followUpMessages) {
+          try {
+            await new Promise(r => setTimeout(r, 1500));
+            const fuFileRegex = /\[FILE:(https?:\/\/[^\]:]+):([^\]]+)\]/g;
+            const fuMatch = fuFileRegex.exec(followUp);
+            if (fuMatch) {
+              await fetch(`https://api.green-api.com/waInstance${instanceId}/sendFileByUrl/${token}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ chatId, urlFile: fuMatch[1], fileName: fuMatch[2] }) });
+            } else {
+              await fetch(`https://api.green-api.com/waInstance${instanceId}/sendMessage/${token}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ chatId, message: followUp }) });
+            }
+          } catch (_) {}
+        }
+
+        if (sendOk) {
+          await base44.asServiceRole.entities.ServiceRequest.update(requestId, { last_system_message: effectiveTrigger });
+          await base44.asServiceRole.entities.ServiceRequestTimeline.create({ service_request_id: requestId, event_type: 'message_sent', description: `הודעת ${effectiveTrigger} נשלחה (frontend trigger)` });
+          console.log(`Frontend trigger: sent ${effectiveTrigger} to ${chatId}`);
+        }
 
         return Response.json({
           ok: true,
           botTrigger: effectiveTrigger,
-          botSent: false,
-          pendingBotMessage: {
+          botSent: sendOk,
+          pendingBotMessage: sendOk ? null : {
             conversationId: effectiveConversationId,
             message: botMessage,
             followUpMessages,
