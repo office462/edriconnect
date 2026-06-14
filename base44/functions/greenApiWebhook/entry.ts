@@ -401,6 +401,64 @@ Deno.serve(async (req) => {
 
     // FP-Consultation-Start removed — "2" is handled by the bot agent naturally
 
+    // ===== FAST PATH: FP-Menu — main menu choice (1/2/3/4) creates ServiceRequest + routes to sub-menu =====
+    // Prevents "4" (and other menu numbers) from reaching the LLM and looping back to the start.
+    {
+      const _mnMu = `https://api.green-api.com/waInstance${instanceId}/sendMessage/${token}`;
+      const _mnNorm = text.trim().replace(/[*"'״.]/g, '').toLowerCase();
+      const _mnHasContact = contact && contact.full_name && contact.email && contact.phone;
+      // Only treat as a menu choice when there is no active (non-completed) ServiceRequest in progress
+      const _mnNoActiveSr = !serviceRequest || serviceRequest.status === 'completed';
+      const _mnMap = {
+        '1': 'legal', 'חוות דעת': 'legal', 'חוות דעת משפטית': 'legal', 'משפטי': 'legal',
+        '2': 'consultation', 'ייעוץ': 'consultation',
+        '3': 'clinic', 'קליניקה': 'clinic', 'השכרת קליניקה': 'clinic',
+        '4': 'lectures', 'הרצאות': 'lectures',
+      };
+      const _mnServiceType = _mnHasContact && _mnNoActiveSr ? _mnMap[_mnNorm] : null;
+      if (_mnServiceType) {
+        try {
+          const _mnSr = await base44.asServiceRole.entities.ServiceRequest.create({
+            contact_id: contact.id, contact_name: contact.full_name, contact_phone: localPhone || phone,
+            contact_email: contact.email, service_type: _mnServiceType, status: 'new_lead', conversation_id: conversationId,
+          });
+          await base44.asServiceRole.entities.WhatsAppMessageLog.create({ id_message: idMessage || `wa_${Date.now()}`, phone, direction: 'incoming', text: text.substring(0, 500), status: 'replied', chat_id: chatId, conversation_id: conversationId });
+
+          if (_mnServiceType === 'lectures') {
+            const _mnBc = await base44.asServiceRole.entities.BotContent.filter({ key: 'lectures_welcome' });
+            const _mnMsg = _mnBc.length > 0 ? _mnBc[0].content : 'סדרת הרצאות:\n1. סדרה מלאה\n2. הרצאה בודדת\n3. סדנת ביופידבק';
+            await fetch(_mnMu, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ chatId, message: _mnMsg }) });
+            await updateSrWithTimeline(base44, _mnSr, { current_step: 'awaiting_lectures_type' }, 'נבחר מסלול הרצאות — נשלח תפריט סוג הרצאה');
+            try { await base44.asServiceRole.agents.addMessage(conversation, { role: 'assistant', content: '[לקוח כתב]: ' + text }); await base44.asServiceRole.agents.addMessage(conversation, { role: 'assistant', content: _mnMsg }); } catch (_) {}
+          } else if (_mnServiceType === 'clinic') {
+            const _mnBc = await base44.asServiceRole.entities.BotContent.filter({ key: 'clinic_welcome' });
+            const _mnMsg = _mnBc.length > 0 ? _mnBc[0].content : 'האם את/ה שוכר/ת ותיק/ה או מתעניין/ת חדש/ה?\n1. שוכר ותיק\n2. מתעניין חדש';
+            await fetch(_mnMu, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ chatId, message: _mnMsg }) });
+            await updateSrWithTimeline(base44, _mnSr, { current_step: 'awaiting_clinic_choice' }, 'נבחר מסלול קליניקה — נשלח תפריט ותיק/חדש');
+            try { await base44.asServiceRole.agents.addMessage(conversation, { role: 'assistant', content: '[לקוח כתב]: ' + text }); await base44.asServiceRole.agents.addMessage(conversation, { role: 'assistant', content: _mnMsg }); } catch (_) {}
+          } else if (_mnServiceType === 'legal') {
+            const _mnBc = await base44.asServiceRole.entities.BotContent.filter({ key: 'legal_explanation' });
+            const _mnMsg = _mnBc.length > 0 ? _mnBc[0].content : 'שירות חוות דעת משפטית.\n\nמעוניין/ת להמשיך לשלב ההסכם? 📝';
+            await fetch(_mnMu, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ chatId, message: _mnMsg }) });
+            await updateSrWithTimeline(base44, _mnSr, { current_step: 'awaiting_legal_reading_response' }, 'נבחר מסלול משפטי — נשלח הסבר שירות');
+            try { await base44.asServiceRole.agents.addMessage(conversation, { role: 'assistant', content: '[לקוח כתב]: ' + text }); await base44.asServiceRole.agents.addMessage(conversation, { role: 'assistant', content: _mnMsg }); } catch (_) {}
+          } else if (_mnServiceType === 'consultation') {
+            const [_mnBc, _mnVid] = await Promise.all([
+              base44.asServiceRole.entities.BotContent.filter({ key: 'consultation_video_intro' }),
+              base44.asServiceRole.entities.ServiceContent.filter({ service_type: 'consultation', content_type: 'video', sub_type: 'general' }),
+            ]);
+            const _mnVidUrl = _mnVid.length > 0 ? _mnVid[0].url : '';
+            const _mnMsg = _mnBc.length > 0 ? _mnBc[0].content.replace('{קישור_סרטון}', _mnVidUrl) : `להבנת הייעוץ אנא צפה בסרטון:\n${_mnVidUrl}\nלאחר הצפייה רשום "צפיתי".`;
+            await fetch(_mnMu, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ chatId, message: _mnMsg }) });
+            await updateSrWithTimeline(base44, _mnSr, { current_step: '' }, 'נבחר מסלול ייעוץ — נשלח סרטון הסבר');
+            try { await base44.asServiceRole.agents.addMessage(conversation, { role: 'assistant', content: '[לקוח כתב]: ' + text }); await base44.asServiceRole.agents.addMessage(conversation, { role: 'assistant', content: _mnMsg }); } catch (_) {}
+          }
+          await base44.asServiceRole.entities.WhatsAppMessageLog.create({ id_message: `out_${Date.now()}_fp_menu`, phone, direction: 'outgoing', text: `[fast_path_menu_${_mnServiceType}]`, status: 'replied', chat_id: chatId, conversation_id: conversationId });
+          return Response.json({ ok: true, fast_path: `menu_${_mnServiceType}` });
+        } catch (mnErr) { console.warn(`FP-Menu error: ${mnErr.message}`); }
+      }
+    }
+
     // ===== FAST PATH: consultation disease selection =====
     {
       const DISEASE_MAP = { '1': 'פוריות', 'פוריות': 'פוריות', '2': 'הריון', 'הריון': 'הריון', '3': 'גיל המעבר', 'גיל המעבר': 'גיל המעבר', 'גיל': 'גיל המעבר', '4': 'סוכרת', 'סוכרת': 'סוכרת', '5': 'דיכאון', 'דיכאון': 'דיכאון', '6': 'מחלות מעי', 'מחלות מעי': 'מחלות מעי', 'מעי': 'מחלות מעי', '7': 'סרטן', 'סרטן': 'סרטן', '8': 'אוטיזם', 'אוטיזם': 'אוטיזם', 'אוטיזם ותסמונות גנטיות': 'אוטיזם' };
