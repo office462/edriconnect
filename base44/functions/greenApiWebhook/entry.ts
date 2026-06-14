@@ -300,7 +300,7 @@ Deno.serve(async (req) => {
         const _pldPhoneMatch = text.replace(/[\-\s]/g, '').match(/0[5]\d{8}/);
         if (_pldEmailMatch && _pldPhoneMatch) {
           const _pldEmail = _pldEmailMatch[0].toLowerCase().trim(); const _pldPhone = _pldPhoneMatch[0];
-          const _pldName = text.replace(_pldEmailMatch[0], '').replace(/0[5][\d\-\s]{8,12}/g, '').replace(/שמי?\s*/gi, '').replace(/מספרי?\s*/gi, '').replace(/טלפון:?\s*/gi, '').replace(/מייל:?\s*/gi, '').replace(/email:?\s*/gi, '').replace(/[,;:]/g, ' ').replace(/\s+/g, ' ').trim();
+          const _pldName = text.replace(_pldEmailMatch[0], '').replace(/0[5][\d\-\s]{8,12}/g, '').replace(/(^|\s)שמי\b\s*/g, ' ').replace(/(^|\s)שם:\s*/g, ' ').replace(/(^|\s)מספרי\b\s*/g, ' ').replace(/(^|\s)טלפון:\s*/g, ' ').replace(/(^|\s)מייל:\s*/g, ' ').replace(/(^|\s)email:\s*/gi, ' ').replace(/[,;:]/g, ' ').replace(/\s+/g, ' ').trim();
           if (_pldName.length >= 2) {
             try {
               const _pldExisting = await base44.asServiceRole.entities.Contact.filter({ phone: _pldPhone });
@@ -337,7 +337,7 @@ Deno.serve(async (req) => {
           const _detEmail = _detEmailMatch[0].toLowerCase().trim();
           const _detPhone = _detPhoneMatch[0];
           const _detName = text.replace(_detEmailMatch[0], '').replace(/0[5][\d\-\s]{8,12}/g, '')
-            .replace(/שמי?\s*/gi, '').replace(/מספרי?\s*/gi, '').replace(/טלפון:?\s*/gi, '').replace(/מייל:?\s*/gi, '').replace(/email:?\s*/gi, '')
+            .replace(/(^|\s)שמי\b\s*/g, ' ').replace(/(^|\s)שם:\s*/g, ' ').replace(/(^|\s)מספרי\b\s*/g, ' ').replace(/(^|\s)טלפון:\s*/g, ' ').replace(/(^|\s)מייל:\s*/g, ' ').replace(/(^|\s)email:\s*/gi, ' ')
             .replace(/[,;:]/g, ' ').replace(/\s+/g, ' ').trim();
           if (_detName.length >= 2) {
             const _detKey = `pending_contact_${phone}`;
