@@ -649,6 +649,34 @@ Deno.serve(async (req) => {
     { const _ccrMu = `https://api.green-api.com/waInstance${instanceId}/sendMessage/${token}`; const _ccrNorm = text.trim().replace(/[*"'\u05F4]/g, '').toLowerCase(); const _ccrYes = ['כן','בטח','כמובן','אשמח','סבבה','אוקי','ok'].includes(_ccrNorm); const _ccrNo = ['לא','לא תודה','לא צריך'].includes(_ccrNorm);
       if (serviceRequest?.service_type === 'clinic' && serviceRequest?.current_step === 'awaiting_clinic_code_response' && (_ccrYes || _ccrNo)) {
         try { if (_ccrYes) { const _ccrCode = await base44.asServiceRole.entities.BotContent.filter({ key: 'clinic_secret_code' }); if (_ccrCode.length > 0) await fetch(_ccrMu, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ chatId, message: _ccrCode[0].content }) }); } await new Promise(r => setTimeout(r, 1000)); const _ccrAnything = await base44.asServiceRole.entities.BotContent.filter({ key: 'clinic_anything_else' }); if (_ccrAnything.length > 0) await fetch(_ccrMu, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ chatId, message: _ccrAnything[0].content }) }); await updateSrWithTimeline(base44, serviceRequest, { current_step: 'awaiting_clinic_anything_else' }, 'נשלח קוד/המשך — קליניקה'); await base44.asServiceRole.entities.WhatsAppMessageLog.create({ id_message: idMessage || `wa_${Date.now()}`, phone, direction: 'incoming', text: text.substring(0, 500), status: 'replied', chat_id: chatId, conversation_id: conversationId }); await base44.asServiceRole.entities.WhatsAppMessageLog.create({ id_message: `out_${Date.now()}_fp_ccr`, phone, direction: 'outgoing', text: `[fast_path_clinic_code_${_ccrYes ? 'yes' : 'no'}]`, status: 'replied', chat_id: chatId, conversation_id: conversationId }); return Response.json({ ok: true, fast_path: `clinic_code_${_ccrYes ? 'yes' : 'no'}` }); } catch (e) {} } }
+    // ===== FP-Clinic-Refer-Shalom — "anything else" step → refer to Shalom or goodbye =====
+    { const _crsMu = `https://api.green-api.com/waInstance${instanceId}/sendMessage/${token}`; const _crsNorm = text.trim().replace(/[*"'\u05F4?]/g, '').toLowerCase();
+      const _crsNo = ['לא','לא תודה','לא צריך','זהו','סיימתי','אין','הכל טוב','הכל בסדר'].includes(_crsNorm);
+      const _crsYes = !_crsNo && _crsNorm.length > 0;
+      if (serviceRequest?.service_type === 'clinic' && serviceRequest?.current_step === 'awaiting_clinic_anything_else') {
+        try {
+          if (_crsNo) {
+            const _crsBye = await base44.asServiceRole.entities.BotContent.filter({ key: 'goodbye' });
+            const _crsByeMsg = _crsBye.length > 0 ? _crsBye[0].content : 'שמחתי לשוחח, שיהיה לך יום נפלא 🌸';
+            await fetch(_crsMu, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ chatId, message: _crsByeMsg }) });
+            await updateSrWithTimeline(base44, serviceRequest, { status: 'completed', current_step: 'completed' }, 'קליניקה — אין שאלות נוספות, פרידה');
+          } else if (_crsYes) {
+            const [_crsBc, _crsPhone] = await Promise.all([
+              base44.asServiceRole.entities.BotContent.filter({ key: 'clinic_refer_shalom' }),
+              base44.asServiceRole.entities.SystemSetting.filter({ key: 'shalom_whatsapp_phone' }),
+            ]);
+            const _crsPhoneVal = _crsPhone.length > 0 ? _crsPhone[0].value : '';
+            const _crsMsg = (_crsBc.length > 0 ? _crsBc[0].content : 'לשאלות נוספות ניתן לפנות לשלום אדרי בוואטסאפ 📱\nטלפון: {טלפון_שלום}').replace('{טלפון_שלום}', _crsPhoneVal);
+            await fetch(_crsMu, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ chatId, message: _crsMsg }) });
+            await updateSrWithTimeline(base44, serviceRequest, { current_step: 'completed', status: 'completed' }, 'קליניקה — הופנה לשלום אדרי');
+          } else {
+            return Response.json({ ok: true, skipped: true });
+          }
+          await base44.asServiceRole.entities.WhatsAppMessageLog.create({ id_message: idMessage || `wa_${Date.now()}`, phone, direction: 'incoming', text: text.substring(0, 500), status: 'replied', chat_id: chatId, conversation_id: conversationId });
+          await base44.asServiceRole.entities.WhatsAppMessageLog.create({ id_message: `out_${Date.now()}_fp_crs`, phone, direction: 'outgoing', text: `[fast_path_clinic_refer_shalom_${_crsNo ? 'no' : 'yes'}]`, status: 'replied', chat_id: chatId, conversation_id: conversationId });
+          try { await base44.asServiceRole.agents.addMessage(conversation, { role: 'assistant', content: '[לקוח כתב]: ' + text }); } catch (_) {}
+          return Response.json({ ok: true, fast_path: `clinic_refer_shalom_${_crsNo ? 'no' : 'yes'}` });
+        } catch (e) {} } }
     // ===== FP-Clinic-WantToPay =====
     { const _cwpMu = `https://api.green-api.com/waInstance${instanceId}/sendMessage/${token}`; const _cwpNorm = text.trim().replace(/[*"'\u05F4]/g, '').toLowerCase(); const _cwpWantPay = (_cwpNorm.includes('מעוניין') || _cwpNorm.includes('מעוניינת') || _cwpNorm.includes('רוצה')) && _cwpNorm.includes('לשלם');
       if (serviceRequest?.service_type === 'clinic' && _cwpWantPay) {
