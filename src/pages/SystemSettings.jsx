@@ -10,15 +10,17 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
-import { Plus, Pencil, Save, Palette, GitBranch, MessageSquare, UserCircle } from 'lucide-react';
+import { Plus, Pencil, Save, Palette, GitBranch, MessageSquare, UserCircle, Bot } from 'lucide-react';
 import { toast } from 'sonner';
 import WhatsAppTestSender from '@/components/settings/WhatsAppTestSender';
+import ManagerBotConnect from '@/components/settings/ManagerBotConnect';
 
 const categoryConfig = {
   details: { label: 'פרטים', icon: UserCircle, color: 'bg-purple-100 text-purple-700' },
   whatsapp: { label: 'וואטסאפ', icon: MessageSquare, color: 'bg-green-100 text-green-700' },
   ui: { label: 'עיצוב ותצוגה', icon: Palette, color: 'bg-amber-100 text-amber-700' },
   flow: { label: 'הגדרות Flow', icon: GitBranch, color: 'bg-red-100 text-red-700' },
+  manager_bot: { label: 'סוכן ניהול', icon: Bot, color: 'bg-blue-100 text-blue-700' },
 };
 
 const valueTypes = [
@@ -81,9 +83,11 @@ export default function SystemSettings() {
     <div data-tutorial="system-settings" className="space-y-6">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <h1 className="text-xl md:text-2xl font-bold">הגדרות מערכת</h1>
-        <Button onClick={() => { setForm({ ...emptyForm, category: activeTab }); setEditId(null); setShowDialog(true); }} className="gap-2" size="sm">
-          <Plus className="w-4 h-4" /> <span className="hidden sm:inline">הוסף הגדרה</span><span className="sm:hidden">הוסף</span>
-        </Button>
+        {activeTab !== 'manager_bot' && (
+          <Button onClick={() => { setForm({ ...emptyForm, category: activeTab }); setEditId(null); setShowDialog(true); }} className="gap-2" size="sm">
+            <Plus className="w-4 h-4" /> <span className="hidden sm:inline">הוסף הגדרה</span><span className="sm:hidden">הוסף</span>
+          </Button>
+        )}
       </div>
 
       {/* Category tabs */}
@@ -113,6 +117,10 @@ export default function SystemSettings() {
           </CardTitle>
         </CardHeader>
         <CardContent>
+          {activeTab === 'manager_bot' ? (
+            <ManagerBotConnect />
+          ) : (
+          <>
           {activeTab === 'whatsapp' && (
             <div className="mb-6">
               <WhatsAppTestSender />
@@ -184,6 +192,8 @@ export default function SystemSettings() {
                 </div>
               ))}
             </div>
+          )}
+          </>
           )}
         </CardContent>
       </Card>
