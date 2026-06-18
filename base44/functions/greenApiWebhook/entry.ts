@@ -206,64 +206,100 @@ Deno.serve(async (req) => {
     const msgCountBefore = (conversation.messages || []).length;
     fetch(`https://api.green-api.com/waInstance${instanceId}/sendTyping/${token}`, { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ chatId, typingTime: 15000 }) }).catch(() => {});
 
-    // ===== FAST PATH: FP-PL-QR — post_lecture QR message → send PDF immediately =====
+    // ===== FAST PATH: FP-PL-QR — fixed QR message → send lecture-choice menu =====
     {
-      const _plqNorm = text.trim();
-      const _plqMatch = _plqNorm.match(/אשמח לקבל את הסיכום של ההרצאה[\s\-–—]*(.+)/i) ||
-                         _plqNorm.match(/סיכום.*הרצאה[\s\-–—]*(.+)/i);
+      const _plqNorm = text.trim().replace(/[״"']/g, '');
+      const _plqMatch = /אשמח לקבל את הסיכום של ההרצאה/i.test(_plqNorm);
       if (_plqMatch) {
-        const _plqLectureName = _plqMatch[1].replace(/[״"']/g, '').trim();
-        console.log(`FAST_PATH: FP-PL-QR detected post_lecture for "${_plqLectureName}"`);
+        console.log(`FAST_PATH: FP-PL-QR detected fixed post_lecture QR message`);
         try {
           const _plqMu = `https://api.green-api.com/waInstance${instanceId}/sendMessage/${token}`;
-          const _plqFu = `https://api.green-api.com/waInstance${instanceId}/sendFileByUrl/${token}`;
-          const _plqAllPdfs = await base44.asServiceRole.entities.ServiceContent.filter({ service_type: 'post_lecture', content_type: 'pdf' });
-          const _plqNameLower = _plqLectureName.toLowerCase();
-          let _plqPdf = _plqAllPdfs.find(p => p.sub_type && p.sub_type.toLowerCase() === _plqNameLower);
-          if (!_plqPdf) _plqPdf = _plqAllPdfs.find(p => p.sub_type && (_plqNameLower.includes(p.sub_type.toLowerCase()) || p.sub_type.toLowerCase().includes(_plqNameLower)));
-          if (!_plqPdf) _plqPdf = _plqAllPdfs.find(p => {
-            const words = _plqNameLower.split(/\s+/);
-            return words.some(w => w.length > 2 && p.sub_type && p.sub_type.toLowerCase().includes(w));
-          });
-          if (_plqPdf && _plqPdf.url) {
-            let _plqSr = serviceRequest;
-            if (!_plqSr || _plqSr.service_type !== 'post_lecture') {
-              _plqSr = await base44.asServiceRole.entities.ServiceRequest.create({
-                contact_id: contact?.id || 'pending', contact_name: contact?.full_name || '',
-                contact_phone: localPhone || phone, service_type: 'post_lecture',
-                status: 'new_lead', conversation_id: conversationId, sub_type: _plqPdf.sub_type,
-              });
-            }
-            const _plqBlog = await base44.asServiceRole.entities.ServiceContent.filter({ service_type: 'post_lecture', content_type: 'external_link', sub_type: 'blog' });
-            const _plqBlogUrl = _plqBlog.length > 0 ? _plqBlog[0].url : '';
-            const _plqBc = await base44.asServiceRole.entities.BotContent.filter({ key: 'post_lecture_pdf_sent' });
-            const _plqMsg = _plqBc.length > 0
-              ? _plqBc[0].content.replace('{שם_הרצאה}', _plqPdf.sub_type).replace('{קישור_בלוג}', _plqBlogUrl)
-              : `הנה הסיכום של ההרצאה ${_plqPdf.sub_type} 🌸`;
-            await fetch(_plqMu, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ chatId, message: _plqMsg }) });
-            await new Promise(r => setTimeout(r, 1500));
-            const _plqIsDirect = /\.pdf(\?.*)?$/i.test(_plqPdf.url);
-            if (_plqIsDirect) {
-              await fetch(_plqFu, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ chatId, urlFile: _plqPdf.url, fileName: `סיכום הרצאה - ${_plqPdf.sub_type}.pdf`, caption: '' }) });
-            } else {
-              await fetch(_plqMu, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ chatId, message: _plqPdf.url }) });
-            }
-            const _plqMailBc = await base44.asServiceRole.entities.BotContent.filter({ key: 'post_lecture_mailing_list' });
-            if (_plqMailBc.length > 0) {
-              await new Promise(r => setTimeout(r, 2000));
-              await fetch(_plqMu, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ chatId, message: _plqMailBc[0].content }) });
-            }
-            await updateSrWithTimeline(base44, _plqSr, { current_step: 'awaiting_post_lecture_details' }, 'נשלח סיכום הרצאה (QR) — ' + _plqPdf.sub_type);
-            await base44.asServiceRole.entities.WhatsAppMessageLog.create({ id_message: idMessage || `wa_${Date.now()}`, phone, direction: 'incoming', text: text.substring(0, 500), status: 'replied', chat_id: chatId, conversation_id: conversationId });
-            await base44.asServiceRole.entities.WhatsAppMessageLog.create({ id_message: `out_${Date.now()}_fp_plq`, phone, direction: 'outgoing', text: `[fast_path_pl_qr_pdf_sent] ${_plqPdf.sub_type}`, status: 'replied', chat_id: chatId, conversation_id: conversationId });
-            try {
-              await base44.asServiceRole.agents.addMessage(conversation, { role: 'assistant', content: '[לקוח כתב]: ' + text });
-              await base44.asServiceRole.agents.addMessage(conversation, { role: 'assistant', content: _plqMsg });
-              if (_plqMailBc.length > 0) await base44.asServiceRole.agents.addMessage(conversation, { role: 'assistant', content: _plqMailBc[0].content });
-            } catch (_) {}
-            return Response.json({ ok: true, fast_path: 'pl_qr_pdf_sent', lecture: _plqPdf.sub_type });
+          let _plqSr = (serviceRequest && serviceRequest.service_type === 'post_lecture') ? serviceRequest : null;
+          if (!_plqSr) {
+            _plqSr = await base44.asServiceRole.entities.ServiceRequest.create({
+              contact_id: contact?.id || 'pending', contact_name: contact?.full_name || '',
+              contact_phone: localPhone || phone, service_type: 'post_lecture',
+              status: 'new_lead', conversation_id: conversationId,
+            });
           }
+          const _plqBc = await base44.asServiceRole.entities.BotContent.filter({ key: 'post_lecture_choose_lecture' });
+          const _plqMsg = _plqBc.length > 0 ? _plqBc[0].content : '🌿 בחר/י את ההרצאה הרלוונטית:\n1. אריכות ימים\n2. מניעת שחיקה\n3. תזונה מונעת מחלות\n4. אנטומיה של אושר';
+          await fetch(_plqMu, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ chatId, message: _plqMsg }) });
+          await updateSrWithTimeline(base44, _plqSr, { current_step: 'awaiting_post_lecture_lecture_choice' }, 'נשלח תפריט בחירת הרצאה (QR קבוע)');
+          await base44.asServiceRole.entities.WhatsAppMessageLog.create({ id_message: idMessage || `wa_${Date.now()}`, phone, direction: 'incoming', text: text.substring(0, 500), status: 'replied', chat_id: chatId, conversation_id: conversationId });
+          await base44.asServiceRole.entities.WhatsAppMessageLog.create({ id_message: `out_${Date.now()}_fp_plq`, phone, direction: 'outgoing', text: '[fast_path_pl_qr_choice_menu]', status: 'replied', chat_id: chatId, conversation_id: conversationId });
+          try {
+            await base44.asServiceRole.agents.addMessage(conversation, { role: 'assistant', content: '[לקוח כתב]: ' + text });
+            await base44.asServiceRole.agents.addMessage(conversation, { role: 'assistant', content: _plqMsg });
+          } catch (_) {}
+          return Response.json({ ok: true, fast_path: 'pl_qr_choice_menu' });
         } catch (plqErr) { console.warn(`FP-PL-QR error: ${plqErr.message}`); }
+      }
+    }
+
+    // ===== FAST PATH: FP-PL-Choice — lecture choice (1-4 or name) → send matching PDF =====
+    {
+      let _plcSr = (serviceRequest && serviceRequest.service_type === 'post_lecture' && serviceRequest.current_step === 'awaiting_post_lecture_lecture_choice') ? serviceRequest : null;
+      if (!_plcSr && conversationId) {
+        try {
+          const _plcByConv = await base44.asServiceRole.entities.ServiceRequest.filter({ conversation_id: conversationId, service_type: 'post_lecture' });
+          if (_plcByConv.length > 0) {
+            _plcByConv.sort((a, b) => new Date(b.created_date) - new Date(a.created_date));
+            if (_plcByConv[0].current_step === 'awaiting_post_lecture_lecture_choice') _plcSr = _plcByConv[0];
+          }
+        } catch (_) {}
+      }
+      if (_plcSr) {
+        const _plcMap = { '1': 'אריכות ימים', '2': 'מניעת שחיקה', '3': 'תזונה מונעת מחלות', '4': 'אנטומיה של אושר' };
+        const _plcNorm = text.trim().replace(/[*"'״.]/g, '');
+        let _plcLectureName = _plcMap[_plcNorm] || null;
+        if (!_plcLectureName) {
+          const _plcLower = _plcNorm.toLowerCase();
+          const _plcNames = Object.values(_plcMap);
+          _plcLectureName = _plcNames.find(n => n.toLowerCase() === _plcLower)
+            || _plcNames.find(n => _plcLower.includes(n.toLowerCase()) || n.toLowerCase().includes(_plcLower));
+        }
+        if (_plcLectureName) {
+          console.log(`FAST_PATH: FP-PL-Choice → "${_plcLectureName}"`);
+          try {
+            const _plqMu = `https://api.green-api.com/waInstance${instanceId}/sendMessage/${token}`;
+            const _plqFu = `https://api.green-api.com/waInstance${instanceId}/sendFileByUrl/${token}`;
+            const _plqAllPdfs = await base44.asServiceRole.entities.ServiceContent.filter({ service_type: 'post_lecture', content_type: 'pdf' });
+            const _plqNameLower = _plcLectureName.toLowerCase();
+            let _plqPdf = _plqAllPdfs.find(p => p.sub_type && p.sub_type.toLowerCase() === _plqNameLower);
+            if (!_plqPdf) _plqPdf = _plqAllPdfs.find(p => p.sub_type && (_plqNameLower.includes(p.sub_type.toLowerCase()) || p.sub_type.toLowerCase().includes(_plqNameLower)));
+            if (_plqPdf && _plqPdf.url) {
+              const _plqBlog = await base44.asServiceRole.entities.ServiceContent.filter({ service_type: 'post_lecture', content_type: 'external_link', sub_type: 'blog' });
+              const _plqBlogUrl = _plqBlog.length > 0 ? _plqBlog[0].url : '';
+              const _plqBc = await base44.asServiceRole.entities.BotContent.filter({ key: 'post_lecture_pdf_sent' });
+              const _plqMsg = _plqBc.length > 0
+                ? _plqBc[0].content.replace('{שם_הרצאה}', _plqPdf.sub_type).replace('{קישור_בלוג}', _plqBlogUrl)
+                : `הנה הסיכום של ההרצאה ${_plqPdf.sub_type} 🌸`;
+              await fetch(_plqMu, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ chatId, message: _plqMsg }) });
+              await new Promise(r => setTimeout(r, 1500));
+              const _plqIsDirect = /\.pdf(\?.*)?$/i.test(_plqPdf.url);
+              if (_plqIsDirect) {
+                await fetch(_plqFu, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ chatId, urlFile: _plqPdf.url, fileName: `סיכום הרצאה - ${_plqPdf.sub_type}.pdf`, caption: '' }) });
+              } else {
+                await fetch(_plqMu, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ chatId, message: _plqPdf.url }) });
+              }
+              const _plqMailBc = await base44.asServiceRole.entities.BotContent.filter({ key: 'post_lecture_mailing_list' });
+              if (_plqMailBc.length > 0) {
+                await new Promise(r => setTimeout(r, 2000));
+                await fetch(_plqMu, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ chatId, message: _plqMailBc[0].content }) });
+              }
+              await updateSrWithTimeline(base44, _plcSr, { sub_type: _plqPdf.sub_type, current_step: 'awaiting_post_lecture_details' }, 'נשלח סיכום הרצאה (בחירה) — ' + _plqPdf.sub_type);
+              await base44.asServiceRole.entities.WhatsAppMessageLog.create({ id_message: idMessage || `wa_${Date.now()}`, phone, direction: 'incoming', text: text.substring(0, 500), status: 'replied', chat_id: chatId, conversation_id: conversationId });
+              await base44.asServiceRole.entities.WhatsAppMessageLog.create({ id_message: `out_${Date.now()}_fp_plc`, phone, direction: 'outgoing', text: `[fast_path_pl_choice_pdf_sent] ${_plqPdf.sub_type}`, status: 'replied', chat_id: chatId, conversation_id: conversationId });
+              try {
+                await base44.asServiceRole.agents.addMessage(conversation, { role: 'assistant', content: '[לקוח כתב]: ' + text });
+                await base44.asServiceRole.agents.addMessage(conversation, { role: 'assistant', content: _plqMsg });
+                if (_plqMailBc.length > 0) await base44.asServiceRole.agents.addMessage(conversation, { role: 'assistant', content: _plqMailBc[0].content });
+              } catch (_) {}
+              return Response.json({ ok: true, fast_path: 'pl_choice_pdf_sent', lecture: _plqPdf.sub_type });
+            }
+          } catch (plcErr) { console.warn(`FP-PL-Choice error: ${plcErr.message}`); }
+        }
       }
     }
 
