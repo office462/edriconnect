@@ -781,6 +781,31 @@ Deno.serve(async (req) => {
         } catch (e) {} } }
 
     // ===== END FAST PATH — SEND TO BOT =====
+    // Inject state-context so the LLM knows where the client stands and does NOT restart the conversation.
+    // This is additive only — no return, does not capture/block messages.
+    try {
+      const _ctxHasContact = !!(contact && contact.full_name && contact.email && contact.phone);
+      let _ctxLine = '';
+      if (serviceRequest) {
+        const _ctxStatus = serviceRequest.status || '';
+        const _ctxStep = serviceRequest.current_step || '';
+        const _ctxType = serviceRequest.service_type || '';
+        const _ctxIsClosed = _ctxStatus === 'completed' || _ctxStep === 'completed' || _ctxStep === 'post_lecture_completed';
+        _ctxLine = `[הקשר מערכת — אל תתחיל את שיחת הפתיחה מחדש. ללקוח כבר יש פנייה קיימת (סוג=${_ctxType || 'לא ידוע'}, סטטוס=${_ctxStatus || 'לא ידוע'}, שלב=${_ctxStep || 'ללא'}, פרטים מלאים=${_ctxHasContact ? 'כן' : 'לא'}). `;
+        if (_ctxIsClosed) {
+          _ctxLine += 'המסלול כבר הושלם. אם הלקוח כותב נימוס/תודה/סגירה — הגב בחום ובקצרה בלבד, בלי לפתוח תפריט מחדש. אם הוא מבקש שירות חדש במפורש — אז המשך כרגיל.]';
+        } else if (!_ctxHasContact) {
+          _ctxLine += 'הלקוח נמצא באמצע איסוף/אישור פרטים. אם הוא שולח תיקון או הבהרה לפרטים — התייחס לזה כתיקון פרטים, אל תפתח שיחה מחדש.]';
+        } else {
+          _ctxLine += 'המשך מהשלב הנוכחי, אל תחזור לפתיחה.]';
+        }
+      } else if (_ctxHasContact) {
+        _ctxLine = '[הקשר מערכת — ללקוח יש כבר פרטים מלאים אך אין פנייה פעילה. אם הוא בוחר מספר מתפריט או מבקש שירות — המשך בהתאם, אל תבקש פרטים שוב.]';
+      }
+      if (_ctxLine) {
+        await base44.asServiceRole.agents.addMessage(conversation, { role: 'assistant', content: _ctxLine });
+      }
+    } catch (_ctxErr) {}
     await base44.asServiceRole.agents.addMessage(conversation, { role: 'user', content: text });
     const expectedIndex = msgCountBefore + 1;
     const logRecord = await base44.asServiceRole.entities.WhatsAppMessageLog.create({ id_message: idMessage || `wa_${Date.now()}`, phone, direction: 'incoming', text: text.substring(0, 500), status: 'pending_reply', conversation_id: conversationId, chat_id: chatId, message_count_at_send: expectedIndex });
