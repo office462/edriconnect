@@ -396,6 +396,43 @@ Deno.serve(async (req) => {
       }
     }
 
+    // ===== FAST PATH: FP-DetailsCorrect — correction text (not "כן") while awaiting details confirmation → re-parse + re-confirm =====
+    // Prevents the LLM from restarting the greeting when a client corrects a detail (e.g. fixes their name).
+    {
+      const _dcorMu = `https://api.green-api.com/waInstance${instanceId}/sendMessage/${token}`;
+      const _dcorNorm = text.trim().replace(/[*"'״]/g, '').toLowerCase();
+      const _dcorIsPositive = ['כן', 'נכון', 'הכל נכון', 'כן נכון', 'בטח', 'כמובן', 'אוקי', 'ok', 'סבבה', '👍', '✅'].includes(_dcorNorm);
+      const _dcorIsPostLecture = serviceRequest?.service_type === 'post_lecture';
+      if (!contact && !_dcorIsPositive && !_dcorIsPostLecture) {
+        const _dcorKey = `pending_contact_${phone}`;
+        const _dcorSettings = await base44.asServiceRole.entities.SystemSetting.filter({ key: _dcorKey });
+        if (_dcorSettings.length > 0) {
+          const _dcorEmailMatch = text.match(/[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}/);
+          const _dcorPhoneMatch = text.replace(/[\-\s]/g, '').match(/0[5]\d{8}/);
+          let _dcorPrev = {};
+          try { _dcorPrev = JSON.parse(_dcorSettings[0].value); } catch (_) {}
+          // Re-parse only the fields present; keep previous values for fields not mentioned
+          const _dcorName = text.replace(_dcorEmailMatch ? _dcorEmailMatch[0] : '', '').replace(/0[5][\d\-\s]{8,12}/g, '')
+            .replace(/(^|\s)שמי\b\s*/g, ' ').replace(/(^|\s)שם:\s*/g, ' ').replace(/(^|\s)מספרי\b\s*/g, ' ').replace(/(^|\s)טלפון:\s*/g, ' ').replace(/(^|\s)מייל:\s*/g, ' ').replace(/(^|\s)email:\s*/gi, ' ')
+            .replace(/[,;:]/g, ' ').replace(/\s+/g, ' ').trim();
+          const _dcorEmail = _dcorEmailMatch ? _dcorEmailMatch[0].toLowerCase().trim() : (_dcorPrev.email || '');
+          const _dcorPhone = _dcorPhoneMatch ? _dcorPhoneMatch[0] : (_dcorPrev.phone || '');
+          const _dcorFinalName = _dcorName.length >= 2 ? _dcorName : (_dcorPrev.name || '');
+          // Only act if the message actually carried correction content (an email, a phone, or a plausible name)
+          if (_dcorEmailMatch || _dcorPhoneMatch || _dcorName.length >= 2) {
+            const _dcorData = JSON.stringify({ name: _dcorFinalName, phone: _dcorPhone, email: _dcorEmail });
+            await base44.asServiceRole.entities.SystemSetting.update(_dcorSettings[0].id, { value: _dcorData });
+            const _dcorConfirmMsg = `הפרטים שלך:\n📛 שם: ${_dcorFinalName}\n📱 טלפון: ${_dcorPhone}\n📧 מייל: ${_dcorEmail}\n\nהאם הכל נכון? כתוב/י *כן* לאישור או תקנ/י את הפרט השגוי.`;
+            await fetch(_dcorMu, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ chatId, message: _dcorConfirmMsg }) });
+            await base44.asServiceRole.entities.WhatsAppMessageLog.create({ id_message: idMessage || `wa_${Date.now()}`, phone, direction: 'incoming', text: text.substring(0, 500), status: 'replied', chat_id: chatId, conversation_id: conversationId });
+            await base44.asServiceRole.entities.WhatsAppMessageLog.create({ id_message: `out_${Date.now()}_fp_dcor`, phone, direction: 'outgoing', text: '[fast_path_details_correct_reconfirm]', status: 'replied', chat_id: chatId, conversation_id: conversationId });
+            try { await base44.asServiceRole.agents.addMessage(conversation, { role: 'assistant', content: '[לקוח כתב]: ' + text }); await base44.asServiceRole.agents.addMessage(conversation, { role: 'assistant', content: _dcorConfirmMsg }); } catch (_) {}
+            return Response.json({ ok: true, fast_path: 'fp_details_correct' });
+          }
+        }
+      }
+    }
+
     // ===== FAST PATH: FP-DetailsConfirm — "כן" after details → create Contact + send welcome =====
     // SKIP for post_lecture — no confirm loop needed
     {
@@ -781,8 +818,30 @@ Deno.serve(async (req) => {
         } catch (e) {} } }
 
     // ===== END FAST PATH — SEND TO BOT =====
+    // Inject a short state-context note so the LLM knows where the client stands and never restarts the greeting wrongly.
+    try {
+      const _ctxParts = [];
+      if (serviceRequest) {
+        const _ctxTypeMap = { consultation: 'ייעוץ', legal: 'חוות דעת משפטית', clinic: 'קליניקה', lectures: 'הרצאות', post_lecture: 'פוסט הרצאה' };
+        _ctxParts.push(`מסלול נוכחי: ${_ctxTypeMap[serviceRequest.service_type] || serviceRequest.service_type}`);
+        if (serviceRequest.status) _ctxParts.push(`סטטוס: ${serviceRequest.status}`);
+        if (serviceRequest.current_step) _ctxParts.push(`שלב: ${serviceRequest.current_step}`);
+        if (serviceRequest.status === 'completed' || serviceRequest.current_step === 'post_lecture_completed' || serviceRequest.current_step === 'completed') {
+          _ctxParts.push('הערה: המסלול כבר הושלם. אם הלקוח כותב נימוס/תודה/ברכה (כמו "תודה", "יום טוב", "להתראות") — הגב בחום ובקצרה ואל תתחיל את שיחת הפתיחה מחדש. רק אם הלקוח מבקש שירות חדש ממש — התחל מסלול מתאים.');
+        }
+      }
+      if (contact && contact.full_name) {
+        _ctxParts.push(`שם הלקוח: ${contact.full_name}`);
+      } else {
+        _ctxParts.push('הערה: עדיין אין פרטי לקוח מלאים שמורים.');
+      }
+      if (_ctxParts.length > 0) {
+        await base44.asServiceRole.agents.addMessage(conversation, { role: 'assistant', content: '[הקשר מערכת — לא להציג ללקוח]: ' + _ctxParts.join(' | ') });
+      }
+    } catch (_ctxErr) {}
     await base44.asServiceRole.agents.addMessage(conversation, { role: 'user', content: text });
-    const expectedIndex = msgCountBefore + 1;
+    const freshAfterUser = await base44.asServiceRole.agents.getConversation(conversationId);
+    const expectedIndex = (freshAfterUser.messages || []).length;
     const logRecord = await base44.asServiceRole.entities.WhatsAppMessageLog.create({ id_message: idMessage || `wa_${Date.now()}`, phone, direction: 'incoming', text: text.substring(0, 500), status: 'pending_reply', conversation_id: conversationId, chat_id: chatId, message_count_at_send: expectedIndex });
 
     let botReply = '';
