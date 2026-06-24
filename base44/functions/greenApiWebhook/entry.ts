@@ -250,11 +250,11 @@ Deno.serve(async (req) => {
         } catch (_) {}
       }
       if (_plcSr) {
-        const _plcMap = { '1': 'אריכות ימים', '2': 'מניעת שחיקה', '3': 'תזונה מונעת מחלות', '4': 'אנטומיה של אושר' };
+        const _plcMap = { '1': 'אריכות ימים', '2': 'מניעת שחיקה', '3': 'תזונה מונעת מחלות', '4': 'אנטומיה של אושר', '5': 'בריאות בהתאמה נשית גיל המעבר' };
         const _plcNorm = text.trim().replace(/[*"'״]/g, '').trim();
         let _plcLectureName = null;
         // 1) leading number (e.g. "1", "1.", "1. אריכות ימים")
-        const _plcNumMatch = _plcNorm.match(/^\s*([1-4])\b/);
+        const _plcNumMatch = _plcNorm.match(/^\s*([1-5])\b/);
         if (_plcNumMatch) _plcLectureName = _plcMap[_plcNumMatch[1]];
         // 2) match by name (strip any leading number/punctuation first)
         if (!_plcLectureName) {
