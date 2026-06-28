@@ -250,15 +250,15 @@ Deno.serve(async (req) => {
         } catch (_) {}
       }
       if (_plcSr) {
-        const _plcMap = { '1': 'אריכות ימים', '2': 'מניעת שחיקה', '3': 'תזונה מונעת מחלות', '4': 'אנטומיה של אושר', '5': 'בריאות בהתאמה נשית גיל המעבר' };
+        const _plcMap = { 'א': 'אריכות ימים', 'ב': 'מניעת שחיקה', 'ג': 'תזונה מונעת מחלות', 'ד': 'אנטומיה של אושר', 'ה': 'בריאות בהתאמה נשית גיל המעבר' };
         const _plcNorm = text.trim().replace(/[*"'״]/g, '').trim();
         let _plcLectureName = null;
-        // 1) leading number (e.g. "1", "1.", "1. אריכות ימים")
-        const _plcNumMatch = _plcNorm.match(/^\s*([1-5])\b/);
-        if (_plcNumMatch) _plcLectureName = _plcMap[_plcNumMatch[1]];
-        // 2) match by name (strip any leading number/punctuation first)
+        // 1) leading Hebrew letter (e.g. "א", "א.", "א. אריכות ימים")
+        const _plcLetterMatch = _plcNorm.match(/^\s*([אבגדה])\b/);
+        if (_plcLetterMatch) _plcLectureName = _plcMap[_plcLetterMatch[1]];
+        // 2) match by name (strip any leading letter/number/punctuation first)
         if (!_plcLectureName) {
-          const _plcLower = _plcNorm.replace(/^[\s\d.\-)]+/, '').toLowerCase().trim();
+          const _plcLower = _plcNorm.replace(/^[\s\d.\-)אבגדה]+/, '').toLowerCase().trim();
           const _plcNames = Object.values(_plcMap);
           _plcLectureName = _plcNames.find(n => n.toLowerCase() === _plcLower)
             || _plcNames.find(n => _plcLower && (_plcLower.includes(n.toLowerCase()) || n.toLowerCase().includes(_plcLower)));
