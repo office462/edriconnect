@@ -366,6 +366,26 @@ Deno.serve(async (req) => {
       if (_detNeedsContact && !_detIsPostLecture) {
         const _detEmailMatch = text.match(/[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}/);
         const _detPhoneMatch = text.replace(/[\-\s]/g, '').match(/0[5]\d{8}/);
+        // Merge a follow-up email into an existing pending_contact_ (saved with name+phone, empty email)
+        if (_detEmailMatch && !_detPhoneMatch) {
+          const _detKey = `pending_contact_${phone}`;
+          const _detExisting = await base44.asServiceRole.entities.SystemSetting.filter({ key: _detKey });
+          if (_detExisting.length > 0) {
+            let _detPending;
+            try { _detPending = JSON.parse(_detExisting[0].value); } catch (_) { _detPending = null; }
+            if (_detPending && _detPending.name && _detPending.phone && !_detPending.email) {
+              const _detEmail = _detEmailMatch[0].toLowerCase().trim();
+              const _detData = JSON.stringify({ name: _detPending.name, phone: _detPending.phone, email: _detEmail });
+              await base44.asServiceRole.entities.SystemSetting.update(_detExisting[0].id, { value: _detData });
+              const _detConfirmMsg = `הפרטים שלך:\n📛 שם: ${_detPending.name}\n📱 טלפון: ${_detPending.phone}\n📧 מייל: ${_detEmail}\n\nהאם הכל נכון? כתוב/י *כן* לאישור או תקנ/י את הפרט השגוי.`;
+              await fetch(_detMu, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ chatId, message: _detConfirmMsg }) });
+              await base44.asServiceRole.entities.WhatsAppMessageLog.create({ id_message: idMessage || `wa_${Date.now()}`, phone, direction: 'incoming', text: text.substring(0, 500), status: 'replied', chat_id: chatId, conversation_id: conversationId });
+              await base44.asServiceRole.entities.WhatsAppMessageLog.create({ id_message: `out_${Date.now()}_fp_det_merge`, phone, direction: 'outgoing', text: '[fast_path_details_email_merged_confirm]', status: 'replied', chat_id: chatId, conversation_id: conversationId });
+              try { await base44.asServiceRole.agents.addMessage(conversation, { role: 'assistant', content: '[לקוח כתב]: ' + text }); await base44.asServiceRole.agents.addMessage(conversation, { role: 'assistant', content: _detConfirmMsg }); } catch (_) {}
+              return Response.json({ ok: true, fast_path: 'fp_details_email_merged_confirm' });
+            }
+          }
+        }
         if (_detEmailMatch && _detPhoneMatch) {
           const _detEmail = _detEmailMatch[0].toLowerCase().trim();
           const _detPhone = _detPhoneMatch[0];
@@ -386,6 +406,26 @@ Deno.serve(async (req) => {
             return Response.json({ ok: true, fast_path: 'fp_details_confirm' });
           }
         }
+        // Partial details: phone without email → save name+phone, ask only for the email
+        else if (_detPhoneMatch && !_detEmailMatch) {
+          const _detPhone = _detPhoneMatch[0];
+          const _detName = text.replace(/0[5][\d\-\s]{8,12}/g, '')
+            .replace(/(^|\s)שמי\b\s*/g, ' ').replace(/(^|\s)שם:\s*/g, ' ').replace(/(^|\s)מספרי\b\s*/g, ' ').replace(/(^|\s)טלפון:\s*/g, ' ')
+            .replace(/[,;:]/g, ' ').replace(/\s+/g, ' ').trim();
+          if (_detName.length >= 2) {
+            const _detKey = `pending_contact_${phone}`;
+            const _detData = JSON.stringify({ name: _detName, phone: _detPhone, email: '' });
+            const _detExisting = await base44.asServiceRole.entities.SystemSetting.filter({ key: _detKey });
+            if (_detExisting.length > 0) { await base44.asServiceRole.entities.SystemSetting.update(_detExisting[0].id, { value: _detData }); }
+            else { await base44.asServiceRole.entities.SystemSetting.create({ key: _detKey, value: _detData, category: 'whatsapp' }); }
+            const _detAskEmail = 'תודה! 🌸 כדי להשלים את הפרטים חסרה לי רק כתובת המייל שלך 📧';
+            await fetch(_detMu, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ chatId, message: _detAskEmail }) });
+            await base44.asServiceRole.entities.WhatsAppMessageLog.create({ id_message: idMessage || `wa_${Date.now()}`, phone, direction: 'incoming', text: text.substring(0, 500), status: 'replied', chat_id: chatId, conversation_id: conversationId });
+            await base44.asServiceRole.entities.WhatsAppMessageLog.create({ id_message: `out_${Date.now()}_fp_det_partial`, phone, direction: 'outgoing', text: '[fast_path_details_ask_email]', status: 'replied', chat_id: chatId, conversation_id: conversationId });
+            try { await base44.asServiceRole.agents.addMessage(conversation, { role: 'assistant', content: '[לקוח כתב]: ' + text }); await base44.asServiceRole.agents.addMessage(conversation, { role: 'assistant', content: _detAskEmail }); } catch (_) {}
+            return Response.json({ ok: true, fast_path: 'fp_details_ask_email' });
+          }
+        }
       }
     }
 
@@ -402,6 +442,14 @@ Deno.serve(async (req) => {
         if (_dcSettings.length > 0) {
           try {
             const _dcData = JSON.parse(_dcSettings[0].value);
+            // Guard: pending details still missing the email → don't create a Contact, re-ask for the email
+            if (!_dcData.email) {
+              const _dcAskEmail = 'כדי להשלים את הפרטים חסרה לי רק כתובת המייל שלך 📧';
+              await fetch(_dcMu, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ chatId, message: _dcAskEmail }) });
+              await base44.asServiceRole.entities.WhatsAppMessageLog.create({ id_message: idMessage || `wa_${Date.now()}`, phone, direction: 'incoming', text: text.substring(0, 500), status: 'replied', chat_id: chatId, conversation_id: conversationId });
+              await base44.asServiceRole.entities.WhatsAppMessageLog.create({ id_message: `out_${Date.now()}_fp_dc_ask_email`, phone, direction: 'outgoing', text: '[fast_path_details_confirm_missing_email]', status: 'replied', chat_id: chatId, conversation_id: conversationId });
+              return Response.json({ ok: true, fast_path: 'fp_details_confirm_missing_email' });
+            }
             const _dcExisting = await base44.asServiceRole.entities.Contact.filter({ phone: _dcData.phone });
             if (_dcExisting.length === 0) {
               await base44.asServiceRole.entities.Contact.create({ full_name: _dcData.name, phone: _dcData.phone, email: _dcData.email, source: 'whatsapp' });
@@ -776,9 +824,9 @@ Deno.serve(async (req) => {
     // ===== END FAST PATH — SEND TO BOT =====
     // Inject state-context so the LLM knows where the client stands and does NOT restart the conversation.
     // This is additive only — no return, does not capture/block messages.
+    let _ctxLine = '';
     try {
       const _ctxHasContact = !!(contact && contact.full_name && contact.email && contact.phone);
-      let _ctxLine = '';
       if (serviceRequest) {
         const _ctxStatus = serviceRequest.status || '';
         const _ctxStep = serviceRequest.current_step || '';
@@ -794,12 +842,11 @@ Deno.serve(async (req) => {
         }
       } else if (_ctxHasContact) {
         _ctxLine = '[הקשר מערכת — ללקוח יש כבר פרטים מלאים אך אין פנייה פעילה. אם הוא בוחר מספר מתפריט או מבקש שירות — המשך בהתאם, אל תבקש פרטים שוב.]';
-      }
-      if (_ctxLine) {
-        await base44.asServiceRole.agents.addMessage(conversation, { role: 'assistant', content: _ctxLine });
+      } else if (!contact && cachedConvSetting?.length > 0) {
+        _ctxLine = '[הקשר מערכת — הודעת הפתיחה ובקשת הפרטים (שם, טלפון, מייל) כבר נשלחו לפונה. אל תשלח greeting מחדש! בדוק אילו פרטים הפונה כבר מסר בהודעה הנוכחית ובקש רק את החסרים.]';
       }
     } catch (_ctxErr) {}
-    await base44.asServiceRole.agents.addMessage(conversation, { role: 'user', content: text });
+    await base44.asServiceRole.agents.addMessage(conversation, { role: 'user', content: (_ctxLine ? _ctxLine + '\n\n' : '') + text });
     const expectedIndex = msgCountBefore + 1;
     const logRecord = await base44.asServiceRole.entities.WhatsAppMessageLog.create({ id_message: idMessage || `wa_${Date.now()}`, phone, direction: 'incoming', text: text.substring(0, 500), status: 'pending_reply', conversation_id: conversationId, chat_id: chatId, message_count_at_send: expectedIndex });
 
