@@ -96,9 +96,27 @@ Deno.serve(async (req) => {
 
     fetch(`https://api.green-api.com/waInstance${instanceId}/sendTyping/${token}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ chatId, typingTime: 15000 }) }).catch(() => {});
 
-    let contacts = await base44.asServiceRole.entities.Contact.filter({ phone: phone });
-    if (contacts.length === 0 && phone.startsWith('972')) {
-      contacts = await base44.asServiceRole.entities.Contact.filter({ phone: localPhone });
+    // Normalize phone to all common variants so a saved Contact is found regardless of stored format
+    // (05XXXXXXXX / 972XXXXXXXXX / +972XXXXXXXXX / with spaces or dashes).
+    const digitsOnly = phone.replace(/[\s\-\+]/g, '');
+    const phoneVariants = new Set();
+    phoneVariants.add(digitsOnly);
+    if (digitsOnly.startsWith('972')) {
+      phoneVariants.add('0' + digitsOnly.substring(3));       // 972... -> 05...
+      phoneVariants.add('+' + digitsOnly);                    // -> +972...
+    } else if (digitsOnly.startsWith('0')) {
+      phoneVariants.add('972' + digitsOnly.substring(1));     // 05... -> 972...
+      phoneVariants.add('+972' + digitsOnly.substring(1));    // -> +972...
+    }
+    let contacts = [];
+    for (const variant of phoneVariants) {
+      const found = await base44.asServiceRole.entities.Contact.filter({ phone: variant });
+      if (found.length > 0) contacts = contacts.concat(found);
+    }
+    // De-duplicate by id (a contact could match more than one variant query)
+    if (contacts.length > 1) {
+      const seen = new Set();
+      contacts = contacts.filter(c => (seen.has(c.id) ? false : seen.add(c.id)));
     }
     if (contacts.length > 1) {
       contacts.sort((a, b) => new Date(b.created_date) - new Date(a.created_date));
