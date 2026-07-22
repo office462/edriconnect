@@ -850,7 +850,7 @@ Deno.serve(async (req) => {
         const _ctxStep = serviceRequest.current_step || '';
         const _ctxType = serviceRequest.service_type || '';
         const _ctxIsClosed = _ctxStatus === 'completed' || _ctxStep === 'completed' || _ctxStep === 'post_lecture_completed';
-        _ctxLine = `[הקשר מערכת — אל תתחיל את שיחת הפתיחה מחדש. ללקוח כבר יש פנייה קיימת (סוג=${_ctxType || 'לא ידוע'}, סטטוס=${_ctxStatus || 'לא ידוע'}, שלב=${_ctxStep || 'ללא'}, פרטים מלאים=${_ctxHasContact ? 'כן' : 'לא'}). `;
+        _ctxLine = `[הקשר מערכת — אל תתחיל את שיחת הפתיחה מחדש. ללקוח כבר יש פנייה קיימת (מזהה_פנייה=${serviceRequest.id}, פונה=${serviceRequest.contact_name || contact?.full_name || 'לא ידוע'}, סוג=${_ctxType || 'לא ידוע'}, סטטוס=${_ctxStatus || 'לא ידוע'}, שלב=${_ctxStep || 'ללא'}, פרטים מלאים=${_ctxHasContact ? 'כן' : 'לא'}). כשצריך לקרוא ל-notifyAdmin — השתמש תמיד ב-service_request_id הזה בלבד, אל תחפש פנייה אחרת. `;
         if (_ctxIsClosed) {
           _ctxLine += 'המסלול כבר הושלם. אם הלקוח כותב נימוס/תודה/סגירה — הגב בחום ובקצרה בלבד, בלי לפתוח תפריט מחדש. אם הוא מבקש שירות חדש במפורש — אז המשך כרגיל.]';
         } else if (!_ctxHasContact) {
