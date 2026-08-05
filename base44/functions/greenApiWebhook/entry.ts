@@ -365,12 +365,12 @@ Deno.serve(async (req) => {
       };
       const _c = text.trim().replace(/[*"'״.,]/g, '').replace(/\s+/g, ' ').trim();
       const _plcKeys = Object.keys(_plCodes);
-      let _hit = _plcKeys.find(k => _c === k);
-      if (!_hit && (_c.includes('סיכום') || _c.includes('הרצאה'))) {
-        _hit = _plcKeys.find(k => _c.includes(k));
-      }
       const _plcAllowed = !serviceRequest || serviceRequest.service_type === 'post_lecture';
-      if (_hit && _plcAllowed) {
+      // כלל 2 — מילת קוד יחד עם "סיכום"/"הרצאה" → תמיד מותר (ספציפי, אין FP)
+      let _hit = (_c.includes('סיכום') || _c.includes('הרצאה')) ? _plcKeys.find(k => _c.includes(k)) : null;
+      // כלל 1 — מילה בודדת מדויקת → רק אם אין שיחה פעילה ממסלול אחר
+      if (!_hit && _plcAllowed) _hit = _plcKeys.find(k => _c === k);
+      if (_hit) {
         const _plcLecture = _plCodes[_hit];
         console.log(`FAST_PATH: FP-PL-Code "${_hit}" → "${_plcLecture}"`);
         try {
