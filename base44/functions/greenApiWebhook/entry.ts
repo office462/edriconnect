@@ -353,6 +353,69 @@ Deno.serve(async (req) => {
       }
     }
 
+    // ===== FAST PATH: FP-PL-Code — code word from the closing slide → send that lecture summary directly =====
+    {
+      const _plCodes = {
+        'אושר': 'אנטומיה של אושר',
+        'שחיקה': 'מניעת שחיקה',
+        'תזונה': 'תזונה מונעת מחלות',
+        'אריכות': 'אריכות ימים',
+        'גיל המעבר': 'בריאות בהתאמה נשית גיל המעבר',
+        'בינה': 'בינה מלאכותית בבריאות',
+      };
+      const _c = text.trim().replace(/[*"'״.,]/g, '').replace(/\s+/g, ' ').trim();
+      const _plcKeys = Object.keys(_plCodes);
+      let _hit = _plcKeys.find(k => _c === k);
+      if (!_hit && (_c.includes('סיכום') || _c.includes('הרצאה'))) {
+        _hit = _plcKeys.find(k => _c.includes(k));
+      }
+      const _plcAllowed = !serviceRequest || serviceRequest.service_type === 'post_lecture';
+      if (_hit && _plcAllowed) {
+        const _plcLecture = _plCodes[_hit];
+        console.log(`FAST_PATH: FP-PL-Code "${_hit}" → "${_plcLecture}"`);
+        try {
+          const _plcMu = `https://api.green-api.com/waInstance${instanceId}/sendMessage/${token}`;
+          const _plcFu = `https://api.green-api.com/waInstance${instanceId}/sendFileByUrl/${token}`;
+          const _plcAllPdfs = await base44.asServiceRole.entities.ServiceContent.filter({ service_type: 'post_lecture', content_type: 'pdf' });
+          const _plcPdf = _plcAllPdfs.find(p => p.sub_type === _plcLecture);
+          if (_plcPdf && _plcPdf.url) {
+            let _plcSr = (serviceRequest && serviceRequest.service_type === 'post_lecture') ? serviceRequest : null;
+            if (!_plcSr) {
+              _plcSr = await base44.asServiceRole.entities.ServiceRequest.create({
+                contact_id: contact?.id || 'pending', contact_name: contact?.full_name || '',
+                contact_phone: localPhone || phone, service_type: 'post_lecture',
+                status: 'new_lead', conversation_id: conversationId,
+              });
+            }
+            const _plcBlog = await base44.asServiceRole.entities.ServiceContent.filter({ service_type: 'post_lecture', content_type: 'external_link', sub_type: 'blog' });
+            const _plcBlogUrl = _plcBlog.length > 0 ? _plcBlog[0].url : '';
+            const _plcPdfBc = await base44.asServiceRole.entities.BotContent.filter({ key: 'post_lecture_pdf_sent' });
+            const _plcPdfMsg = _plcPdfBc.length > 0 ? _plcPdfBc[0].content.replace('{שם_הרצאה}', _plcPdf.sub_type).replace('{קישור_בלוג}', _plcBlogUrl) : `הנה הסיכום של ההרצאה ${_plcPdf.sub_type} 🌸`;
+            await fetch(_plcMu, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ chatId, message: _plcPdfMsg }) });
+            await new Promise(r => setTimeout(r, 1500));
+            if (/\.pdf(\?.*)?$/i.test(_plcPdf.url)) {
+              await fetch(_plcFu, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ chatId, urlFile: _plcPdf.url, fileName: `סיכום הרצאה - ${_plcPdf.sub_type}.pdf`, caption: '' }) });
+            } else {
+              await fetch(_plcMu, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ chatId, message: _plcPdf.url }) });
+            }
+            const _plcMailBc = await base44.asServiceRole.entities.BotContent.filter({ key: 'post_lecture_mailing_list' });
+            if (_plcMailBc.length > 0) {
+              await new Promise(r => setTimeout(r, 2000));
+              await fetch(_plcMu, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ chatId, message: _plcMailBc[0].content }) });
+            }
+            await updateSrWithTimeline(base44, _plcSr, { sub_type: _plcPdf.sub_type, current_step: 'awaiting_post_lecture_details' }, 'נשלח סיכום הרצאה (מילת קוד) — ' + _plcPdf.sub_type);
+            await base44.asServiceRole.entities.WhatsAppMessageLog.create({ id_message: idMessage || `wa_${Date.now()}`, phone, direction: 'incoming', text: text.substring(0, 500), status: 'replied', chat_id: chatId, conversation_id: conversationId });
+            await base44.asServiceRole.entities.WhatsAppMessageLog.create({ id_message: `out_${Date.now()}_fp_plcode`, phone, direction: 'outgoing', text: `[fast_path_pl_code_direct_pdf] ${_plcPdf.sub_type}`, status: 'replied', chat_id: chatId, conversation_id: conversationId });
+            try {
+              await base44.asServiceRole.agents.addMessage(conversation, { role: 'assistant', content: '[לקוח כתב]: ' + text });
+              await base44.asServiceRole.agents.addMessage(conversation, { role: 'assistant', content: _plcPdfMsg });
+            } catch (_) {}
+            return Response.json({ ok: true, fast_path: 'pl_code_direct_pdf_sent', lecture: _plcPdf.sub_type });
+          }
+        } catch (plcErr) { console.warn(`FP-PL-Code error: ${plcErr.message}`); }
+      }
+    }
+
     // ===== FAST PATH: FP-0 — welcome message for new user =====
     if (!contact && (!cachedConvSetting || cachedConvSetting.length === 0)) {
       try {
