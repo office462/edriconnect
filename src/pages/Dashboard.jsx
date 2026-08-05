@@ -7,6 +7,7 @@ import AlertCards from '@/components/dashboard/AlertCards';
 import RecentRequests from '@/components/dashboard/RecentRequests';
 import ServiceBreakdown from '@/components/dashboard/ServiceBreakdown';
 import PostLectureQR from '@/components/dashboard/PostLectureQR';
+import PostLectureAIHealthQR from '@/components/dashboard/PostLectureAIHealthQR';
 import BackupButton from '@/components/dashboard/BackupButton';
 
 export default function Dashboard() {
@@ -70,6 +71,7 @@ export default function Dashboard() {
         <div className="space-y-4 md:space-y-6">
           <ServiceBreakdown requests={requests} />
           <PostLectureQR />
+          <PostLectureAIHealthQR />
         </div>
       </div>
     </div>

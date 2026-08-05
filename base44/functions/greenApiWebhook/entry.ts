@@ -240,6 +240,41 @@ Deno.serve(async (req) => {
               status: 'new_lead', conversation_id: conversationId,
             });
           }
+          // Dedicated per-lecture QR: if the fixed message also names a specific lecture, skip the menu and send that PDF directly.
+          const _plqDirectNames = ['אריכות ימים', 'מניעת שחיקה', 'תזונה מונעת מחלות', 'אנטומיה של אושר', 'בריאות בהתאמה נשית גיל המעבר', 'בינה מלאכותית בבריאות'];
+          const _plqDirectName = _plqDirectNames.find(n => _plqNorm.includes(n));
+          if (_plqDirectName) {
+            const _plqFu = `https://api.green-api.com/waInstance${instanceId}/sendFileByUrl/${token}`;
+            const _plqAllPdfs = await base44.asServiceRole.entities.ServiceContent.filter({ service_type: 'post_lecture', content_type: 'pdf' });
+            const _plqPdf = _plqAllPdfs.find(p => p.sub_type === _plqDirectName);
+            if (_plqPdf && _plqPdf.url) {
+              const _plqBlog = await base44.asServiceRole.entities.ServiceContent.filter({ service_type: 'post_lecture', content_type: 'external_link', sub_type: 'blog' });
+              const _plqBlogUrl = _plqBlog.length > 0 ? _plqBlog[0].url : '';
+              const _plqPdfBc = await base44.asServiceRole.entities.BotContent.filter({ key: 'post_lecture_pdf_sent' });
+              const _plqPdfMsg = _plqPdfBc.length > 0 ? _plqPdfBc[0].content.replace('{שם_הרצאה}', _plqPdf.sub_type).replace('{קישור_בלוג}', _plqBlogUrl) : `הנה הסיכום של ההרצאה ${_plqPdf.sub_type} 🌸`;
+              await fetch(_plqMu, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ chatId, message: _plqPdfMsg }) });
+              await new Promise(r => setTimeout(r, 1500));
+              const _plqIsDirect = /\.pdf(\?.*)?$/i.test(_plqPdf.url);
+              if (_plqIsDirect) {
+                await fetch(_plqFu, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ chatId, urlFile: _plqPdf.url, fileName: `סיכום הרצאה - ${_plqPdf.sub_type}.pdf`, caption: '' }) });
+              } else {
+                await fetch(_plqMu, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ chatId, message: _plqPdf.url }) });
+              }
+              const _plqMailBc = await base44.asServiceRole.entities.BotContent.filter({ key: 'post_lecture_mailing_list' });
+              if (_plqMailBc.length > 0) {
+                await new Promise(r => setTimeout(r, 2000));
+                await fetch(_plqMu, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ chatId, message: _plqMailBc[0].content }) });
+              }
+              await updateSrWithTimeline(base44, _plqSr, { sub_type: _plqPdf.sub_type, current_step: 'awaiting_post_lecture_details' }, 'נשלח סיכום הרצאה (QR ייעודי) — ' + _plqPdf.sub_type);
+              await base44.asServiceRole.entities.WhatsAppMessageLog.create({ id_message: idMessage || `wa_${Date.now()}`, phone, direction: 'incoming', text: text.substring(0, 500), status: 'replied', chat_id: chatId, conversation_id: conversationId });
+              await base44.asServiceRole.entities.WhatsAppMessageLog.create({ id_message: `out_${Date.now()}_fp_plq_direct`, phone, direction: 'outgoing', text: `[fast_path_pl_qr_direct_pdf] ${_plqPdf.sub_type}`, status: 'replied', chat_id: chatId, conversation_id: conversationId });
+              try {
+                await base44.asServiceRole.agents.addMessage(conversation, { role: 'assistant', content: '[לקוח כתב]: ' + text });
+                await base44.asServiceRole.agents.addMessage(conversation, { role: 'assistant', content: _plqPdfMsg });
+              } catch (_) {}
+              return Response.json({ ok: true, fast_path: 'pl_qr_direct_pdf_sent', lecture: _plqPdf.sub_type });
+            }
+          }
           const _plqBc = await base44.asServiceRole.entities.BotContent.filter({ key: 'post_lecture_choose_lecture' });
           const _plqMsg = _plqBc.length > 0 ? _plqBc[0].content : '🌿 בחר/י את ההרצאה הרלוונטית:\n1. אריכות ימים\n2. מניעת שחיקה\n3. תזונה מונעת מחלות\n4. אנטומיה של אושר';
           await fetch(_plqMu, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ chatId, message: _plqMsg }) });
@@ -269,7 +304,7 @@ Deno.serve(async (req) => {
       }
       if (_plcSr) {
         // Match by lecture NAME only — no letters/numbers (prevents collision with the main service menu).
-        const _plcNames = ['אריכות ימים', 'מניעת שחיקה', 'תזונה מונעת מחלות', 'אנטומיה של אושר', 'בריאות בהתאמה נשית גיל המעבר'];
+        const _plcNames = ['אריכות ימים', 'מניעת שחיקה', 'תזונה מונעת מחלות', 'אנטומיה של אושר', 'בריאות בהתאמה נשית גיל המעבר', 'בינה מלאכותית בבריאות'];
         const _plcNorm = text.trim().replace(/[*"'״.]/g, '').replace(/\s+/g, ' ').trim();
         const _plcLower = _plcNorm.toLowerCase();
         let _plcLectureName = _plcNames.find(n => n.toLowerCase() === _plcLower)
