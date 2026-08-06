@@ -21,10 +21,21 @@ Deno.serve(async (req) => {
       // Skips noisy status/state events. Remove after verification.
       try {
         const _t = body.typeWebhook;
-        if (_t && _t !== 'outgoingMessageStatus' && _t !== 'stateInstanceChanged') {
+        if (_t === 'outgoingMessageReceived' || _t === 'outgoingAPIMessageReceived') {
           const _md = body.messageData || {};
           const _txt = _md.textMessageData?.textMessage || _md.extendedTextMessageData?.text || '';
-          console.log(`[WEBHOOK_PROBE] type=${_t} chatId=${body.senderData?.chatId || ''} text="${String(_txt).substring(0, 120)}"`);
+          const _chatId = body.senderData?.chatId || '';
+          const _phone = _chatId.replace('@c.us', '');
+          console.log(`[WEBHOOK_PROBE] type=${_t} chatId=${_chatId} text="${String(_txt).substring(0, 120)}"`);
+          const _base44probe = createClientFromRequest(req);
+          await _base44probe.asServiceRole.entities.WhatsAppMessageLog.create({
+            id_message: `probe_${body.idMessage || Date.now()}`,
+            phone: _phone,
+            direction: 'incoming',
+            text: `[PROBE ${_t}] ${String(_txt).substring(0, 200)}`,
+            status: 'skipped',
+            chat_id: _chatId,
+          });
         }
       } catch (_) {}
       return Response.json({ ok: true, skipped: true });
