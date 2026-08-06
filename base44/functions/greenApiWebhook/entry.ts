@@ -16,6 +16,17 @@ Deno.serve(async (req) => {
       return Response.json({ error: 'Forbidden' }, { status: 403 });
     }
     if (body.typeWebhook !== 'incomingMessageReceived') {
+      // WEBHOOK_PROBE (2026-08-06): temporary diagnostic — verify Green API delivers
+      // outgoing-message webhooks and how it labels a manual send vs an API send.
+      // Skips noisy status/state events. Remove after verification.
+      try {
+        const _t = body.typeWebhook;
+        if (_t && _t !== 'outgoingMessageStatus' && _t !== 'stateInstanceChanged') {
+          const _md = body.messageData || {};
+          const _txt = _md.textMessageData?.textMessage || _md.extendedTextMessageData?.text || '';
+          console.log(`[WEBHOOK_PROBE] type=${_t} chatId=${body.senderData?.chatId || ''} text="${String(_txt).substring(0, 120)}"`);
+        }
+      } catch (_) {}
       return Response.json({ ok: true, skipped: true });
     }
     const messageData = body.messageData;
