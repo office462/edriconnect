@@ -16,26 +16,31 @@ Deno.serve(async (req) => {
       return Response.json({ error: 'Forbidden' }, { status: 403 });
     }
     if (body.typeWebhook !== 'incomingMessageReceived') {
-      // WEBHOOK_PROBE (2026-08-06): temporary diagnostic — verify Green API delivers
-      // outgoing-message webhooks and how it labels a manual send vs an API send.
-      // Skips noisy status/state events. Remove after verification.
+      // Human-takeover detection: when Dr. Liat replies MANUALLY from her phone,
+      // Green API sends 'outgoingMessageReceived' — pause the bot for that recipient
+      // so it stops auto-replying. The bot's own API sends ('outgoingAPIMessageReceived')
+      // are ignored, so it never pauses itself. Resume is manual only (dashboard/agent).
       try {
-        const _t = body.typeWebhook;
-        if (_t === 'outgoingMessageReceived' || _t === 'outgoingAPIMessageReceived') {
-          const _md = body.messageData || {};
-          const _txt = _md.textMessageData?.textMessage || _md.extendedTextMessageData?.text || '';
+        if (body.typeWebhook === 'outgoingMessageReceived') {
           const _chatId = body.senderData?.chatId || '';
-          const _phone = _chatId.replace('@c.us', '');
-          console.log(`[WEBHOOK_PROBE] type=${_t} chatId=${_chatId} text="${String(_txt).substring(0, 120)}"`);
-          const _base44probe = createClientFromRequest(req);
-          await _base44probe.asServiceRole.entities.WhatsAppMessageLog.create({
-            id_message: `probe_${body.idMessage || Date.now()}`,
-            phone: _phone,
-            direction: 'incoming',
-            text: `[PROBE ${_t}] ${String(_txt).substring(0, 200)}`,
-            status: 'skipped',
-            chat_id: _chatId,
-          });
+          const _rawPhone = _chatId.replace('@c.us', '');
+          if (_rawPhone && !_chatId.includes('@g.us')) {
+            const _digits = _rawPhone.replace(/[\s\-\+]/g, '');
+            const _variants = new Set([_digits]);
+            if (_digits.startsWith('972')) { _variants.add('0' + _digits.substring(3)); _variants.add('+' + _digits); }
+            else if (_digits.startsWith('0')) { _variants.add('972' + _digits.substring(1)); _variants.add('+972' + _digits.substring(1)); }
+            const _b44 = createClientFromRequest(req);
+            let _existing = [];
+            for (const _v of _variants) {
+              const _f = await _b44.asServiceRole.entities.WhatsAppBotControl.filter({ phone: _v });
+              if (_f.length > 0) _existing = _existing.concat(_f);
+            }
+            const _managed = _existing.some(r => r.mode === 'active_managed');
+            const _alreadyPaused = _existing.some(r => r.mode === 'paused');
+            if (!_managed && !_alreadyPaused) {
+              await _b44.asServiceRole.entities.WhatsAppBotControl.create({ phone: _digits, mode: 'paused', set_by: 'auto' });
+            }
+          }
         }
       } catch (_) {}
       return Response.json({ ok: true, skipped: true });
@@ -85,6 +90,28 @@ Deno.serve(async (req) => {
     if (idMessage && idempotencyCheck.length > 0) {
       return Response.json({ ok: true, skipped: true, reason: 'duplicate' });
     }
+    // Human-takeover pause: if this number is marked 'paused' in WhatsAppBotControl,
+    // the bot stays completely silent (no reply, no holding message). Resume is manual only.
+    try {
+      const _digitsP = phone.replace(/[\s\-\+]/g, '');
+      const _variantsP = new Set([_digitsP, localPhone]);
+      if (_digitsP.startsWith('972')) { _variantsP.add('0' + _digitsP.substring(3)); _variantsP.add('+' + _digitsP); }
+      else if (_digitsP.startsWith('0')) { _variantsP.add('972' + _digitsP.substring(1)); _variantsP.add('+972' + _digitsP.substring(1)); }
+      let _ctrl = [];
+      for (const _v of _variantsP) {
+        const _f = await base44.asServiceRole.entities.WhatsAppBotControl.filter({ phone: _v });
+        if (_f.length > 0) _ctrl = _ctrl.concat(_f);
+      }
+      if (_ctrl.some(r => r.mode === 'paused')) {
+        if (idMessage) {
+          await base44.asServiceRole.entities.WhatsAppMessageLog.create({
+            id_message: idMessage, phone, direction: 'incoming',
+            text: text.substring(0, 500), status: 'skipped', chat_id: chatId,
+          });
+        }
+        return Response.json({ ok: true, skipped: true, reason: 'bot_paused' });
+      }
+    } catch (_) {}
     const botEnabled = botEnabledSettings.length > 0 && botEnabledSettings[0].value === 'true';
     if (!botEnabled) {
       const testPhoneSettings = await base44.asServiceRole.entities.SystemSetting.filter({ key: 'whatsapp_test_phones' });
