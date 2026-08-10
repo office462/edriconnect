@@ -10,6 +10,7 @@ import StatusActions from '@/components/service-request/StatusActions';
 import TimelineView from '@/components/service-request/TimelineView';
 import FilesList from '@/components/service-request/FilesList';
 import TestBotMessageButton from '@/components/service-request/TestBotMessageButton';
+import BotControlButton from '@/components/service-request/BotControlButton';
 import EditContactButton from '@/components/service-request/EditContactButton';
 import { toast } from 'sonner';
 import { handleBotMessage } from '@/lib/sendBotMessage';
@@ -152,6 +153,7 @@ export default function ServiceRequestDetail() {
             onUpdate={(updates, oldStatus) => updateMutation.mutate({ updates, oldStatus })}
             isUpdating={updateMutation.isPending}
           />
+          <BotControlButton request={request} contact={contact} />
           <TestBotMessageButton requestId={id} />
         </div>
       </div>
