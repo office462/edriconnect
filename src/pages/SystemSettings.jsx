@@ -14,6 +14,7 @@ import { Plus, Pencil, Save, Palette, GitBranch, MessageSquare, UserCircle, Bot 
 import { toast } from 'sonner';
 import WhatsAppTestSender from '@/components/settings/WhatsAppTestSender';
 import ManagerBotConnect from '@/components/settings/ManagerBotConnect';
+import BotControlPanel from '@/components/settings/BotControlPanel';
 
 const categoryConfig = {
   details: { label: 'פרטים', icon: UserCircle, color: 'bg-purple-100 text-purple-700' },
@@ -122,8 +123,9 @@ export default function SystemSettings() {
           ) : (
           <>
           {activeTab === 'whatsapp' && (
-            <div className="mb-6">
+            <div className="mb-6 space-y-6">
               <WhatsAppTestSender />
+              <BotControlPanel />
             </div>
           )}
           {isLoading ? (
