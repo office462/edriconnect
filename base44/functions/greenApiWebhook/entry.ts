@@ -24,21 +24,35 @@ Deno.serve(async (req) => {
         if (body.typeWebhook === 'outgoingMessageReceived') {
           const _chatId = body.senderData?.chatId || '';
           const _rawPhone = _chatId.replace('@c.us', '');
+          const _md = body.messageData || {};
+          const _outText = String(_md.textMessageData?.textMessage || _md.extendedTextMessageData?.text || '');
           if (_rawPhone && !_chatId.includes('@g.us')) {
-            const _digits = _rawPhone.replace(/[\s\-\+]/g, '');
-            const _variants = new Set([_digits]);
-            if (_digits.startsWith('972')) { _variants.add('0' + _digits.substring(3)); _variants.add('+' + _digits); }
-            else if (_digits.startsWith('0')) { _variants.add('972' + _digits.substring(1)); _variants.add('+972' + _digits.substring(1)); }
             const _b44 = createClientFromRequest(req);
-            let _existing = [];
-            for (const _v of _variants) {
-              const _f = await _b44.asServiceRole.entities.WhatsAppBotControl.filter({ phone: _v });
-              if (_f.length > 0) _existing = _existing.concat(_f);
-            }
-            const _managed = _existing.some(r => r.mode === 'active_managed');
-            const _alreadyPaused = _existing.some(r => r.mode === 'paused');
-            if (!_managed && !_alreadyPaused) {
-              await _b44.asServiceRole.entities.WhatsAppBotControl.create({ phone: _digits, mode: 'paused', set_by: 'auto' });
+            // Automated WhatsApp Business greeting/away messages must NOT pause the bot —
+            // they are sent by WhatsApp, not a human takeover. Match against configurable phrases.
+            let _ignorePhrases = ['הגעת למשרדה'];
+            try {
+              const _ps = await _b44.asServiceRole.entities.SystemSetting.filter({ key: 'bot_pause_ignore_phrases' });
+              if (_ps.length > 0 && _ps[0].value) {
+                _ignorePhrases = _ps[0].value.split('\n').map(s => s.trim()).filter(Boolean);
+              }
+            } catch (_) {}
+            const _isAutoReply = _ignorePhrases.some(p => p && _outText.includes(p));
+            if (!_isAutoReply) {
+              const _digits = _rawPhone.replace(/[\s\-\+]/g, '');
+              const _variants = new Set([_digits]);
+              if (_digits.startsWith('972')) { _variants.add('0' + _digits.substring(3)); _variants.add('+' + _digits); }
+              else if (_digits.startsWith('0')) { _variants.add('972' + _digits.substring(1)); _variants.add('+972' + _digits.substring(1)); }
+              let _existing = [];
+              for (const _v of _variants) {
+                const _f = await _b44.asServiceRole.entities.WhatsAppBotControl.filter({ phone: _v });
+                if (_f.length > 0) _existing = _existing.concat(_f);
+              }
+              const _managed = _existing.some(r => r.mode === 'active_managed');
+              const _alreadyPaused = _existing.some(r => r.mode === 'paused');
+              if (!_managed && !_alreadyPaused) {
+                await _b44.asServiceRole.entities.WhatsAppBotControl.create({ phone: _digits, mode: 'paused', set_by: 'auto', note: _outText.substring(0, 80) });
+              }
             }
           }
         }
