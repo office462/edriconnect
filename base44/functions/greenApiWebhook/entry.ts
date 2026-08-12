@@ -52,6 +52,21 @@ Deno.serve(async (req) => {
               const _alreadyPaused = _existing.some(r => r.mode === 'paused');
               if (!_managed && !_alreadyPaused) {
                 await _b44.asServiceRole.entities.WhatsAppBotControl.create({ phone: _digits, mode: 'paused', set_by: 'auto', note: _outText.substring(0, 80) });
+                // Notify Liat (admin) so she can resume from WhatsApp with a simple "כן".
+                try {
+                  const _adminS = await _b44.asServiceRole.entities.SystemSetting.filter({ key: 'admin_whatsapp_phone' });
+                  const _adminPhone = _adminS.length > 0 ? _adminS[0].value : '';
+                  const _iid = Deno.env.get('GREEN_API_INSTANCE_ID');
+                  const _tok = Deno.env.get('GREEN_API_TOKEN');
+                  const _localX = _digits.startsWith('972') ? '0' + _digits.substring(3) : _digits;
+                  if (_adminPhone && _iid && _tok) {
+                    const _notif = `🔔 ענית ידנית למספר ${_localX} — הבוט הושהה אוטומטית ולא יענה לו, כדי לא לדרוס אותך.\n\nכשתסיימי לטפל בו והבוט יכול להמשיך — השיבי *כן* ואחזיר אותו.`;
+                    await fetch(`https://api.green-api.com/waInstance${_iid}/sendMessage/${_tok}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ chatId: `${_adminPhone}@c.us`, message: _notif }) });
+                    const _pend = await _b44.asServiceRole.entities.SystemSetting.filter({ key: 'bot_pause_pending_resume' });
+                    if (_pend.length > 0) await _b44.asServiceRole.entities.SystemSetting.update(_pend[0].id, { value: _digits });
+                    else await _b44.asServiceRole.entities.SystemSetting.create({ category: 'flow', key: 'bot_pause_pending_resume', value: _digits, value_type: 'text', label: 'מספר ממתין להחזרת בוט (השב כן)' });
+                  }
+                } catch (_) {}
               }
             }
           }
@@ -83,6 +98,39 @@ Deno.serve(async (req) => {
     const instanceId = Deno.env.get('GREEN_API_INSTANCE_ID');
     const token = Deno.env.get('GREEN_API_TOKEN');
     const localPhone = phone.startsWith('972') ? '0' + phone.substring(3) : phone;
+
+    // Admin (Liat) WhatsApp control: a plain "כן"/"לא" reply resumes/keeps the last auto-paused number.
+    try {
+      const _pendS0 = await base44.asServiceRole.entities.SystemSetting.filter({ key: 'bot_pause_pending_resume' });
+      const _pendNum = _pendS0.length > 0 ? (_pendS0[0].value || '') : '';
+      if (_pendNum) {
+        const _adminS0 = await base44.asServiceRole.entities.SystemSetting.filter({ key: 'admin_whatsapp_phone' });
+        const _adminNum = (_adminS0.length > 0 ? _adminS0[0].value : '').replace(/[\s\-\+]/g, '');
+        let _fromNorm = phone.replace(/[\s\-\+]/g, '');
+        if (_fromNorm.startsWith('0')) _fromNorm = '972' + _fromNorm.substring(1);
+        if (_adminNum && _fromNorm === _adminNum) {
+          const _tt = text.trim();
+          const _instId = Deno.env.get('GREEN_API_INSTANCE_ID');
+          const _tokn = Deno.env.get('GREEN_API_TOKEN');
+          const _replyAdmin = async (m) => { await fetch(`https://api.green-api.com/waInstance${_instId}/sendMessage/${_tokn}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ chatId, message: m }) }); };
+          const _localP = _pendNum.startsWith('972') ? '0' + _pendNum.substring(3) : _pendNum;
+          if (/^(כן|כן!|כן\.|אישור|החזר|נכון|yes)$/i.test(_tt)) {
+            const _vv = new Set([_pendNum]);
+            if (_pendNum.startsWith('972')) { _vv.add('0' + _pendNum.substring(3)); _vv.add('+' + _pendNum); }
+            for (const _v of _vv) { const _ff = await base44.asServiceRole.entities.WhatsAppBotControl.filter({ phone: _v }); for (const _r of _ff) await base44.asServiceRole.entities.WhatsAppBotControl.delete(_r.id); }
+            await _replyAdmin(`✅ הבוט הוחזר לפעולה למספר ${_localP}.`);
+            await base44.asServiceRole.entities.SystemSetting.update(_pendS0[0].id, { value: '' });
+            if (idMessage) await base44.asServiceRole.entities.WhatsAppMessageLog.create({ id_message: idMessage, phone, direction: 'incoming', text: text.substring(0, 500), status: 'skipped', chat_id: chatId });
+            return Response.json({ ok: true, admin_resume: true });
+          } else if (/^(לא|לא\.|no)$/i.test(_tt)) {
+            await _replyAdmin('בסדר, הבוט נשאר מושהה. אפשר להחזיר בכל רגע מהדשבורד.');
+            await base44.asServiceRole.entities.SystemSetting.update(_pendS0[0].id, { value: '' });
+            if (idMessage) await base44.asServiceRole.entities.WhatsAppMessageLog.create({ id_message: idMessage, phone, direction: 'incoming', text: text.substring(0, 500), status: 'skipped', chat_id: chatId });
+            return Response.json({ ok: true, admin_resume: false });
+          }
+        }
+      }
+    } catch (_) {}
 
     const [botEnabledSettings, cachedConvSetting, blockList, idempotencyCheck] = await Promise.all([
       base44.asServiceRole.entities.SystemSetting.filter({ key: 'whatsapp_bot_enabled' }),
