@@ -1,0 +1,44 @@
+{
+  "name": "Bulk Post-Lecture Reminder (04.06)",
+  "description": "\u05e9\u05d5\u05dc\u05d7 \u05d4\u05de\u05dc\u05e6\u05d4+\u05ea\u05de\u05d5\u05e0\u05ea \u05e1\u05d3\u05e8\u05d4+goodbye \u05dc\u05e4\u05e0\u05d9\u05d5\u05ea post_lecture \u05de-04.06 \u05e9\u05dc\u05d0 \u05d4\u05e9\u05d0\u05d9\u05e8\u05d5 \u05e4\u05e8\u05d8\u05d9\u05dd. \u05d0\u05d7\u05d3 \u05db\u05dc 10 \u05d3\u05e7\u05d5\u05ea \u05e2\u05d3 19:00.",
+  "trigger": {
+    "condition": null,
+    "config": {
+      "trigger_type": "scheduled",
+      "events": [],
+      "schedule_mode": "interval",
+      "cron_expression": null,
+      "one_time_date": null,
+      "timezone": "UTC",
+      "interval_value": 10,
+      "interval_unit": "minutes",
+      "interval_anchor": "2026-06-04T10:30:26.370000",
+      "ends_type": "on_date",
+      "ends_on_date": "2026-06-04T16:00:00",
+      "ends_after_count": null
+    }
+  },
+  "definition": {
+    "document": {
+      "dsl": "1.0.0",
+      "name": "bulk_post_lecture_reminder_04_06",
+      "version": "1.0",
+      "namespace": "base44"
+    },
+    "do": [
+      {
+        "run_function": {
+          "call": "invoke_backend_function",
+          "with": {
+            "function_name": "sendBulkPostLectureReminder",
+            "args": {}
+          },
+          "then": "end"
+        }
+      }
+    ]
+  },
+  "x-base44-migrated-from-automation": {
+    "legacy_payload_function": "sendBulkPostLectureReminder"
+  }
+}
