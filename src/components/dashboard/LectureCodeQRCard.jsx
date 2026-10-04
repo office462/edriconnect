@@ -4,7 +4,8 @@ import { Copy } from 'lucide-react';
 
 export default function LectureCodeQRCard({ lecture, code, phone }) {
   const [copied, setCopied] = useState(false);
-  const link = `https://wa.me/${phone}?text=${encodeURIComponent(code)}`;
+  const message = `אבקש לקבל את סיכום ההרצאה ${lecture}`;
+  const link = `https://wa.me/${phone}?text=${encodeURIComponent(message)}`;
   const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(link)}`;
 
   const handleCopy = () => {
@@ -17,7 +18,7 @@ export default function LectureCodeQRCard({ lecture, code, phone }) {
     <div className="border rounded-lg p-3 space-y-2 text-center">
       <p className="text-xs font-semibold text-foreground leading-tight">{lecture}</p>
       <img src={qrUrl} alt={`QR ${lecture}`} className="w-28 h-28 mx-auto rounded border" />
-      <p className="text-xs text-muted-foreground">מילת קוד: <span className="font-medium text-foreground">{code}</span></p>
+      <p className="text-xs text-muted-foreground">הודעה: <span className="font-medium text-foreground">{message}</span></p>
       <Button variant="outline" size="sm" className="w-full gap-1 text-xs" onClick={handleCopy}>
         <Copy className="h-3 w-3" />
         {copied ? 'הועתק!' : 'העתק קישור'}

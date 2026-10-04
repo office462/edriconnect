@@ -15,7 +15,7 @@ const LECTURE_CODES = [
   { lecture: 'אריכות ימים', code: 'סיכום אריכות' },
   { lecture: 'בריאות בהתאמה נשית גיל המעבר', code: 'סיכום גיל המעבר' },
   { lecture: 'בינה מלאכותית בבריאות', code: 'סיכום בינה' },
-  { lecture: 'שחרור המוח הנעול', code: 'סיכום ההרצאה שחרור המוח הנעול' },
+  { lecture: 'שחרור המוח הנעול', code: 'שחרור המוח הנעול' },
 ];
 
 export default function PostLectureQR() {
