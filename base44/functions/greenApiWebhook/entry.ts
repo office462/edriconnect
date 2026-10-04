@@ -358,7 +358,7 @@ Deno.serve(async (req) => {
             });
           }
           // Dedicated per-lecture QR: if the fixed message also names a specific lecture, skip the menu and send that PDF directly.
-          const _plqDirectNames = ['אריכות ימים', 'מניעת שחיקה', 'תזונה מונעת מחלות', 'אנטומיה של אושר', 'בריאות בהתאמה נשית גיל המעבר', 'בינה מלאכותית בבריאות'];
+          const _plqDirectNames = ['אריכות ימים', 'מניעת שחיקה', 'תזונה מונעת מחלות', 'אנטומיה של אושר', 'בריאות בהתאמה נשית גיל המעבר', 'בינה מלאכותית בבריאות', 'שחרור המוח הנעול'];
           const _plqDirectName = _plqDirectNames.find(n => _plqNorm.includes(n));
           if (_plqDirectName) {
             const _plqFu = `https://api.green-api.com/waInstance${instanceId}/sendFileByUrl/${token}`;
@@ -421,7 +421,7 @@ Deno.serve(async (req) => {
       }
       if (_plcSr) {
         // Match by lecture NAME only — no letters/numbers (prevents collision with the main service menu).
-        const _plcNames = ['אריכות ימים', 'מניעת שחיקה', 'תזונה מונעת מחלות', 'אנטומיה של אושר', 'בריאות בהתאמה נשית גיל המעבר', 'בינה מלאכותית בבריאות'];
+        const _plcNames = ['אריכות ימים', 'מניעת שחיקה', 'תזונה מונעת מחלות', 'אנטומיה של אושר', 'בריאות בהתאמה נשית גיל המעבר', 'בינה מלאכותית בבריאות', 'שחרור המוח הנעול'];
         const _plcNorm = text.trim().replace(/[*"'״.]/g, '').replace(/\s+/g, ' ').trim();
         const _plcLower = _plcNorm.toLowerCase();
         let _plcLectureName = _plcNames.find(n => n.toLowerCase() === _plcLower)
@@ -479,6 +479,7 @@ Deno.serve(async (req) => {
         'אריכות': 'אריכות ימים',
         'גיל המעבר': 'בריאות בהתאמה נשית גיל המעבר',
         'בינה': 'בינה מלאכותית בבריאות',
+        'מוח': 'שחרור המוח הנעול',
       };
       const _c = text.trim().replace(/[*"'״.,]/g, '').replace(/\s+/g, ' ').trim();
       const _plcKeys = Object.keys(_plCodes);
