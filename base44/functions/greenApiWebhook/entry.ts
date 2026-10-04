@@ -49,9 +49,15 @@ Deno.serve(async (req) => {
                 if (_f.length > 0) _existing = _existing.concat(_f);
               }
               const _managed = _existing.some(r => r.mode === 'active_managed');
-              const _alreadyPaused = _existing.some(r => r.mode === 'paused');
-              if (!_managed && !_alreadyPaused) {
-                await _b44.asServiceRole.entities.WhatsAppBotControl.create({ phone: _digits, mode: 'paused', set_by: 'auto', note: _outText.substring(0, 80) });
+              // Auto-pauses expire 24h after Liat's last manual message; human pauses never expire.
+              const _humanPaused = _existing.some(r => r.mode === 'paused' && r.set_by !== 'auto');
+              const _autoRec = _existing.find(r => r.mode === 'paused' && r.set_by === 'auto');
+              const _autoActive = !!_autoRec && (Date.now() - new Date(_autoRec.updated_date).getTime()) < 24 * 60 * 60 * 1000;
+              if (_autoRec) {
+                await _b44.asServiceRole.entities.WhatsAppBotControl.update(_autoRec.id, { note: _outText.substring(0, 80) });
+              }
+              if (!_managed && !_humanPaused && !_autoActive) {
+                if (!_autoRec) await _b44.asServiceRole.entities.WhatsAppBotControl.create({ phone: _digits, mode: 'paused', set_by: 'auto', note: _outText.substring(0, 80) });
                 // Notify Liat (admin) so she can resume from WhatsApp with a simple "כן".
                 try {
                   const _adminS = await _b44.asServiceRole.entities.SystemSetting.filter({ key: 'admin_whatsapp_phone' });
@@ -60,7 +66,7 @@ Deno.serve(async (req) => {
                   const _tok = Deno.env.get('GREEN_API_TOKEN');
                   const _localX = _digits.startsWith('972') ? '0' + _digits.substring(3) : _digits;
                   if (_adminPhone && _iid && _tok) {
-                    const _notif = `🔔 ענית ידנית למספר ${_localX} — הבוט הושהה אוטומטית ולא יענה לו, כדי לא לדרוס אותך.\n\nכשתסיימי לטפל בו והבוט יכול להמשיך — השיבי *כן* ואחזיר אותו.`;
+                    const _notif = `🔔 ענית ידנית למספר ${_localX} — הבוט הושהה אוטומטית ל-24 שעות ולא יענה לו, כדי לא לדרוס אותך (כל הודעה ידנית נוספת מאריכה ב-24 שעות).\n\nאם תסיימי קודם לטפל בו והבוט יכול להמשיך — השיבי *כן* ואחזיר אותו.`;
                     await fetch(`https://api.green-api.com/waInstance${_iid}/sendMessage/${_tok}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ chatId: `${_adminPhone}@c.us`, message: _notif }) });
                     const _pend = await _b44.asServiceRole.entities.SystemSetting.filter({ key: 'bot_pause_pending_resume' });
                     if (_pend.length > 0) await _b44.asServiceRole.entities.SystemSetting.update(_pend[0].id, { value: _digits });
@@ -164,7 +170,7 @@ Deno.serve(async (req) => {
         const _f = await base44.asServiceRole.entities.WhatsAppBotControl.filter({ phone: _v });
         if (_f.length > 0) _ctrl = _ctrl.concat(_f);
       }
-      if (_ctrl.some(r => r.mode === 'paused')) {
+      if (_ctrl.some(r => r.mode === 'paused' && (r.set_by !== 'auto' || (Date.now() - new Date(r.updated_date).getTime()) < 24 * 60 * 60 * 1000))) {
         if (idMessage) {
           await base44.asServiceRole.entities.WhatsAppMessageLog.create({
             id_message: idMessage, phone, direction: 'incoming',
