@@ -48,7 +48,7 @@ async function sendViaGreenApi(phone, message) {
   }
   const chatId = `${cleanPhone}@c.us`;
 
-  const url = `https://api.green-api.com/waInstance${instanceId}/sendMessage/${token}`;
+  const url = `https://7103.api.greenapi.com/waInstance${instanceId}/sendMessage/${token}`;
   const response = await fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -74,7 +74,7 @@ async function sendFileViaGreenApi(phone, fileUrl, fileName) {
   }
   const chatId = `${cleanPhone}@c.us`;
 
-  const url = `https://api.green-api.com/waInstance${instanceId}/sendFileByUrl/${token}`;
+  const url = `https://7103.api.greenapi.com/waInstance${instanceId}/sendFileByUrl/${token}`;
   const response = await fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

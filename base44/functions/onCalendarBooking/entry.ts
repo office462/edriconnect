@@ -191,7 +191,7 @@ Deno.serve(async (req) => {
           // Send text
           let sendOk = true;
           if (textMessage) {
-            const sendUrl = `https://api.green-api.com/waInstance${instanceId}/sendMessage/${token}`;
+            const sendUrl = `https://7103.api.greenapi.com/waInstance${instanceId}/sendMessage/${token}`;
             const sendResp = await fetch(sendUrl, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
@@ -206,7 +206,7 @@ Deno.serve(async (req) => {
           // Send files from main message
           for (const file of files) {
             try {
-              const fileUrl = `https://api.green-api.com/waInstance${instanceId}/sendFileByUrl/${token}`;
+              const fileUrl = `https://7103.api.greenapi.com/waInstance${instanceId}/sendFileByUrl/${token}`;
               await fetch(fileUrl, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -227,7 +227,7 @@ Deno.serve(async (req) => {
               const fuMatch = fuFileRegex.exec(followUp);
               if (fuMatch) {
                 // It's a file message
-                const fileUrl = `https://api.green-api.com/waInstance${instanceId}/sendFileByUrl/${token}`;
+                const fileUrl = `https://7103.api.greenapi.com/waInstance${instanceId}/sendFileByUrl/${token}`;
                 await fetch(fileUrl, {
                   method: 'POST',
                   headers: { 'Content-Type': 'application/json' },
@@ -236,7 +236,7 @@ Deno.serve(async (req) => {
                 console.log(`Follow-up file sent: ${fuMatch[2]}`);
               } else {
                 // It's a text message
-                const sendUrl = `https://api.green-api.com/waInstance${instanceId}/sendMessage/${token}`;
+                const sendUrl = `https://7103.api.greenapi.com/waInstance${instanceId}/sendMessage/${token}`;
                 await fetch(sendUrl, {
                   method: 'POST',
                   headers: { 'Content-Type': 'application/json' },

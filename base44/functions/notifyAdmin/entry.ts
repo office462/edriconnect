@@ -52,7 +52,7 @@ Deno.serve(async (req) => {
     let whatsappSent = false;
     if (botEnabled && adminPhone && instanceId && token) {
       const chatId = `${adminPhone}@c.us`;
-      const apiUrl = `https://api.green-api.com/waInstance${instanceId}/sendMessage/${token}`;
+      const apiUrl = `https://7103.api.greenapi.com/waInstance${instanceId}/sendMessage/${token}`;
       const waResponse = await fetch(apiUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

@@ -69,8 +69,8 @@ Deno.serve(async (req) => {
       base44.asServiceRole.entities.Lecture.filter({ lecture_type: 'series' }),
     ]);
 
-    const msgUrl = `https://api.green-api.com/waInstance${instanceId}/sendMessage/${token}`;
-    const fileUrl = `https://api.green-api.com/waInstance${instanceId}/sendFileByUrl/${token}`;
+    const msgUrl = `https://7103.api.greenapi.com/waInstance${instanceId}/sendMessage/${token}`;
+    const fileUrl = `https://7103.api.greenapi.com/waInstance${instanceId}/sendFileByUrl/${token}`;
     let allOk = true;
 
     // 1. Recommend text

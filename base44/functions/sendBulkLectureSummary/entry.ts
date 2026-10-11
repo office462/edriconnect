@@ -43,7 +43,7 @@ Deno.serve(async (req) => {
     const chatId = `${cleanPhone}@c.us`;
 
     // 1. Send text message
-    const sendUrl = `https://api.green-api.com/waInstance${instanceId}/sendMessage/${token}`;
+    const sendUrl = `https://7103.api.greenapi.com/waInstance${instanceId}/sendMessage/${token}`;
     const textResp = await fetch(sendUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -52,7 +52,7 @@ Deno.serve(async (req) => {
 
     // 2. Wait 2 seconds then send PDF
     await new Promise(resolve => setTimeout(resolve, 2000));
-    const fileUrl = `https://api.green-api.com/waInstance${instanceId}/sendFileByUrl/${token}`;
+    const fileUrl = `https://7103.api.greenapi.com/waInstance${instanceId}/sendFileByUrl/${token}`;
     const fileResp = await fetch(fileUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },

@@ -77,7 +77,7 @@ Deno.serve(async (req) => {
                 if (waInstanceId && waToken) {
                   let cleanPhone = request.contact_phone.replace(/[\s\-\+]/g, '');
                   if (cleanPhone.startsWith('0')) cleanPhone = '972' + cleanPhone.substring(1);
-                  await fetch(`https://api.green-api.com/waInstance${waInstanceId}/sendMessage/${waToken}`, {
+                  await fetch(`https://7103.api.greenapi.com/waInstance${waInstanceId}/sendMessage/${waToken}`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ chatId: `${cleanPhone}@c.us`, message: timeoutMessage }),

@@ -116,7 +116,7 @@ Deno.serve(async (req) => {
           // Send text
           let pendingSendOk = true;
           if (pendingText) {
-            const sendUrl = `https://api.green-api.com/waInstance${instanceId}/sendMessage/${token}`;
+            const sendUrl = `https://7103.api.greenapi.com/waInstance${instanceId}/sendMessage/${token}`;
             const sendResp = await fetch(sendUrl, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
@@ -132,7 +132,7 @@ Deno.serve(async (req) => {
           // Send files from main message
           for (const pf of pendingFiles) {
             try {
-              const pfUrl = `https://api.green-api.com/waInstance${instanceId}/sendFileByUrl/${token}`;
+              const pfUrl = `https://7103.api.greenapi.com/waInstance${instanceId}/sendFileByUrl/${token}`;
               await fetch(pfUrl, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -152,7 +152,7 @@ Deno.serve(async (req) => {
               const fuFileRegex = /\[FILE:(https?:\/\/[^\]:]+):([^\]]+)\]/g;
               const fuMatch = fuFileRegex.exec(followUp);
               if (fuMatch) {
-                const pfUrl = `https://api.green-api.com/waInstance${instanceId}/sendFileByUrl/${token}`;
+                const pfUrl = `https://7103.api.greenapi.com/waInstance${instanceId}/sendFileByUrl/${token}`;
                 await fetch(pfUrl, {
                   method: 'POST',
                   headers: { 'Content-Type': 'application/json' },
@@ -160,7 +160,7 @@ Deno.serve(async (req) => {
                 });
                 console.log(`Follow-up file sent: ${fuMatch[2]}`);
               } else {
-                const sendUrl = `https://api.green-api.com/waInstance${instanceId}/sendMessage/${token}`;
+                const sendUrl = `https://7103.api.greenapi.com/waInstance${instanceId}/sendMessage/${token}`;
                 await fetch(sendUrl, {
                   method: 'POST',
                   headers: { 'Content-Type': 'application/json' },
@@ -291,7 +291,7 @@ Deno.serve(async (req) => {
         // Send clean text message
         let sendSuccess = true;
         if (textMessage) {
-          const sendUrl = `https://api.green-api.com/waInstance${instanceId}/sendMessage/${token}`;
+          const sendUrl = `https://7103.api.greenapi.com/waInstance${instanceId}/sendMessage/${token}`;
           const sendResponse = await fetch(sendUrl, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -307,7 +307,7 @@ Deno.serve(async (req) => {
         // Send each file as a separate message
         for (const file of fileUrls) {
           try {
-            const fileApiUrl = `https://api.green-api.com/waInstance${instanceId}/sendFileByUrl/${token}`;
+            const fileApiUrl = `https://7103.api.greenapi.com/waInstance${instanceId}/sendFileByUrl/${token}`;
             const fileResp = await fetch(fileApiUrl, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },

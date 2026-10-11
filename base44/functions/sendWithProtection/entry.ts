@@ -62,7 +62,7 @@ Deno.serve(async (req) => {
     }
     const chatId = `${cleanPhone}@c.us`;
 
-    const url = `https://api.green-api.com/waInstance${instanceId}/sendMessage/${token}`;
+    const url = `https://7103.api.greenapi.com/waInstance${instanceId}/sendMessage/${token}`;
     const response = await fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },

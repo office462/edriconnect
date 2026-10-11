@@ -18,16 +18,7 @@ Deno.serve(async (req) => {
 
     // 1. Validate webhook secret (try env var first, then DB)
     const secretHeader = req.headers.get('X-Webhook-Secret') || '';
-    let expectedSecret = Deno.env.get('PAYMENT_WEBHOOK_SECRET') || null;
-
-    if (!expectedSecret) {
-      try {
-        const secretSettings = await base44.asServiceRole.entities.SystemSetting.filter({ key: 'payment_webhook_secret' });
-        expectedSecret = secretSettings.length > 0 ? secretSettings[0].value : null;
-      } catch (e) {
-        console.log('Could not read SystemSetting, falling back to env only:', e.message);
-      }
-    }
+    const expectedSecret = Deno.env.get('PAYMENT_WEBHOOK_SECRET') || null;
 
     if (!expectedSecret || secretHeader !== expectedSecret) {
       console.log('Webhook secret mismatch');

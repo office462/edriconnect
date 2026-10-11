@@ -12,22 +12,22 @@ Deno.serve(async (req) => {
     const token = Deno.env.get('GREEN_API_TOKEN');
 
     // Check instance state
-    const stateResp = await fetch(`https://api.green-api.com/waInstance${instanceId}/getStateInstance/${token}`);
+    const stateResp = await fetch(`https://7103.api.greenapi.com/waInstance${instanceId}/getStateInstance/${token}`);
     const stateData = await stateResp.json();
 
     // Check webhook settings
-    const settingsResp = await fetch(`https://api.green-api.com/waInstance${instanceId}/getSettings/${token}`);
+    const settingsResp = await fetch(`https://7103.api.greenapi.com/waInstance${instanceId}/getSettings/${token}`);
     const settingsData = await settingsResp.json();
 
     // Check incoming notification queue
-    const queueResp = await fetch(`https://api.green-api.com/waInstance${instanceId}/receiveNotification/${token}`);
+    const queueResp = await fetch(`https://7103.api.greenapi.com/waInstance${instanceId}/receiveNotification/${token}`);
     let queueData = null;
     try {
       queueData = await queueResp.json();
     } catch (_) {}
 
     // Get recent incoming messages
-    const journalResp = await fetch(`https://api.green-api.com/waInstance${instanceId}/lastIncomingMessages/${token}`);
+    const journalResp = await fetch(`https://7103.api.greenapi.com/waInstance${instanceId}/lastIncomingMessages/${token}`);
     let recentMessages = [];
     try {
       recentMessages = await journalResp.json();
@@ -42,7 +42,7 @@ Deno.serve(async (req) => {
     } catch (_) {}
 
     // Get recent outgoing messages
-    const outResp = await fetch(`https://api.green-api.com/waInstance${instanceId}/lastOutgoingMessages/${token}`);
+    const outResp = await fetch(`https://7103.api.greenapi.com/waInstance${instanceId}/lastOutgoingMessages/${token}`);
     let recentOutgoing = [];
     try {
       recentOutgoing = await outResp.json();

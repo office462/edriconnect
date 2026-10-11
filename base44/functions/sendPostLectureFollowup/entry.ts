@@ -27,8 +27,8 @@ Deno.serve(async (req) => {
 
     const instanceId = Deno.env.get('GREEN_API_INSTANCE_ID');
     const token = Deno.env.get('GREEN_API_TOKEN');
-    const msgUrl = `https://api.green-api.com/waInstance${instanceId}/sendMessage/${token}`;
-    const fileUrl = `https://api.green-api.com/waInstance${instanceId}/sendFileByUrl/${token}`;
+    const msgUrl = `https://7103.api.greenapi.com/waInstance${instanceId}/sendMessage/${token}`;
+    const fileUrl = `https://7103.api.greenapi.com/waInstance${instanceId}/sendFileByUrl/${token}`;
 
     const [recommendBc, goodbyeBc, seriesLectures] = await Promise.all([
       base44.asServiceRole.entities.BotContent.filter({ key: 'post_lecture_recommend' }),

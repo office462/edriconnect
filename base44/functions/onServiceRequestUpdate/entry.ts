@@ -90,7 +90,7 @@ Deno.serve(async (req) => {
 
         let sendOk = false;
         if (textMessage) {
-          const sendUrl = `https://api.green-api.com/waInstance${instanceId}/sendMessage/${token}`;
+          const sendUrl = `https://7103.api.greenapi.com/waInstance${instanceId}/sendMessage/${token}`;
           for (let attempt = 1; attempt <= 3; attempt++) {
             try {
               if (attempt > 1) await new Promise(r => setTimeout(r, 1500 * attempt));
@@ -104,7 +104,7 @@ Deno.serve(async (req) => {
 
         for (const file of files) {
           try {
-            await fetch(`https://api.green-api.com/waInstance${instanceId}/sendFileByUrl/${token}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ chatId, urlFile: file.url, fileName: file.fileName }) });
+            await fetch(`https://7103.api.greenapi.com/waInstance${instanceId}/sendFileByUrl/${token}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ chatId, urlFile: file.url, fileName: file.fileName }) });
           } catch (_) {}
         }
 
@@ -114,9 +114,9 @@ Deno.serve(async (req) => {
             const fuFileRegex = /\[FILE:(https?:\/\/[^\]:]+):([^\]]+)\]/g;
             const fuMatch = fuFileRegex.exec(followUp);
             if (fuMatch) {
-              await fetch(`https://api.green-api.com/waInstance${instanceId}/sendFileByUrl/${token}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ chatId, urlFile: fuMatch[1], fileName: fuMatch[2] }) });
+              await fetch(`https://7103.api.greenapi.com/waInstance${instanceId}/sendFileByUrl/${token}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ chatId, urlFile: fuMatch[1], fileName: fuMatch[2] }) });
             } else {
-              await fetch(`https://api.green-api.com/waInstance${instanceId}/sendMessage/${token}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ chatId, message: followUp }) });
+              await fetch(`https://7103.api.greenapi.com/waInstance${instanceId}/sendMessage/${token}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ chatId, message: followUp }) });
             }
           } catch (_) {}
         }
@@ -485,7 +485,7 @@ Deno.serve(async (req) => {
         // Send text — retry up to 3 times on failure
         let sendOk = true;
         if (textMessage) {
-          const sendUrl = `https://api.green-api.com/waInstance${instanceId}/sendMessage/${token}`;
+          const sendUrl = `https://7103.api.greenapi.com/waInstance${instanceId}/sendMessage/${token}`;
           sendOk = false;
           for (let attempt = 1; attempt <= 3; attempt++) {
             try {
@@ -512,7 +512,7 @@ Deno.serve(async (req) => {
         // Send files from main message
         for (const file of files) {
           try {
-            const fileUrl = `https://api.green-api.com/waInstance${instanceId}/sendFileByUrl/${token}`;
+            const fileUrl = `https://7103.api.greenapi.com/waInstance${instanceId}/sendFileByUrl/${token}`;
             await fetch(fileUrl, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
@@ -531,7 +531,7 @@ Deno.serve(async (req) => {
             const fuFileRegex = /\[FILE:(https?:\/\/[^\]:]+):([^\]]+)\]/g;
             const fuMatch = fuFileRegex.exec(followUp);
             if (fuMatch) {
-              const fileUrl = `https://api.green-api.com/waInstance${instanceId}/sendFileByUrl/${token}`;
+              const fileUrl = `https://7103.api.greenapi.com/waInstance${instanceId}/sendFileByUrl/${token}`;
               await fetch(fileUrl, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -539,7 +539,7 @@ Deno.serve(async (req) => {
               });
               console.log(`Follow-up file sent: ${fuMatch[2]}`);
             } else {
-              const sendUrl = `https://api.green-api.com/waInstance${instanceId}/sendMessage/${token}`;
+              const sendUrl = `https://7103.api.greenapi.com/waInstance${instanceId}/sendMessage/${token}`;
               await fetch(sendUrl, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
