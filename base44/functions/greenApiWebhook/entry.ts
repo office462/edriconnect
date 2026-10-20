@@ -746,10 +746,15 @@ Deno.serve(async (req) => {
             await updateSrWithTimeline(base44, _mnSr, { current_step: 'awaiting_lectures_type' }, 'נבחר מסלול הרצאות — נשלח תפריט סוג הרצאה');
             try { await base44.asServiceRole.agents.addMessage(conversation, { role: 'assistant', content: '[לקוח כתב]: ' + text }); await base44.asServiceRole.agents.addMessage(conversation, { role: 'assistant', content: _mnMsg }); } catch (_) {}
           } else if (_mnServiceType === 'clinic') {
-            const _mnBc = await base44.asServiceRole.entities.BotContent.filter({ key: 'clinic_welcome' });
-            const _mnMsg = _mnBc.length > 0 ? _mnBc[0].content : 'האם את/ה שוכר/ת ותיק/ה או מתעניין/ת חדש/ה?\n1. שוכר ותיק\n2. מתעניין חדש';
+            const [_mnBc, _mnLinks] = await Promise.all([
+              base44.asServiceRole.entities.BotContent.filter({ key: 'clinic_welcome' }),
+              base44.asServiceRole.entities.ServiceContent.filter({ service_type: 'clinic', content_type: 'external_link' }),
+            ]);
+            const _mnR1 = _mnLinks.find(l => l.sub_type === 'room_1')?.url || '';
+            const _mnR2 = _mnLinks.find(l => l.sub_type === 'room_2')?.url || '';
+            const _mnMsg = (_mnBc.length > 0 ? _mnBc[0].content : 'להלן קישורים:\n{קישור_חדר_1}\n{קישור_חדר_2}\n\nתודה רבה שפנית 🌸').replace('{קישור_חדר_1}', _mnR1).replace('{קישור_חדר_2}', _mnR2);
             await fetch(_mnMu, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ chatId, message: _mnMsg }) });
-            await updateSrWithTimeline(base44, _mnSr, { current_step: 'awaiting_clinic_choice' }, 'נבחר מסלול קליניקה — נשלח תפריט ותיק/חדש');
+            await updateSrWithTimeline(base44, _mnSr, { current_step: 'completed', status: 'completed' }, 'נבחר מסלול קליניקה — נשלחו קישורי חדרים');
             try { await base44.asServiceRole.agents.addMessage(conversation, { role: 'assistant', content: '[לקוח כתב]: ' + text }); await base44.asServiceRole.agents.addMessage(conversation, { role: 'assistant', content: _mnMsg }); } catch (_) {}
           } else if (_mnServiceType === 'legal') {
             const _mnBc = await base44.asServiceRole.entities.BotContent.filter({ key: 'legal_explanation' });
