@@ -754,7 +754,7 @@ Deno.serve(async (req) => {
             const _mnR2 = _mnLinks.find(l => l.sub_type === 'room_2')?.url || '';
             const _mnMsg = (_mnBc.length > 0 ? _mnBc[0].content : 'להלן קישורים:\n{קישור_חדר_1}\n{קישור_חדר_2}\n\nתודה רבה שפנית 🌸').replace('{קישור_חדר_1}', _mnR1).replace('{קישור_חדר_2}', _mnR2);
             await fetch(_mnMu, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ chatId, message: _mnMsg }) });
-            await updateSrWithTimeline(base44, _mnSr, { current_step: 'completed', status: 'completed' }, 'נבחר מסלול קליניקה — נשלחו קישורי חדרים');
+            await updateSrWithTimeline(base44, _mnSr, { current_step: 'awaiting_clinic_anything_else', status: 'completed' }, 'נבחר מסלול קליניקה — נשלחו קישורי חדרים');
             try { await base44.asServiceRole.agents.addMessage(conversation, { role: 'assistant', content: '[לקוח כתב]: ' + text }); await base44.asServiceRole.agents.addMessage(conversation, { role: 'assistant', content: _mnMsg }); } catch (_) {}
           } else if (_mnServiceType === 'legal') {
             const _mnBc = await base44.asServiceRole.entities.BotContent.filter({ key: 'legal_explanation' });
@@ -971,7 +971,7 @@ Deno.serve(async (req) => {
         try { if (_ccrYes) { const _ccrCode = await base44.asServiceRole.entities.BotContent.filter({ key: 'clinic_secret_code' }); if (_ccrCode.length > 0) await fetch(_ccrMu, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ chatId, message: _ccrCode[0].content }) }); } await new Promise(r => setTimeout(r, 1000)); const _ccrAnything = await base44.asServiceRole.entities.BotContent.filter({ key: 'clinic_anything_else' }); if (_ccrAnything.length > 0) await fetch(_ccrMu, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ chatId, message: _ccrAnything[0].content }) }); await updateSrWithTimeline(base44, serviceRequest, { current_step: 'awaiting_clinic_anything_else' }, 'נשלח קוד/המשך — קליניקה'); await base44.asServiceRole.entities.WhatsAppMessageLog.create({ id_message: idMessage || `wa_${Date.now()}`, phone, direction: 'incoming', text: text.substring(0, 500), status: 'replied', chat_id: chatId, conversation_id: conversationId }); await base44.asServiceRole.entities.WhatsAppMessageLog.create({ id_message: `out_${Date.now()}_fp_ccr`, phone, direction: 'outgoing', text: `[fast_path_clinic_code_${_ccrYes ? 'yes' : 'no'}]`, status: 'replied', chat_id: chatId, conversation_id: conversationId }); return Response.json({ ok: true, fast_path: `clinic_code_${_ccrYes ? 'yes' : 'no'}` }); } catch (e) {} } }
     // ===== FP-Clinic-Refer-Shalom — "anything else" step → refer to Shalom or goodbye =====
     { const _crsMu = `https://7103.api.greenapi.com/waInstance${instanceId}/sendMessage/${token}`; const _crsNorm = text.trim().replace(/[*"'\u05F4?]/g, '').toLowerCase();
-      const _crsNo = ['לא','לא תודה','לא צריך','זהו','סיימתי','אין','הכל טוב','הכל בסדר'].includes(_crsNorm);
+      const _crsNo = ['לא','לא תודה','לא צריך','זהו','סיימתי','אין','הכל טוב','הכל בסדר','תודה','תודה רבה','תודה!','מעולה','סבבה','אוקי','ok','👍','🙏'].includes(_crsNorm);
       const _crsYes = !_crsNo && _crsNorm.length > 0;
       if (serviceRequest?.service_type === 'clinic' && serviceRequest?.current_step === 'awaiting_clinic_anything_else') {
         try {
