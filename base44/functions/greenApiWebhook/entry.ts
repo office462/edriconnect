@@ -752,8 +752,11 @@ Deno.serve(async (req) => {
             ]);
             const _mnR1 = _mnLinks.find(l => l.sub_type === 'room_1')?.url || '';
             const _mnR2 = _mnLinks.find(l => l.sub_type === 'room_2')?.url || '';
-            const _mnMsg = (_mnBc.length > 0 ? _mnBc[0].content : 'להלן קישורים:\n{קישור_חדר_1}\n{קישור_חדר_2}\n\nתודה רבה שפנית 🌸').replace('{קישור_חדר_1}', _mnR1).replace('{קישור_חדר_2}', _mnR2);
-            await fetch(_mnMu, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ chatId, message: _mnMsg }) });
+            const _mnMsg = [_mnR1, _mnR2].filter(Boolean).join('\n');
+            for (const _mnLink of [_mnR1, _mnR2].filter(Boolean)) {
+              await fetch(_mnMu, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ chatId, message: _mnLink }) });
+              await new Promise(r => setTimeout(r, 1000));
+            }
             await updateSrWithTimeline(base44, _mnSr, { current_step: 'awaiting_clinic_anything_else', status: 'completed' }, 'נבחר מסלול קליניקה — נשלחו קישורי חדרים');
             try { await base44.asServiceRole.agents.addMessage(conversation, { role: 'assistant', content: '[לקוח כתב]: ' + text }); await base44.asServiceRole.agents.addMessage(conversation, { role: 'assistant', content: _mnMsg }); } catch (_) {}
           } else if (_mnServiceType === 'legal') {
