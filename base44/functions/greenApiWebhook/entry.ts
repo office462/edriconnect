@@ -15,6 +15,17 @@ Deno.serve(async (req) => {
     if (incomingInstanceId !== expectedInstanceId) {
       return Response.json({ error: 'Forbidden' }, { status: 403 });
     }
+    if (body.typeWebhook === 'stateInstanceChanged') {
+      const _state = String(body.stateInstance || '');
+      if (_state && _state !== 'authorized') {
+        const _sb = createClientFromRequest(req);
+        const _admins = (await _sb.asServiceRole.entities.User.list()).filter(u => u.role === 'admin' && u.email);
+        for (const _a of _admins) {
+          await _sb.asServiceRole.integrations.Core.SendEmail({ to: _a.email, category: 'transactional', subject: '⚠️ חיבור הוואטסאפ של הבוט נותק', body: `מצב המופע ב-Green API השתנה ל: ${_state}.\nהבוט לא שולח ולא מקבל הודעות עד לחיבור מחדש (סריקת QR באתר Green API).` }).catch(() => {});
+        }
+      }
+      return Response.json({ ok: true, state: _state });
+    }
     if (body.typeWebhook !== 'incomingMessageReceived') {
       // Human-takeover detection: when Dr. Liat replies MANUALLY from her phone,
       // Green API sends 'outgoingMessageReceived' — pause the bot for that recipient
@@ -275,12 +286,7 @@ Deno.serve(async (req) => {
     try {
       const existingLogs = await phoneLogsPromise;
       const isFirstMessage = existingLogs.length === 0;
-      if (isFirstMessage) {
-        const firstMessages = ['תודה שפנית! 🌸 אני על זה, חוזרת אליך מיד','שלום וברוכ/ה הבא/ה! 💜 מיד ממשיכה','נעים להכיר! ✨ עוד שנייה איתך','היי! קיבלתי 😊 רגע ואחזור אליך'];
-        const thinkingMsg = firstMessages[Math.floor(Math.random() * firstMessages.length)];
-        const sendUrl = `https://7103.api.greenapi.com/waInstance${instanceId}/sendMessage/${token}`;
-        await fetch(sendUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ chatId, message: thinkingMsg }) });
-      } else {
+      if (!isFirstMessage) {
         fetch(`https://7103.api.greenapi.com/waInstance${instanceId}/sendTyping/${token}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ chatId, typingTime: 15000 }) }).catch(() => {});
       }
     } catch (typErr) {}
@@ -1098,7 +1104,6 @@ Deno.serve(async (req) => {
     let sentReassurance = false;
     while (Date.now() - pollStart < 25000) {
       await new Promise(r => setTimeout(r, 500));
-      if (!sentReassurance && Date.now() - pollStart > 15000) { sentReassurance = true; const rMsgs = ['עוד קצת סבלנות, כמעט שם 💜', 'עוד רגע ואני חוזרת 🌸', 'ממש בדרך! ✨']; fetch(`https://7103.api.greenapi.com/waInstance${instanceId}/sendMessage/${token}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ chatId, message: rMsgs[Math.floor(Math.random() * rMsgs.length)] }) }).catch(() => {}); }
       if (Date.now() - lastTypingRefresh > 6000) { lastTypingRefresh = Date.now(); fetch(`https://7103.api.greenapi.com/waInstance${instanceId}/sendTyping/${token}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ chatId, typingTime: 8000 }) }).catch(() => {}); }
       const freshConv = await base44.asServiceRole.agents.getConversation(conversationId);
       const msgs = freshConv.messages || [];
