@@ -17,7 +17,15 @@ Deno.serve(async (req) => {
     }
     if (body.typeWebhook === 'stateInstanceChanged') {
       const _state = String(body.stateInstance || '');
-      if (_state && _state !== 'authorized') {
+      if (_state === 'notAuthorized' || _state === 'blocked') {
+        await new Promise(r => setTimeout(r, 30000));
+        let _nowState = _state;
+        try {
+          const _sr = await fetch(`https://7103.api.greenapi.com/waInstance${Deno.env.get('GREEN_API_INSTANCE_ID')}/getStateInstance/${Deno.env.get('GREEN_API_TOKEN')}`);
+          const _sj = await _sr.json();
+          if (_sj?.stateInstance) _nowState = _sj.stateInstance;
+        } catch (_) {}
+        if (_nowState === 'authorized') return Response.json({ ok: true, state: _nowState, recovered: true });
         const _sb = createClientFromRequest(req);
         const _admins = (await _sb.asServiceRole.entities.User.list()).filter(u => u.role === 'admin' && u.email);
         for (const _a of _admins) {
